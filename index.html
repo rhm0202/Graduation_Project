@@ -3774,12 +3774,73 @@
                     // 스트림 시작 후 오디오 믹서 컨트롤 다시 설정
                     setupAudioMixerControls();
                     
+                    // 드롭다운 메뉴 클릭 방식 설정
+                    setupDropdownMenus();
+                    
                     // 프리뷰 영역 리사이즈 기능 설정
                     setupPreviewResize();
                 } catch (error) {
                     console.error('초기화 중 오류 발생:', error);
                 }
             })();
+
+            /**
+             * 드롭다운 메뉴를 클릭 방식으로 초기화합니다.
+             * 메뉴 아이템을 클릭하면 드롭다운이 열리고, 다른 곳을 클릭하면 닫힙니다.
+             */
+            function setupDropdownMenus() {
+                const menuItems = document.querySelectorAll('.menu-item');
+                let activeMenu = null;
+
+                menuItems.forEach(menuItem => {
+                    const menuSpan = menuItem.querySelector('span');
+                    
+                    // 메뉴 아이템 클릭 이벤트
+                    if (menuSpan) {
+                        menuSpan.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            
+                            // 현재 활성화된 메뉴와 같으면 닫기
+                            if (activeMenu === menuItem) {
+                                menuItem.classList.remove('active');
+                                activeMenu = null;
+                            } else {
+                                // 다른 메뉴가 열려있으면 닫기
+                                if (activeMenu) {
+                                    activeMenu.classList.remove('active');
+                                }
+                                // 현재 메뉴 열기
+                                menuItem.classList.add('active');
+                                activeMenu = menuItem;
+                            }
+                        });
+                    }
+
+                    // 드롭다운 메뉴 항목 클릭 시 메뉴 닫기
+                    const dropdownItems = menuItem.querySelectorAll('.dropdown-menu li');
+                    dropdownItems.forEach(item => {
+                        item.addEventListener('click', (e) => {
+                            // 메뉴 항목의 실제 클릭 이벤트는 그대로 실행되도록
+                            // 약간의 지연 후 메뉴 닫기
+                            setTimeout(() => {
+                                menuItem.classList.remove('active');
+                                activeMenu = null;
+                            }, 100);
+                        });
+                    });
+                });
+
+                // 외부 클릭 시 드롭다운 닫기
+                document.addEventListener('click', (e) => {
+                    // 클릭한 요소가 메뉴 아이템이나 드롭다운 내부가 아니면
+                    if (!e.target.closest('.menu-item')) {
+                        if (activeMenu) {
+                            activeMenu.classList.remove('active');
+                            activeMenu = null;
+                        }
+                    }
+                });
+            }
 
             /**
              * 하단 패널 상단 리사이즈 바를 통해 프리뷰 영역과 하단 패널의 크기를 조절합니다.

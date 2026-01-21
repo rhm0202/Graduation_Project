@@ -104,7 +104,7 @@ body {
     position: relative;
     display: inline-block;
     margin-right: 15px;
-    cursor: default;
+    cursor: pointer;
 }
 .dropdown-menu {
     display: none; /* 평소엔 숨김 */
@@ -130,13 +130,8 @@ body {
     background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
     color: white;
 }
-/* 메뉴 아이템에 호버 시 드롭다운 표시 */
-.menu-item:hover .dropdown-menu {
-    display: block;
-}
-/* 드롭다운 메뉴 자체에 호버 시에도 표시 유지 */
-.menu-item:hover .dropdown-menu,
-.dropdown-menu:hover {
+/* 클릭 방식으로 드롭다운 메뉴 표시 */
+.menu-item.active .dropdown-menu {
     display: block;
 }
 
