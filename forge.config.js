@@ -4,8 +4,19 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: true,
+    prune: true,
     name: 'Video Tracker',
     executableName: 'VideoTracker',
+    ignore: [
+      /^\/docs/,
+      /^\/website/,
+      /^\/updates/,
+      /^\/out/,
+      /^\/\.git/,
+      /^\/\.vscode/,
+      /^\/.*\.md$/,
+      /^\/forge\.config\.js$/
+    ],
     // icon: './assets/icon', // 아이콘 파일이 있으면 경로 지정
   },
   rebuildConfig: {},

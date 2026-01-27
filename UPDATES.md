@@ -18,7 +18,7 @@ Spotlight Cam은 자동 업데이트 기능을 지원합니다. 사용자는 앱
 {
   "version": "1.0.1",
   "releaseDate": "2024-01-15",
-  "downloadUrl": "https://github.com/yourusername/spotlight-cam/releases/download/v1.0.1/VideoTracker-Setup-1.0.1.exe",
+  "downloadUrl": "https://github.com/rhm0202/Graduation_Project/releases/download/v1.0.1/VideoTracker-Setup-1.0.1.exe",
   "releaseNotes": "버그 수정 및 성능 개선\n- 라즈베리파이 연결 안정성 향상\n- UI 개선\n- 새로운 기능 추가"
 }
 ```

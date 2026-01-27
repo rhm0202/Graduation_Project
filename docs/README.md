@@ -6,7 +6,7 @@
 
 ### GitHub Pages 사용
 
-1. GitHub 저장소로 이동: https://github.com/wer134/application
+1. GitHub 저장소로 이동: https://github.com/rhm0202/Graduation_Project
 2. **Settings** 탭 클릭
 3. 왼쪽 메뉴에서 **Pages** 선택
 4. **Source** 섹션에서:
@@ -14,7 +14,7 @@
    - Folder: `/website` 선택
 5. **Save** 클릭
 6. 몇 분 후 웹사이트가 배포됩니다
-7. 배포된 URL: `https://wer134.github.io/application/`
+7. 배포된 URL: `https://rhm0202.github.io/Graduation_Project/`
 
 ### 로컬에서 테스트
 
@@ -52,4 +52,3 @@ website/
 
 웹사이트는 `updates/latest.json` 파일을 자동으로 읽어서 최신 버전 정보를 표시합니다.
 새 버전이 릴리스되면 자동으로 웹사이트에 반영됩니다.
-

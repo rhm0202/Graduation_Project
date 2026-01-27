@@ -1,41 +1,7 @@
-# Dependencies
 node_modules/
-package-lock.json
-
-# Build outputs
-out/
 dist/
-*.exe
-*.dmg
-*.deb
-*.rpm
-*.zip
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
+out/
+build/
 .DS_Store
-Thumbs.db
-desktop.ini
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Environment
 .env
-.env.local
-
-# Electron
-*.asar
-
-# Temporary files
-*.tmp
-*.temp
+.vscode/
