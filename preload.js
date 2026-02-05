@@ -37,20 +37,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'select-save-path', 
       'get-save-path', 
       'show-recordings', 
-      'check-for-updates',
-      'select-training-data-path',
-      'get-training-data-path',
-      'save-training-image',
-      'get-training-images',
-      'save-label',
-      'load-label',
-      'select-training-dataset-path',
-      'start-training',
-      'stop-training',
-      'get-training-status',
-      'select-dataset-download-path',
-      'download-dataset',
-      'get-dataset-download-status'
+      'check-for-updates'
     ];
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);

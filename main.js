@@ -186,6 +186,116 @@ ipcMain.handle('show-recordings', async () => {
 });
 
 // ============================================
+// 라즈베리파이 통신 및 메시지 규격
+// ============================================
+
+let rpiSocket = null;
+
+/**
+ * 1. 객체 위치 정보 (ROI Message) 생성
+ * @param {number} x - 객체 중심 x 좌표 (pixel)
+ * @param {number} y - 객체 중심 y 좌표 (pixel)
+ * @param {number} w - ROI 너비 (pixel)
+ * @param {number} h - ROI 높이 (pixel)
+ */
+function createROIMessage(x, y, w, h) {
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    w: Math.round(w),
+    h: Math.round(h)
+  };
+}
+
+/**
+ * 2. 카메라 제어 정보 (Control Message) 생성
+ * @param {number} pan - 팬(Pan) 각도 (degree)
+ * @param {number} tilt - 틸트(Tilt) 각도 (degree)
+ */
+function createControlMessage(pan, tilt) {
+  return {
+    pan: Number(pan),
+    tilt: Number(tilt)
+  };
+}
+
+/**
+ * 3. 상태 정보 (Status Message) 생성
+ * @param {string|number} status - 추적 상태 코드
+ */
+function createStatusMessage(status) {
+  return {
+    status: status,
+    timestamp: Date.now()
+  };
+}
+
+/**
+ * 라즈베리파이 WebSocket 연결 IPC 핸들러
+ */
+ipcMain.handle('connect-rpi', async (event, ip) => {
+  return new Promise((resolve) => {
+    try {
+      if (rpiSocket) {
+        rpiSocket.close();
+        rpiSocket = null;
+      }
+
+      const wsUrl = `ws://${ip}:8765`;
+      console.log(`[RPi] Connecting to ${wsUrl}`);
+      
+      // Electron 39+ (Node 20+) 환경에서는 global.WebSocket 사용 가능
+      rpiSocket = new WebSocket(wsUrl);
+
+      rpiSocket.onopen = () => {
+        console.log('[RPi] Connected');
+        resolve({ success: true });
+        resolve({ success: true, streamUrl: `http://${ip}:8000/stream.mjpg` });
+        rpiSocket.send(JSON.stringify(createStatusMessage('CONNECTED')));
+      };
+
+      rpiSocket.onmessage = (msg) => {
+        try {
+          const data = JSON.parse(msg.data);
+          event.sender.send('rpi-message', data);
+        } catch (e) {
+          console.error('[RPi] Message parse error:', e);
+        }
+      };
+
+      rpiSocket.onerror = (err) => {
+        console.error('[RPi] Error:', err.message);
+        resolve({ success: false, error: err.message });
+      };
+
+      rpiSocket.onclose = () => {
+        console.log('[RPi] Disconnected');
+        event.sender.send('rpi-disconnected');
+        rpiSocket = null;
+      };
+    } catch (error) {
+      console.error('[RPi] Setup failed:', error);
+      resolve({ success: false, error: error.message });
+    }
+  });
+});
+
+ipcMain.handle('disconnect-rpi', () => {
+  if (rpiSocket) {
+    rpiSocket.close();
+    rpiSocket = null;
+  }
+  return { success: true };
+});
+
+ipcMain.on('send-control', (event, { pan, tilt }) => {
+  if (rpiSocket && rpiSocket.readyState === 1) {
+    const msg = createControlMessage(pan, tilt);
+    rpiSocket.send(JSON.stringify(msg));
+  }
+});
+
+// ============================================
 // 자동 업데이트 기능
 // ============================================
 
@@ -324,432 +434,3 @@ ipcMain.on('download-update', (event, downloadUrl) => {
   console.log('업데이트 다운로드:', downloadUrl);
   shell.openExternal(downloadUrl);
 });
-
-// ============================================
-// AI 학습 관련 IPC 핸들러
-// ============================================
-
-const trainingDataPath = path.join(app.getPath('userData'), 'training_data');
-
-/**
- * 학습 데이터 저장 경로 선택 IPC 핸들러
- */
-ipcMain.handle('select-training-data-path', async (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const result = await dialog.showOpenDialog(win, {
-    properties: ['openDirectory'],
-    title: '학습 데이터 저장 위치 선택'
-  });
-  
-  if (!result.canceled && result.filePaths.length > 0) {
-    return result.filePaths[0];
-  }
-  return trainingDataPath;
-});
-
-/**
- * 학습 데이터 저장 경로 조회 IPC 핸들러
- */
-ipcMain.handle('get-training-data-path', () => {
-  return trainingDataPath;
-});
-
-/**
- * 학습 이미지 저장 IPC 핸들러
- */
-ipcMain.handle('save-training-image', async (event, data) => {
-  try {
-    const { imageBuffer, datasetName, timestamp } = data;
-    const datasetPath = path.join(trainingDataPath, datasetName || 'default');
-    const imagesPath = path.join(datasetPath, 'images');
-    
-    if (!fs.existsSync(imagesPath)) {
-      fs.mkdirSync(imagesPath, { recursive: true });
-    }
-    
-    const fileName = `image_${timestamp || Date.now()}.jpg`;
-    const filePath = path.join(imagesPath, fileName);
-    
-    fs.writeFileSync(filePath, Buffer.from(imageBuffer));
-    
-    return { success: true, path: filePath };
-  } catch (error) {
-    console.error('학습 이미지 저장 실패:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-/**
- * 학습 이미지 목록 조회 IPC 핸들러
- */
-ipcMain.handle('get-training-images', async (event, datasetName) => {
-  try {
-    const datasetPath = path.join(trainingDataPath, datasetName || 'default');
-    const imagesPath = path.join(datasetPath, 'images');
-    
-    if (!fs.existsSync(imagesPath)) {
-      return [];
-    }
-    
-    const files = fs.readdirSync(imagesPath);
-    return files.filter(file => /\.(jpg|jpeg|png|webp)$/i.test(file));
-  } catch (error) {
-    console.error('학습 이미지 목록 조회 실패:', error);
-    return [];
-  }
-});
-
-/**
- * 라벨 저장 IPC 핸들러
- */
-ipcMain.handle('save-label', async (event, data) => {
-  try {
-    const { imageName, labels, datasetName, format } = data;
-    const datasetPath = path.join(trainingDataPath, datasetName || 'default');
-    const labelsPath = path.join(datasetPath, 'labels');
-    
-    if (!fs.existsSync(labelsPath)) {
-      fs.mkdirSync(labelsPath, { recursive: true });
-    }
-    
-    const labelFileName = imageName.replace(/\.(jpg|jpeg|png|webp)$/i, '.txt');
-    const labelPath = path.join(labelsPath, labelFileName);
-    
-    // YOLO 형식으로 저장
-    let labelContent = '';
-    labels.forEach(label => {
-      // YOLO 형식: class_id center_x center_y width height (정규화된 좌표)
-      const classId = label.class === 'person' ? 0 : 1;
-      const centerX = (label.x + label.width / 2) / label.imageWidth;
-      const centerY = (label.y + label.height / 2) / label.imageHeight;
-      const normWidth = label.width / label.imageWidth;
-      const normHeight = label.height / label.imageHeight;
-      
-      labelContent += `${classId} ${centerX.toFixed(6)} ${centerY.toFixed(6)} ${normWidth.toFixed(6)} ${normHeight.toFixed(6)}\n`;
-    });
-    
-    fs.writeFileSync(labelPath, labelContent);
-    
-    return { success: true, path: labelPath };
-  } catch (error) {
-    console.error('라벨 저장 실패:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-/**
- * 라벨 불러오기 IPC 핸들러
- */
-ipcMain.handle('load-label', async (event, imageName, datasetName) => {
-  try {
-    const datasetPath = path.join(trainingDataPath, datasetName || 'default');
-    const labelsPath = path.join(datasetPath, 'labels');
-    const labelFileName = imageName.replace(/\.(jpg|jpeg|png|webp)$/i, '.txt');
-    const labelPath = path.join(labelsPath, labelFileName);
-    
-    if (!fs.existsSync(labelPath)) {
-      return { success: false, labels: [] };
-    }
-    
-    const labelContent = fs.readFileSync(labelPath, 'utf-8');
-    const lines = labelContent.trim().split('\n');
-    const labels = lines.map(line => {
-      const [classId, centerX, centerY, width, height] = line.split(' ').map(Number);
-      return {
-        classId,
-        centerX,
-        centerY,
-        width,
-        height
-      };
-    });
-    
-    return { success: true, labels };
-  } catch (error) {
-    console.error('라벨 불러오기 실패:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-/**
- * 학습 데이터셋 경로 선택 IPC 핸들러
- */
-ipcMain.handle('select-training-dataset-path', async (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const result = await dialog.showOpenDialog(win, {
-    properties: ['openDirectory'],
-    title: '학습 데이터셋 경로 선택'
-  });
-  
-  if (!result.canceled && result.filePaths.length > 0) {
-    return result.filePaths[0];
-  }
-  return null;
-});
-
-/**
- * 데이터셋 다운로드 경로 선택 IPC 핸들러
- */
-ipcMain.handle('select-dataset-download-path', async (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const result = await dialog.showOpenDialog(win, {
-    properties: ['openDirectory'],
-    title: '데이터셋 다운로드 위치 선택'
-  });
-  
-  if (!result.canceled && result.filePaths.length > 0) {
-    return result.filePaths[0];
-  }
-  return path.join(app.getPath('userData'), 'datasets');
-});
-
-/**
- * 데이터셋 다운로드 IPC 핸들러
- */
-ipcMain.handle('download-dataset', async (event, config) => {
-  const { datasetType, downloadPath, customUrl } = config;
-  
-  try {
-    let downloadUrl = '';
-    
-    // 데이터셋 URL 매핑
-    switch (datasetType) {
-      case 'coco':
-        // COCO 데이터셋 샘플 (실제로는 전체 데이터셋 다운로드)
-        downloadUrl = 'https://github.com/ultralytics/yolov5/releases/download/v1.0/coco128.zip';
-        break;
-      case 'voc':
-        downloadUrl = 'https://github.com/ultralytics/yolov5/releases/download/v1.0/VOC.zip';
-        break;
-      case 'cityscapes':
-        // Cityscapes는 로그인 필요하므로 샘플 데이터셋 사용
-        downloadUrl = 'https://github.com/ultralytics/yolov5/releases/download/v1.0/coco128.zip';
-        break;
-      case 'custom':
-        downloadUrl = customUrl;
-        break;
-      default:
-        return { success: false, error: '알 수 없는 데이터셋 타입' };
-    }
-    
-    if (!downloadUrl) {
-      return { success: false, error: '다운로드 URL이 없습니다' };
-    }
-    
-    // 다운로드 시작 (비동기)
-    downloadFile(downloadUrl, downloadPath, (progress, speed) => {
-      event.sender.send('dataset-download-progress', { progress, speed });
-    }).then(() => {
-      event.sender.send('dataset-download-complete');
-    }).catch((error) => {
-      event.sender.send('dataset-download-error', { error: error.message });
-    });
-    
-    return { success: true, message: '다운로드가 시작되었습니다' };
-  } catch (error) {
-    console.error('데이터셋 다운로드 실패:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-/**
- * 파일 다운로드 헬퍼 함수
- */
-function downloadFile(url, savePath, onProgress) {
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(url);
-    const client = urlObj.protocol === 'https:' ? https : http;
-    const fileName = path.basename(urlObj.pathname) || 'dataset.zip';
-    const filePath = path.join(savePath, fileName);
-    
-    if (!fs.existsSync(savePath)) {
-      fs.mkdirSync(savePath, { recursive: true });
-    }
-    
-    const file = fs.createWriteStream(filePath);
-    let downloadedBytes = 0;
-    let totalBytes = 0;
-    let startTime = Date.now();
-    
-    const req = client.get(url, (res) => {
-      if (res.statusCode !== 200) {
-        reject(new Error(`다운로드 실패: ${res.statusCode}`));
-        return;
-      }
-      
-      totalBytes = parseInt(res.headers['content-length'] || '0', 10);
-      
-      res.on('data', (chunk) => {
-        downloadedBytes += chunk.length;
-        file.write(chunk);
-        
-        const progress = totalBytes > 0 ? (downloadedBytes / totalBytes) * 100 : 0;
-        const elapsed = (Date.now() - startTime) / 1000;
-        const speed = elapsed > 0 ? (downloadedBytes / 1024 / 1024) / elapsed : 0;
-        
-        if (onProgress) {
-          onProgress(progress, speed);
-        }
-      });
-      
-      res.on('end', () => {
-        file.end();
-        resolve(filePath);
-      });
-    });
-    
-    req.on('error', (error) => {
-      file.close();
-      fs.unlinkSync(filePath);
-      reject(error);
-    });
-    
-    file.on('error', (error) => {
-      file.close();
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-      reject(error);
-    });
-  });
-}
-
-/**
- * 학습 시작 IPC 핸들러 (Python 스크립트 실행)
- */
-ipcMain.handle('start-training', async (event, config) => {
-  try {
-    const { trainingType, datasetPath, epochs, batchSize, learningRate, imageSize } = config;
-    
-    // 학습 스크립트 경로
-    const scriptPath = path.join(__dirname, 'training', 'scripts', `train_${trainingType}.py`);
-    
-    // Python 스크립트가 없으면 생성
-    if (!fs.existsSync(scriptPath)) {
-      createTrainingScript(trainingType, scriptPath);
-    }
-    
-    // Python 프로세스 실행 (비동기)
-    const { spawn } = require('child_process');
-    const pythonProcess = spawn('python', [
-      scriptPath,
-      '--dataset', datasetPath,
-      '--epochs', epochs.toString(),
-      '--batch-size', batchSize.toString(),
-      '--learning-rate', learningRate.toString(),
-      '--image-size', imageSize.toString()
-    ], {
-      cwd: path.join(__dirname, 'training')
-    });
-    
-    let trainingOutput = '';
-    
-    pythonProcess.stdout.on('data', (data) => {
-      trainingOutput += data.toString();
-      event.sender.send('training-output', { output: data.toString() });
-    });
-    
-    pythonProcess.stderr.on('data', (data) => {
-      event.sender.send('training-error', { error: data.toString() });
-    });
-    
-    pythonProcess.on('close', (code) => {
-      event.sender.send('training-complete', { code, output: trainingOutput });
-    });
-    
-    // 프로세스 ID 저장 (중지용)
-    trainingProcesses.set(event.sender.id, pythonProcess);
-    
-    return { success: true, message: '학습이 시작되었습니다' };
-  } catch (error) {
-    console.error('학습 시작 실패:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-/**
- * 학습 중지 IPC 핸들러
- */
-ipcMain.handle('stop-training', async (event) => {
-  try {
-    const process = trainingProcesses.get(event.sender.id);
-    if (process) {
-      process.kill();
-      trainingProcesses.delete(event.sender.id);
-      return { success: true };
-    }
-    return { success: false, error: '실행 중인 학습 프로세스가 없습니다' };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
-
-// 학습 프로세스 관리
-const trainingProcesses = new Map();
-
-/**
- * 학습 스크립트 생성 함수
- */
-function createTrainingScript(trainingType, scriptPath) {
-  const scriptDir = path.dirname(scriptPath);
-  if (!fs.existsSync(scriptDir)) {
-    fs.mkdirSync(scriptDir, { recursive: true });
-  }
-  
-  let scriptContent = '';
-  
-  if (trainingType === 'yolo') {
-    scriptContent = `# YOLO 모델 학습 스크립트
-import argparse
-import sys
-import os
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, required=True)
-    parser.add_argument('--epochs', type=int, default=100)
-    parser.add_argument('--batch-size', type=int, default=16)
-    parser.add_argument('--learning-rate', type=float, default=0.001)
-    parser.add_argument('--image-size', type=int, default=640)
-    
-    args = parser.parse_args()
-    
-    print(f"학습 시작: 데이터셋={args.dataset}, 에포크={args.epochs}")
-    print("YOLO 모델 학습을 시작합니다...")
-    print("주의: 실제 학습을 위해서는 ultralytics 패키지가 필요합니다.")
-    print("설치: pip install ultralytics")
-    
-    # 실제 학습 코드는 여기에 추가
-    # from ultralytics import YOLO
-    # model = YOLO('yolov8n.pt')
-    # model.train(data=args.dataset, epochs=args.epochs, ...)
-
-if __name__ == '__main__':
-    main()
-`;
-  } else if (trainingType === 'segmentation') {
-    scriptContent = `# 배경 제거 세그멘테이션 모델 학습 스크립트
-import argparse
-import sys
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, required=True)
-    parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--batch-size', type=int, default=8)
-    parser.add_argument('--learning-rate', type=float, default=0.0001)
-    parser.add_argument('--image-size', type=int, default=512)
-    
-    args = parser.parse_args()
-    
-    print(f"학습 시작: 데이터셋={args.dataset}, 에포크={args.epochs}")
-    print("세그멘테이션 모델 학습을 시작합니다...")
-    print("주의: 실제 학습을 위해서는 torch, torchvision 패키지가 필요합니다.")
-
-if __name__ == '__main__':
-    main()
-`;
-  }
-  
-  fs.writeFileSync(scriptPath, scriptContent);
-}
