@@ -23,23 +23,35 @@
   "license": "ISC",
   "description": "OBS Studio 스타일의 비디오 녹화 애플리케이션",
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "onnxruntime-web": "^1.24.3"
   },
   "config": {
     "forge": {
-      "packageConfig" : {
+      "packageConfig": {
         "outDir": "C:\\out"
       },
-      "makers" : [
-        { "name": "@electron-forge/maker-squirrel" },
-        { "name": "@electron-forge/maker-deb"},
-        { "name": "@electron-forge/maker-rpm"},
-        { "name": "@electron-forge/maker-zip"}
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel"
+        },
+        {
+          "name": "@electron-forge/maker-deb"
+        },
+        {
+          "name": "@electron-forge/maker-rpm"
+        },
+        {
+          "name": "@electron-forge/maker-zip"
+        }
       ],
       "plugin": [
-        { "name": "@electron-forge/plugin-auto-unpack-natives"}
+        {
+          "name": "@electron-forge/plugin-auto-unpack-natives"
+        }
       ]
-  }},
+    }
+  },
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",
     "@electron-forge/maker-deb": "^7.10.2",
