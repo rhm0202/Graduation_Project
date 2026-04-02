@@ -960,7 +960,7 @@
 
                 // Canvas 생성 (아직 생성되지 않은 경우)
                 if (!backgroundCanvas) {
-                    backgroundCanvas = document.createElement('canvas');
+                    backgroundCanvas = canvas;
                     backgroundCtx = backgroundCanvas.getContext('2d', { willReadFrequently: true });
                 }
 
@@ -989,7 +989,7 @@
                     });
 
                     // 프레임 처리 시작
-                    processBackgroundRemoval(tempVideo);
+                    AiProcessBackgroundRemoval(tempVideo);
                 });
             }
 
@@ -1016,7 +1016,7 @@
              * 배경 제거 프레임 처리를 수행합니다.
              * @param {HTMLVideoElement} video - 비디오 요소
              */
-            async function processBackgroundRemoval(video) {
+            async function AiProcessBackgroundRemoval(video) {
                 if (!backgroundRemovalEnabled || !backgroundCtx) return;
 
                 // 비디오 프레임을 Canvas에 그리기
@@ -1109,7 +1109,7 @@
                 }
 
                 // 30fps 내외로 다음 프레임 요청
-                backgroundAnimationFrame = requestAnimationFrame(() => processBackgroundRemoval(video));
+                backgroundAnimationFrame = requestAnimationFrame(() => AiProcessBackgroundRemoval(video));
             }
 
             /**
