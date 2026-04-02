@@ -4,6 +4,10 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 
+//webGPU 가속 활성화
+app.commandLine.appendSwitch('enable-unsafe-webgpu');
+app.commandLine.appendSwitch('enable-features', 'Vulkan');
+
 let writableStream = null;
 let savePath = 'C:\\VideoRecoding';
 
@@ -23,10 +27,10 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: true
     }
   });
-  
+
   mainWindow.setMenu(null);
   mainWindow.loadFile('index.html');
 }
@@ -48,7 +52,7 @@ app.on('window-all-closed', () => {
  */
 ipcMain.on('start-recording', () => {
   console.log('MAIN: 녹화 시작 신호 수신');
-  
+
   const fileName = `obs-recording-${Date.now()}.webm`;
   const fullPath = path.join(savePath, fileName);
 
@@ -151,7 +155,7 @@ ipcMain.handle('select-save-path', async (event) => {
     properties: ['openDirectory'],
     title: '녹화 파일 저장 위치 선택'
   });
-  
+
   if (!result.canceled && result.filePaths.length > 0) {
     savePath = result.filePaths[0];
     console.log(`MAIN: 저장 경로 변경: ${savePath}`);
@@ -243,7 +247,7 @@ ipcMain.handle('connect-rpi', async (event, ip) => {
 
       const wsUrl = `ws://${ip}:8765`;
       console.log(`[RPi] Connecting to ${wsUrl}`);
-      
+
       // Electron 39+ (Node 20+) 환경에서는 global.WebSocket 사용 가능
       rpiSocket = new WebSocket(wsUrl);
 
@@ -313,7 +317,7 @@ function compareVersions(version1, version2) {
   for (let i = 0; i < maxLength; i++) {
     const v1part = v1parts[i] || 0;
     const v2part = v2parts[i] || 0;
-    
+
     if (v1part > v2part) return 1;
     if (v1part < v2part) return -1;
   }
