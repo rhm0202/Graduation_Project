@@ -1,21 +1,24 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:;">
     <title>Spotlight Cam - AI 객체 추적 및 배경 제거</title>
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
 
     <!-- 
         Spotlight Cam 메인 애플리케이션 컨테이너
         전체 UI의 최상위 래퍼 요소
     -->
-    
+
     <div class="spotlight-window">
-        
+
         <header class="app-menubar">
             <div class="menu-item">
                 <span>File</span>
@@ -38,7 +41,8 @@
                 <ul class="dropdown-menu">
                     <li id="menu-toggle-fullscreen">Toggle Fullscreen</li>
                     <li>Docks</li>
-                    <hr> <li id="menu-reload"> Force Reload</li>
+                    <hr>
+                    <li id="menu-reload"> Force Reload</li>
                     <li id="menu-toggle-devtool">Toggle Developer Tools</li>
                 </ul>
             </div>
@@ -80,9 +84,11 @@
             <div class="resize-bar" id="docks-resize-bar"></div>
 
             <section class="docks-container" id="docks-container">
-                
+
                 <div class="dock-panel" id="scenes-panel">
-                    <div class="dock-header"><h3>Scenes</h3></div>
+                    <div class="dock-header">
+                        <h3>Scenes</h3>
+                    </div>
                     <div class="dock-content">
                         <ul id="scenes-list">
                             <li class="scene-item active" data-scene-id="0">Scene</li>
@@ -95,13 +101,16 @@
                         <button id="move-scene-down-btn" title="아래로 이동">⮟</button>
                     </div>
                 </div>
-                
+
                 <div class="dock-panel" id="sources-panel">
-                    <div class="dock-header"><h3>Sources</h3></div>
+                    <div class="dock-header">
+                        <h3>Sources</h3>
+                    </div>
                     <div class="dock-content" id="sources-content">
                         <ul id="sources-list"></ul>
                         <div class="center-text" id="sources-empty" style="display: none;">
-                            <p>You don't have any sources.<br>Click the + button below,<br>or right click here to add one.</p>
+                            <p>You don't have any sources.<br>Click the + button below,<br>or right click here to add
+                                one.</p>
                             <div class="source-icons">
                                 <span>📁</span>
                                 <span>💻</span>
@@ -119,7 +128,9 @@
                 </div>
 
                 <div class="dock-panel" id="audio-mixer-panel">
-                    <div class="dock-header"><h3>Audio Mixer</h3></div>
+                    <div class="dock-header">
+                        <h3>Audio Mixer</h3>
+                    </div>
                     <div class="dock-content">
                         <div class="audio-track" data-track="desktop">
                             <div class="track-header">
@@ -132,7 +143,8 @@
                             </div>
                             <div class="track-controls">
                                 <span class="icon-button mute-btn" data-mute="desktop">🔇</span>
-                                <input type="range" class="volume-slider" data-volume="desktop" min="-100" max="0" value="0">
+                                <input type="range" class="volume-slider" data-volume="desktop" min="-100" max="0"
+                                    value="0">
                             </div>
                         </div>
                         <div class="audio-track" data-track="mic">
@@ -146,14 +158,17 @@
                             </div>
                             <div class="track-controls">
                                 <span class="icon-button mute-btn" data-mute="mic">🔇</span>
-                                <input type="range" class="volume-slider" data-volume="mic" min="-100" max="0" value="0">
+                                <input type="range" class="volume-slider" data-volume="mic" min="-100" max="0"
+                                    value="0">
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="dock-panel" id="controls-panel">
-                    <div class="dock-header"><h3>Controls</h3></div>
+                    <div class="dock-header">
+                        <h3>Controls</h3>
+                    </div>
                     <div class="dock-content">
                         <button class="control-btn" id="start-recording-btn">Start Recording</button>
                         <button class="control-btn" id="toggle-background-removal">배경 제거: OFF</button>
@@ -173,7 +188,8 @@
                 <span>LIVE: 00:00:00</span>
                 <span id="rec-status">REC: 00:00:00</span>
                 <span id="pi-status" style="margin-left: 20px;">
-                    <span id="pi-status-indicator" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: var(--color-danger); margin-right: 5px;"></span>
+                    <span id="pi-status-indicator"
+                        style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: var(--color-danger); margin-right: 5px;"></span>
                     <span id="pi-status-text">라즈베리파이: 연결 안 됨</span>
                 </span>
             </div>
@@ -186,13 +202,13 @@
     <div class="modal-overlay" id="settings-modal">
         <div class="modal-content">
             <h2>설정 (Settings)</h2>
-            
+
             <fieldset>
                 <legend>비디오 설정</legend>
                 <div class="setting-item">
                     <label for="video-source">카메라:</label>
                     <select id="video-source">
-                        </select>
+                    </select>
                 </div>
                 <div class="setting-item">
                     <label for="video-resolution">해상도:</label>
@@ -211,35 +227,40 @@
                     </select>
                 </div>
             </fieldset>
-            
+
             <fieldset>
                 <legend>오디오 설정</legend>
                 <div class="setting-item">
                     <label for="audio-source">마이크:</label>
                     <select id="audio-source">
-                        </select>
+                    </select>
                 </div>
             </fieldset>
-            
+
             <fieldset>
                 <legend>라즈베리파이 연결</legend>
                 <div class="setting-item">
                     <label for="raspberry-pi-ip">라즈베리파이 IP 주소:</label>
                     <div style="display: flex; gap: 5px; flex-grow: 1;">
-                        <input type="text" id="raspberry-pi-ip" placeholder="예: 192.168.1.100" style="flex-grow: 1; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
-                        <input type="number" id="raspberry-pi-port" placeholder="포트" value="8765" min="1" max="65535" style="width: 80px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
+                        <input type="text" id="raspberry-pi-ip" placeholder="예: 192.168.1.100"
+                            style="flex-grow: 1; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
+                        <input type="number" id="raspberry-pi-port" placeholder="포트" value="8765" min="1" max="65535"
+                            style="width: 80px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
                     </div>
                 </div>
                 <div class="setting-item">
                     <label>연결 상태:</label>
                     <div style="display: flex; align-items: center; gap: 10px; flex-grow: 1;">
-                        <span id="pi-connection-status" style="padding: 5px 10px; border-radius: 3px; font-size: 0.9em; background-color: var(--bg-medium);">연결 안 됨</span>
+                        <span id="pi-connection-status"
+                            style="padding: 5px 10px; border-radius: 3px; font-size: 0.9em; background-color: var(--bg-medium);">연결
+                            안 됨</span>
                         <button class="control-btn" id="connect-pi-btn" style="flex-shrink: 0;">연결</button>
-                        <button class="control-btn" id="disconnect-pi-btn" style="flex-shrink: 0; display: none;">연결 해제</button>
+                        <button class="control-btn" id="disconnect-pi-btn" style="flex-shrink: 0; display: none;">연결
+                            해제</button>
                     </div>
                 </div>
             </fieldset>
-            
+
             <fieldset>
                 <legend>출력 (저장)</legend>
                 <div class="setting-item">
@@ -252,7 +273,8 @@
                 <div class="setting-item">
                     <label>저장 위치:</label>
                     <div style="display: flex; gap: 5px; flex-grow: 1;">
-                        <input type="text" id="save-path-display" readonly style="flex-grow: 1; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
+                        <input type="text" id="save-path-display" readonly
+                            style="flex-grow: 1; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
                         <button class="control-btn" id="set-save-path" style="flex-shrink: 0;">선택...</button>
                     </div>
                 </div>
@@ -332,45 +354,51 @@
     <div class="modal-overlay" id="transform-modal">
         <div class="modal-content">
             <h2>소스 변형 (Transform)</h2>
-            
+
             <fieldset>
                 <legend>위치</legend>
                 <div class="setting-item">
                     <label for="transform-x">X 위치:</label>
-                    <input type="number" id="transform-x" value="0" step="1" style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
+                    <input type="number" id="transform-x" value="0" step="1"
+                        style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
                 </div>
                 <div class="setting-item">
                     <label for="transform-y">Y 위치:</label>
-                    <input type="number" id="transform-y" value="0" step="1" style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
+                    <input type="number" id="transform-y" value="0" step="1"
+                        style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
                 </div>
             </fieldset>
-            
+
             <fieldset>
                 <legend>크기</legend>
                 <div class="setting-item">
                     <label for="transform-width">너비:</label>
-                    <input type="number" id="transform-width" value="640" step="1" style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
+                    <input type="number" id="transform-width" value="640" step="1"
+                        style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
                 </div>
                 <div class="setting-item">
                     <label for="transform-height">높이:</label>
-                    <input type="number" id="transform-height" value="480" step="1" style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
+                    <input type="number" id="transform-height" value="480" step="1"
+                        style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
                 </div>
                 <div class="setting-item">
                     <label for="transform-scale">크기 비율:</label>
-                    <input type="range" id="transform-scale" min="0.1" max="2" step="0.1" value="1" style="width: 200px;">
+                    <input type="range" id="transform-scale" min="0.1" max="2" step="0.1" value="1"
+                        style="width: 200px;">
                     <span id="transform-scale-value">100%</span>
                 </div>
             </fieldset>
-            
+
             <fieldset>
                 <legend>회전</legend>
                 <div class="setting-item">
                     <label for="transform-rotation">각도:</label>
-                    <input type="range" id="transform-rotation" min="0" max="360" step="1" value="0" style="width: 200px;">
+                    <input type="range" id="transform-rotation" min="0" max="360" step="1" value="0"
+                        style="width: 200px;">
                     <span id="transform-rotation-value">0°</span>
                 </div>
             </fieldset>
-            
+
             <div class="modal-buttons">
                 <button class="control-btn" id="transform-reset">초기화</button>
                 <button class="control-btn" id="transform-apply">적용</button>
@@ -382,7 +410,7 @@
     <div class="modal-overlay" id="background-replace-modal">
         <div class="modal-content">
             <h2>배경 교체</h2>
-            
+
             <fieldset>
                 <legend>배경 타입</legend>
                 <div class="setting-item">
@@ -410,21 +438,21 @@
                     </label>
                 </div>
             </fieldset>
-            
+
             <fieldset id="background-image-option" style="display: none;">
                 <legend>이미지 선택</legend>
                 <div class="setting-item">
                     <input type="file" id="background-image-file" accept="image/*">
                 </div>
             </fieldset>
-            
+
             <fieldset id="background-video-option" style="display: none;">
                 <legend>비디오 선택</legend>
                 <div class="setting-item">
                     <input type="file" id="background-video-file" accept="video/*">
                 </div>
             </fieldset>
-            
+
             <fieldset id="background-color-option" style="display: none;">
                 <legend>색상 선택</legend>
                 <div class="setting-item">
@@ -432,7 +460,7 @@
                     <input type="color" id="background-color-picker" value="#000000">
                 </div>
             </fieldset>
-            
+
             <div class="modal-buttons">
                 <button class="control-btn" id="background-replace-apply">적용</button>
                 <button class="control-btn" id="background-replace-close">닫기</button>
@@ -443,12 +471,13 @@
     <div class="modal-overlay" id="add-scene-modal">
         <div class="modal-content">
             <h2>장면 추가</h2>
-            
+
             <fieldset>
                 <legend>장면 정보</legend>
                 <div class="setting-item">
                     <label for="scene-name-input">장면 이름:</label>
-                    <input type="text" id="scene-name-input" placeholder="장면 이름을 입력하세요" style="flex-grow: 1; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
+                    <input type="text" id="scene-name-input" placeholder="장면 이름을 입력하세요"
+                        style="flex-grow: 1; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
                 </div>
             </fieldset>
 
@@ -459,7 +488,7 @@
         </div>
     </div>
 
-
+    <script src="./node_modules/onnxruntime-web/dist/ort.all.min.js"></script>
     <script>
         /**
          * Spotlight Cam 메인 애플리케이션 스크립트
@@ -475,6 +504,7 @@
             const sourcesContent = document.getElementById('sources-content');     // 소스 패널 컨텐츠 영역
             const startRecordingBtn = document.getElementById('start-recording-btn'); // 녹화 시작/중지 버튼
             const recStatus = document.getElementById('rec-status');               // 녹화 상태 표시 요소
+            const comparisonContainer = document.getElementById('comparison-container'); // 전/후 비교 표시 요소
 
             // ============================================
             // 전역 상태 변수
@@ -501,7 +531,7 @@
             let backgroundCanvas = null;                // 배경 제거용 Canvas
             let backgroundCtx = null;                   // Canvas 컨텍스트
             let backgroundAnimationFrame = null;        // 애니메이션 프레임 ID
-            
+
             // ============================================
             // 라즈베리파이 WebSocket 연결 변수
             // ============================================
@@ -520,8 +550,68 @@
             let trackingAnimationFrame = null;         // 추적 애니메이션 프레임 ID
             let lastMotorCommand = { pan: 0, tilt: 0 }; // 마지막 모터 명령
 
+            // ============================================
+            // ONNX Runtime 변수 설정
+            // ============================================
+            const MODEL_SIZE = 512;                    // 모델 크기
+            const canvas = document.createElement('canvas'); // Canvas 생성
+            canvas.width = MODEL_SIZE;                 // Canvas 너비
+            canvas.height = MODEL_SIZE;                // Canvas 높이
+
+            let session;
+
             // Electron API 사용 가능 여부 확인
             const isElectron = typeof window.electronAPI !== 'undefined' && typeof window.electronAPI.send === 'function';
+
+            /**
+             * AI 모델 로드
+             */
+            async function loadModel() {
+                try {
+                    console.log("AI 모델 로딩 중");
+                    // ONNX 모델 로드
+                    session = await ort.InferenceSession.create('segformer_person_mask.onnx', {
+                        executionProviders: ["webgpu", "webgl", "wasm"],
+                    });
+
+                    const inputs = session.inputNames.join(', ');
+                    const outputs = session.outputNames.join(', ');
+                    // session.executionProviders가 undefined일 수 있으므로 안전하게 처리
+                    console.log(`AI 모델 로드 성공! 입력: [${inputs}] / 출력: [${outputs}]`);
+
+                    // 화면 상단에 AI 모델 상태 표시바 추가
+                    let debugBar = document.getElementById('ai-debug-bar');
+                    if (!debugBar) {
+                        debugBar = document.createElement('div');
+                        debugBar.id = 'ai-debug-bar';
+                        debugBar.style.position = 'fixed';
+                        debugBar.style.top = '10px';
+                        debugBar.style.left = '50%';
+                        debugBar.style.transform = 'translateX(-50%)';
+                        debugBar.style.backgroundColor = 'rgba(0,0,0,0.7)';
+                        debugBar.style.color = '#fff';
+                        debugBar.style.padding = '10px 20px';
+                        debugBar.style.borderRadius = '5px';
+                        debugBar.style.zIndex = '9999';
+                        debugBar.style.fontFamily = 'monospace';
+                        document.body.appendChild(debugBar);
+                    }
+                    debugBar.innerHTML = `✅ AI Ready (GPU Enabled) | In: ${inputs} | Out: ${outputs}`;
+
+                } catch (error) {
+                    console.error('AI 모델 로드 실패:', error);
+                    alert(`AI 불러오기 실패:\n${error.message}`);
+
+                    let debugBar = document.getElementById('ai-debug-bar');
+                    if (!debugBar) {
+                        debugBar = document.createElement('div');
+                        debugBar.id = 'ai-debug-bar';
+                        document.body.appendChild(debugBar);
+                    }
+                    debugBar.innerHTML = `❌ AI 로드 오류: ${error.message}`;
+                    debugBar.style.backgroundColor = 'rgba(255,0,0,0.7)';
+                }
+            }
 
             /**
              * 사용 가능한 비디오/오디오 입력 장치 목록을 가져와 드롭다운에 추가합니다.
@@ -531,10 +621,10 @@
                 try {
                     // 권한 획득을 위해 임시 스트림 요청 (장치 라벨을 얻기 위해 필요)
                     tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                    
+
                     // 장치 목록 가져오기
                     const devices = await navigator.mediaDevices.enumerateDevices();
-                    
+
                     // 드롭다운 초기화
                     videoSelect.innerHTML = '';
                     audioSelect.innerHTML = '';
@@ -557,7 +647,7 @@
                     devices.forEach(device => {
                         const option = document.createElement('option');
                         option.value = device.deviceId;
-                        
+
                         if (device.kind === 'videoinput') {
                             videoCount++;
                             option.text = device.label || `카메라 ${videoCount}`;
@@ -575,18 +665,18 @@
                     }
 
                     console.log(`장치 목록 로드 완료: 카메라 ${videoCount}개, 마이크 ${audioCount}개`);
-                    
+
                     if (videoCount === 0 && audioCount === 0) {
                         console.warn('인식된 카메라/마이크가 없습니다.');
                     }
                 } catch (err) {
                     console.error("장치 목록을 가져오는 중 오류 발생:", err);
-                    
+
                     // 임시 스트림 정리
                     if (tempStream) {
                         tempStream.getTracks().forEach(track => track.stop());
                     }
-                    
+
                     // 에러 메시지 표시
                     videoSelect.innerHTML = '<option value="">카메라를 찾을 수 없음</option>';
                     audioSelect.innerHTML = '<option value="">마이크를 찾을 수 없음</option>';
@@ -596,7 +686,7 @@
             // ============================================
             // 미디어 스트림 관리 함수
             // ============================================
-            
+
             /**
              * 선택된 비디오/오디오 장치로 미디어 스트림을 시작합니다.
              * 
@@ -625,12 +715,12 @@
 
                 // 비디오 constraints 구성
                 let videoConstraints = {};
-                
+
                 // 장치 ID 설정
                 if (videoDeviceId && videoDeviceId.trim()) {
                     videoConstraints.deviceId = { exact: videoDeviceId };
                 }
-                
+
                 // 해상도 설정
                 if (resolution !== 'auto') {
                     if (resolution === '1080p') {
@@ -641,7 +731,7 @@
                         videoConstraints.height = { ideal: 720 };
                     }
                 }
-                
+
                 // 프레임레이트 설정
                 if (framerate !== 'auto') {
                     videoConstraints.frameRate = { ideal: parseInt(framerate, 10) };
@@ -661,16 +751,16 @@
 
                 try {
                     mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-                    
+
                     updateVideoDisplay(mediaStream);
-                    
+
                     setupAudioProcessing(mediaStream);
                     setupMediaRecorder();
                     startRecordingBtn.disabled = false;
 
                     const videoTrack = mediaStream.getVideoTracks()[0];
                     const audioTrack = mediaStream.getAudioTracks()[0];
-                    
+
                     if (videoTrack) {
                         const currentVideoId = videoTrack.getSettings().deviceId;
                         if (currentVideoId) videoSelect.value = currentVideoId;
@@ -803,12 +893,12 @@
                 const comparisonContainer = document.getElementById('comparison-container');
                 const originalVideo = document.getElementById('original-video');
                 const processedVideo = document.getElementById('processed-video');
-                
+
                 if (comparisonMode && comparisonContainer) {
                     // 비교 모드: 원본과 처리된 영상을 나란히 표시
                     comparisonContainer.classList.add('active');
                     if (videoFeed) videoFeed.style.display = 'none';
-                    
+
                     if (originalVideo) {
                         originalVideo.srcObject = stream.clone();
                     }
@@ -841,7 +931,7 @@
             function toggleBackgroundRemoval() {
                 backgroundRemovalEnabled = !backgroundRemovalEnabled;
                 const btn = document.getElementById('toggle-background-removal');
-                
+
                 if (btn) {
                     btn.textContent = `배경 제거: ${backgroundRemovalEnabled ? 'ON' : 'OFF'}`;
                     if (backgroundRemovalEnabled) {
@@ -850,13 +940,13 @@
                         btn.classList.remove('recording');
                     }
                 }
-                
+
                 if (backgroundRemovalEnabled) {
                     startBackgroundRemoval();
                 } else {
                     stopBackgroundRemoval();
                 }
-                
+
                 if (mediaStream) {
                     updateVideoDisplay(mediaStream);
                 }
@@ -867,39 +957,39 @@
              */
             function startBackgroundRemoval() {
                 if (!mediaStream) return;
-                
+
                 // Canvas 생성 (아직 생성되지 않은 경우)
                 if (!backgroundCanvas) {
-                    backgroundCanvas = document.createElement('canvas');
+                    backgroundCanvas = canvas;
                     backgroundCtx = backgroundCanvas.getContext('2d', { willReadFrequently: true });
                 }
-                
+
                 // 비디오 트랙 가져오기
                 const videoTrack = mediaStream.getVideoTracks()[0];
                 if (!videoTrack) return;
-                
+
                 // 비디오 요소 생성 (프레임 캡처용)
                 const tempVideo = document.createElement('video');
                 tempVideo.srcObject = mediaStream;
                 tempVideo.autoplay = true;
                 tempVideo.muted = true;
                 tempVideo.playsInline = true;
-                
+
                 tempVideo.addEventListener('loadedmetadata', () => {
                     backgroundCanvas.width = tempVideo.videoWidth || 640;
                     backgroundCanvas.height = tempVideo.videoHeight || 480;
-                    
+
                     // Canvas 스트림 생성
                     processedStream = backgroundCanvas.captureStream(30); // 30fps
-                    
+
                     // 오디오 트랙 추가
                     const audioTracks = mediaStream.getAudioTracks();
                     audioTracks.forEach(track => {
                         processedStream.addTrack(track);
                     });
-                    
+
                     // 프레임 처리 시작
-                    processBackgroundRemoval(tempVideo);
+                    AiProcessBackgroundRemoval(tempVideo);
                 });
             }
 
@@ -911,7 +1001,7 @@
                     cancelAnimationFrame(backgroundAnimationFrame);
                     backgroundAnimationFrame = null;
                 }
-                
+
                 if (processedStream) {
                     processedStream.getTracks().forEach(track => {
                         if (track !== mediaStream.getTracks().find(t => t.id === track.id)) {
@@ -926,52 +1016,100 @@
              * 배경 제거 프레임 처리를 수행합니다.
              * @param {HTMLVideoElement} video - 비디오 요소
              */
-            function processBackgroundRemoval(video) {
+            async function AiProcessBackgroundRemoval(video) {
                 if (!backgroundRemovalEnabled || !backgroundCtx) return;
-                
+
                 // 비디오 프레임을 Canvas에 그리기
                 backgroundCtx.drawImage(video, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
-                
-                // 이미지 데이터 가져오기
-                const imageData = backgroundCtx.getImageData(0, 0, backgroundCanvas.width, backgroundCanvas.height);
-                const data = imageData.data;
-                
-                // 배경 제거 처리 (간단한 색상 기반 크로마키 스타일)
-                // 실제로는 AI 기반 세그멘테이션을 사용해야 하지만, 여기서는 기본 구현
-                for (let i = 0; i < data.length; i += 4) {
-                    const r = data[i];
-                    const g = data[i + 1];
-                    const b = data[i + 2];
-                    
-                    // 녹색 배경 제거 (크로마키 스타일)
-                    // 또는 밝기 기반 배경 제거
-                    const brightness = (r + g + b) / 3;
-                    const greenRatio = g / (r + g + b + 1);
-                    
-                    // 배경으로 판단되는 픽셀 투명 처리
-                    if (greenRatio > 0.4 && brightness > 100) {
-                        data[i + 3] = 0; // 알파 채널을 0으로 (투명)
+
+                let imageData = backgroundCtx.getImageData(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+
+                if (session) {
+                    try {
+                        const modelWidth = MODEL_SIZE; // 512
+                        const modelHeight = MODEL_SIZE; // 512
+
+                        // 모델 입력을 위한 임시 캔버스 리사이징
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = modelWidth;
+                        tempCanvas.height = modelHeight;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCtx.drawImage(video, 0, 0, modelWidth, modelHeight);
+                        const imgData = tempCtx.getImageData(0, 0, modelWidth, modelHeight);
+
+                        // Float32 텐서 데이터 생성 [1, 3, H, W]
+                        const tensorData = new Float32Array(3 * modelWidth * modelHeight);
+                        for (let i = 0; i < modelWidth * modelHeight; i++) {
+                            // RGB 값을 0~1로 정규화
+                            tensorData[i] = imgData.data[i * 4] / 255.0; // R
+                            tensorData[modelWidth * modelHeight + i] = imgData.data[i * 4 + 1] / 255.0; // G
+                            tensorData[2 * modelWidth * modelHeight + i] = imgData.data[i * 4 + 2] / 255.0; // B
+                        }
+
+                        const inputTensor = new ort.Tensor('float32', tensorData, [1, 3, modelHeight, modelWidth]);
+
+                        // 동적으로 첫 번째 입력, 출력 노드 이름 획득
+                        const inputName = session.inputNames[0];
+                        const outputName = session.outputNames[0];
+                        const feeds = { [inputName]: inputTensor };
+
+                        // 모델 추론 실행
+                        const output = await session.run(feeds);
+                        const outputData = output[outputName].data;
+
+                        // 출력 마스크를 기반으로 원본 이미지의 알파 채널 0퍼센트 매핑
+                        for (let y = 0; y < backgroundCanvas.height; y++) {
+                            for (let x = 0; x < backgroundCanvas.width; x++) {
+                                // 현재 원본 픽셀에 대응하는 세그멘테이션 마스크 위치 계산
+                                const maskX = Math.floor((x / backgroundCanvas.width) * modelWidth);
+                                const maskY = Math.floor((y / backgroundCanvas.height) * modelHeight);
+
+                                // 형태에 따라 인덱싱이 다름 (우선 일반적인 [1, 1, H, W]를 가정하지만 [1, H, W]도 계산 동일)
+                                const maskValue = outputData[maskY * modelWidth + maskX];
+
+                                const originalIndex = (y * backgroundCanvas.width + x) * 4;
+                                // 모델의 출력이 0.5 미만이면 배경/사람이 아닌 것으로 판단하여 투명(알파 0) 처리
+                                if (maskValue < 0.5) {
+                                    imageData.data[originalIndex + 3] = 0;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('AI 세그멘테이션 추론 오류:', error);
+                        const debugBar = document.getElementById('ai-debug-bar');
+                        if (debugBar) {
+                            debugBar.innerHTML = `❌ 추론 오류: ${error.message}`;
+                            debugBar.style.backgroundColor = 'rgba(255,0,0,0.7)';
+                        }
                     }
                 }
-                
-                // 배경 이미지/비디오가 있으면 먼저 배경을 그리고, 그 위에 처리된 프레임을 합성
+
+                // 배경 이미지/비디오가 있을 경우 합성을 위한 처리
                 if (backgroundImage || backgroundVideo) {
-                    // 배경 그리기
+                    backgroundCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+
+                    // 1. 커스텀 배경 그리기
                     if (backgroundImage) {
                         backgroundCtx.drawImage(backgroundImage, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
                     } else if (backgroundVideo) {
                         backgroundCtx.drawImage(backgroundVideo, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
                     }
-                    
-                    // 처리된 이미지 데이터를 배경 위에 합성 (투명 배경 제거된 부분만 표시)
-                    backgroundCtx.putImageData(imageData, 0, 0);
+
+                    // 2. 세그멘테이션 처리된 사람 이미지를 위에 겹치기
+                    // putImageData는 픽셀 덮어쓰기라 투명도가 반영된 합성이 안 되므로 임시 캔버스로 처리
+                    const fgCanvas = document.createElement('canvas');
+                    fgCanvas.width = backgroundCanvas.width;
+                    fgCanvas.height = backgroundCanvas.height;
+                    fgCanvas.getContext('2d').putImageData(imageData, 0, 0);
+
+                    backgroundCtx.drawImage(fgCanvas, 0, 0);
                 } else {
-                    // 배경이 없으면 투명 배경으로 처리된 이미지만 표시
+                    // 배경 교체가 되지 않은 단순 배경 투명화
                     backgroundCtx.putImageData(imageData, 0, 0);
                 }
-                
-                // 다음 프레임 처리
-                backgroundAnimationFrame = requestAnimationFrame(() => processBackgroundRemoval(video));
+
+                // 30fps 내외로 다음 프레임 요청
+                backgroundAnimationFrame = requestAnimationFrame(() => AiProcessBackgroundRemoval(video));
             }
 
             /**
@@ -1039,7 +1177,7 @@
                 if (applyBtn) {
                     applyBtn.addEventListener('click', () => {
                         const selectedType = document.querySelector('input[name="background-type"]:checked')?.value;
-                        
+
                         if (selectedType === 'none') {
                             backgroundImage = null;
                             backgroundVideo = null;
@@ -1051,7 +1189,7 @@
                                 backgroundCtx.fillRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
                             }
                         }
-                        
+
                         if (modal) modal.classList.remove('visible');
                     });
                 }
@@ -1100,7 +1238,7 @@
                         const yInput = document.getElementById('transform-y');
                         const widthInput = document.getElementById('transform-width');
                         const heightInput = document.getElementById('transform-height');
-                        
+
                         if (xInput) xInput.value = 0;
                         if (yInput) yInput.value = 0;
                         if (widthInput) widthInput.value = 640;
@@ -1135,7 +1273,7 @@
             function toggleComparison() {
                 comparisonMode = !comparisonMode;
                 const btn = document.getElementById('toggle-comparison');
-                
+
                 if (btn) {
                     if (comparisonMode) {
                         btn.textContent = '전/후 비교 숨기기';
@@ -1145,7 +1283,7 @@
                         btn.classList.remove('recording');
                     }
                 }
-                
+
                 if (mediaStream) {
                     updateVideoDisplay(mediaStream);
                 }
@@ -1166,21 +1304,21 @@
 
                 audioContext = new AudioContext();
                 const source = audioContext.createMediaStreamSource(stream);
-                
+
                 // 각 트랙별로 별도의 GainNode와 Analyser 생성
                 gainNodes.mic = audioContext.createGain();
                 gainNodes.desktop = audioContext.createGain();
                 gainNodes.mic.gain.value = 1.0;
                 gainNodes.desktop.gain.value = 1.0;
-                
+
                 // Mic용 Analyser
                 analysers.mic = audioContext.createAnalyser();
                 analysers.mic.fftSize = 256;
-                
+
                 // Desktop용 Analyser
                 analysers.desktop = audioContext.createAnalyser();
                 analysers.desktop.fftSize = 256;
-                
+
                 // 오디오 연결: source -> 각 gainNode -> 각 analyser -> destination
                 source.connect(gainNodes.mic);
                 source.connect(gainNodes.desktop);
@@ -1191,7 +1329,7 @@
 
                 const micBufferLength = analysers.mic.frequencyBinCount;
                 const micDataArray = new Uint8Array(micBufferLength);
-                
+
                 const desktopBufferLength = analysers.desktop.frequencyBinCount;
                 const desktopDataArray = new Uint8Array(desktopBufferLength);
 
@@ -1248,10 +1386,10 @@
              */
             function setVolume(trackType, dbValue) {
                 if (!gainNodes[trackType]) return;
-                
+
                 const gain = dbValue === -100 ? 0 : Math.pow(10, dbValue / 20);
                 gainNodes[trackType].gain.value = gain;
-                
+
                 const dbDisplay = document.querySelector(`[data-track="${trackType}"] .db-display`);
                 if (dbDisplay) {
                     dbDisplay.textContent = `${dbValue.toFixed(1)} dB`;
@@ -1267,12 +1405,12 @@
                     console.error(`GainNode를 찾을 수 없습니다: ${trackType}`);
                     return;
                 }
-                
+
                 audioMuted[trackType] = !audioMuted[trackType];
                 const muteBtn = document.querySelector(`[data-mute="${trackType}"]`);
                 const slider = document.querySelector(`[data-volume="${trackType}"]`);
-                
-                
+
+
                 if (audioMuted[trackType]) {
                     gainNodes[trackType].gain.value = 0;
                     if (muteBtn) {
@@ -1298,11 +1436,11 @@
                 // 이벤트 위임 사용 - 한 번만 등록
                 const audioMixerPanel = document.getElementById('audio-mixer-panel');
                 if (!audioMixerPanel) return;
-                
+
                 // 기존 리스너 제거 후 재등록
                 const newPanel = audioMixerPanel.cloneNode(true);
                 audioMixerPanel.parentNode.replaceChild(newPanel, audioMixerPanel);
-                
+
                 // 볼륨 슬라이더 이벤트 위임
                 newPanel.addEventListener('input', (e) => {
                     if (e.target.classList.contains('volume-slider')) {
@@ -1313,7 +1451,7 @@
                         }
                     }
                 });
-                
+
                 // 음소거 버튼 이벤트 위임
                 newPanel.addEventListener('click', (e) => {
                     const muteBtn = e.target.closest('.mute-btn');
@@ -1322,7 +1460,7 @@
                         e.stopPropagation();
                         const trackType = muteBtn.dataset.mute;
                         if (trackType) {
-                        toggleMute(trackType);
+                            toggleMute(trackType);
                         }
                     }
                 });
@@ -1356,11 +1494,11 @@
 
                 mediaRecorder.onstart = () => {
                     if (isElectron) window.electronAPI.send('start-recording');
-                    
+
                     startRecordingBtn.textContent = 'Stop Recording';
                     startRecordingBtn.classList.add('recording');
                     isRecording = true;
-                    
+
                     recStartTime = Date.now();
                     recStatus.classList.add('recording');
                     recTimer = setInterval(updateRecTimer, 1000);
@@ -1368,11 +1506,11 @@
 
                 mediaRecorder.onstop = () => {
                     if (isElectron) window.electronAPI.send('stop-recording');
-                    
+
                     startRecordingBtn.textContent = 'Start Recording';
                     startRecordingBtn.classList.remove('recording');
                     isRecording = false;
-                    
+
                     clearInterval(recTimer);
                     recStatus.classList.remove('recording');
                     recStatus.textContent = 'REC: 00:00:00';
@@ -1442,7 +1580,7 @@
             // ============================================
             // 설정 저장/불러오기 함수
             // ============================================
-            
+
             /**
              * 설정을 localStorage에 저장합니다.
              */
@@ -1464,7 +1602,7 @@
                     console.error('설정 저장 실패:', error);
                 }
             }
-            
+
             /**
              * localStorage에서 설정을 불러옵니다.
              */
@@ -1472,9 +1610,9 @@
                 try {
                     const saved = localStorage.getItem('spotlightCamSettings');
                     if (!saved) return null;
-                    
+
                     const settings = JSON.parse(saved);
-                    
+
                     // 설정 적용
                     if (settings.videoSource && videoSelect) {
                         videoSelect.value = settings.videoSource;
@@ -1502,7 +1640,7 @@
                         const fileFormatSelect = document.getElementById('file-format');
                         if (fileFormatSelect) fileFormatSelect.value = settings.fileFormat;
                     }
-                    
+
                     return settings;
                 } catch (error) {
                     console.error('설정 불러오기 실패:', error);
@@ -1515,16 +1653,16 @@
             const settingsModal = document.getElementById('settings-modal');
             const setSavePathBtn = document.getElementById('set-save-path');
             const savePathDisplay = document.getElementById('save-path-display');
-            
+
             openSettingsBtn.addEventListener('click', async () => {
                 settingsModal.classList.add('visible');
-                
+
                 // 설정 모달이 열릴 때 장치 목록 새로고침
                 await getDevices();
-                
+
                 // 저장된 설정 불러오기
                 const savedSettings = loadSettings();
-                
+
                 if (isElectron && window.electronAPI.invoke) {
                     try {
                         const currentPath = await window.electronAPI.invoke('get-save-path');
@@ -1543,7 +1681,7 @@
                     }
                 }
             });
-            
+
             closeSettingsBtn.addEventListener('click', () => {
                 // 닫기 전에 설정 저장
                 saveSettings();
@@ -1570,7 +1708,7 @@
             const piIpInput = document.getElementById('raspberry-pi-ip');
             const piPortInput = document.getElementById('raspberry-pi-port');
             const fileFormatSelect = document.getElementById('file-format');
-            
+
             if (piIpInput) {
                 piIpInput.addEventListener('change', saveSettings);
                 piIpInput.addEventListener('blur', saveSettings);
@@ -1628,7 +1766,7 @@
             const menuSettings = document.getElementById('menu-settings');
             const menuCheckUpdates = document.getElementById('menu-check-updates');
             const menuAbout = document.getElementById('menu-about');
-            
+
             if (menuShowRecordings) menuShowRecordings.addEventListener('click', showRecordings);
             if (menuSettings) menuSettings.addEventListener('click', () => {
                 document.getElementById('open-settings')?.click();
@@ -1644,7 +1782,7 @@
             function renderScenes() {
                 const scenesList = document.getElementById('scenes-list');
                 if (!scenesList) return;
-                
+
                 scenesList.innerHTML = '';
                 scenes.forEach((scene) => {
                     const li = document.createElement('li');
@@ -1665,7 +1803,7 @@
             function openAddSceneModal() {
                 const modal = document.getElementById('add-scene-modal');
                 const sceneNameInput = document.getElementById('scene-name-input');
-                
+
                 if (modal) {
                     modal.classList.add('visible');
                     // 기본 장면 이름 설정
@@ -1678,14 +1816,14 @@
                     console.error('Scene 추가 모달을 찾을 수 없습니다!');
                 }
             }
-            
+
             /**
              * Scene 추가 모달을 닫습니다.
              */
             function closeAddSceneModal() {
                 const modal = document.getElementById('add-scene-modal');
                 const sceneNameInput = document.getElementById('scene-name-input');
-                
+
                 if (modal) modal.classList.remove('visible');
                 if (sceneNameInput) sceneNameInput.value = '';
             }
@@ -1696,17 +1834,17 @@
             function addScene() {
                 const sceneNameInput = document.getElementById('scene-name-input');
                 const sceneName = sceneNameInput?.value?.trim();
-                
+
                 if (!sceneName) {
                     alert('장면 이름을 입력하세요.');
                     if (sceneNameInput) sceneNameInput.focus();
                     return;
                 }
-                
-                    const newId = Math.max(...scenes.map(s => s.id), -1) + 1;
+
+                const newId = Math.max(...scenes.map(s => s.id), -1) + 1;
                 scenes.push({ id: newId, name: sceneName });
-                    renderScenes();
-                    switchScene(newId);
+                renderScenes();
+                switchScene(newId);
                 closeAddSceneModal();
             }
 
@@ -1718,18 +1856,18 @@
                     alert('최소 하나의 장면이 필요합니다.');
                     return;
                 }
-                
+
                 const sceneIndex = scenes.findIndex(s => s.id === currentSceneId);
                 if (sceneIndex === -1) return;
-                
+
                 scenes.splice(sceneIndex, 1);
-                
+
                 if (sceneIndex >= scenes.length) {
                     currentSceneId = scenes[scenes.length - 1].id;
                 } else {
                     currentSceneId = scenes[sceneIndex].id;
                 }
-                
+
                 renderScenes();
             }
 
@@ -1739,7 +1877,7 @@
             function moveSceneUp() {
                 const sceneIndex = scenes.findIndex(s => s.id === currentSceneId);
                 if (sceneIndex <= 0) return;
-                
+
                 [scenes[sceneIndex - 1], scenes[sceneIndex]] = [scenes[sceneIndex], scenes[sceneIndex - 1]];
                 renderScenes();
             }
@@ -1750,7 +1888,7 @@
             function moveSceneDown() {
                 const sceneIndex = scenes.findIndex(s => s.id === currentSceneId);
                 if (sceneIndex >= scenes.length - 1) return;
-                
+
                 [scenes[sceneIndex], scenes[sceneIndex + 1]] = [scenes[sceneIndex + 1], scenes[sceneIndex]];
                 renderScenes();
             }
@@ -1762,7 +1900,7 @@
             function switchScene(sceneId) {
                 const scene = scenes.find(s => s.id === sceneId);
                 if (!scene) return;
-                
+
                 currentSceneId = sceneId;
                 renderScenes();
             }
@@ -1773,19 +1911,19 @@
             function setupScenesPanel() {
                 const scenesPanel = document.getElementById('scenes-panel');
                 if (!scenesPanel) return;
-                
+
                 // 기존 리스너 제거 후 재등록
                 const newPanel = scenesPanel.cloneNode(true);
                 scenesPanel.parentNode.replaceChild(newPanel, scenesPanel);
-                
+
                 // 이벤트 위임 사용
                 newPanel.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    
+
                     const btn = e.target.closest('button');
                     if (!btn) return;
-                    
+
                     const btnId = btn.id;
                     if (btnId === 'add-scene-btn') {
                         openAddSceneModal();
@@ -1797,12 +1935,12 @@
                         moveSceneDown();
                     }
                 });
-                
+
                 // Scene 추가 모달 버튼 이벤트
                 const addSceneConfirmBtn = document.getElementById('add-scene-confirm');
                 const cancelAddSceneBtn = document.getElementById('cancel-add-scene');
                 const sceneNameInput = document.getElementById('scene-name-input');
-                
+
                 if (addSceneConfirmBtn) {
                     addSceneConfirmBtn.addEventListener('click', (e) => {
                         e.preventDefault();
@@ -1810,7 +1948,7 @@
                         addScene();
                     });
                 }
-                
+
                 if (cancelAddSceneBtn) {
                     cancelAddSceneBtn.addEventListener('click', (e) => {
                         e.preventDefault();
@@ -1818,7 +1956,7 @@
                         closeAddSceneModal();
                     });
                 }
-                
+
                 if (sceneNameInput) {
                     sceneNameInput.addEventListener('keypress', (e) => {
                         if (e.key === 'Enter') {
@@ -1827,7 +1965,7 @@
                         }
                     });
                 }
-                
+
                 renderScenes();
             }
 
@@ -1837,18 +1975,18 @@
             function renderSources() {
                 const sourcesList = document.getElementById('sources-list');
                 const sourcesEmpty = document.getElementById('sources-empty');
-                
+
                 if (!sourcesList) return;
-                
+
                 sourcesList.innerHTML = '';
-                
+
                 if (sources.length === 0) {
                     sourcesList.style.display = 'none';
                     if (sourcesEmpty) sourcesEmpty.style.display = 'block';
                 } else {
                     sourcesList.style.display = 'block';
                     if (sourcesEmpty) sourcesEmpty.style.display = 'none';
-                    
+
                     sources.forEach((source) => {
                         const li = document.createElement('li');
                         li.className = 'source-item';
@@ -1856,17 +1994,17 @@
                         if (source.id === selectedSourceId) {
                             li.classList.add('selected');
                         }
-                        
+
                         const icon = document.createElement('span');
                         icon.className = 'source-icon';
                         if (source.type === 'video') icon.textContent = '📹';
                         else if (source.type === 'image') icon.textContent = '🖼️';
                         else if (source.type === 'text') icon.textContent = '📝';
-                        
+
                         const name = document.createElement('span');
                         name.className = 'source-name';
                         name.textContent = source.name;
-                        
+
                         li.appendChild(icon);
                         li.appendChild(name);
                         li.addEventListener('click', () => selectSource(source.id));
@@ -1884,7 +2022,7 @@
                 const imageOption = document.getElementById('image-option');
                 const textOption = document.getElementById('text-option');
                 const sourceVideoDevice = document.getElementById('source-video-device');
-                
+
                 // 비디오 장치 목록 채우기
                 if (sourceVideoDevice) {
                     sourceVideoDevice.innerHTML = '';
@@ -1893,7 +2031,7 @@
                         sourceVideoDevice.appendChild(newOption);
                     });
                 }
-                
+
                 // 라디오 버튼 이벤트
                 document.querySelectorAll('input[name="source-type"]').forEach(radio => {
                     radio.addEventListener('change', (e) => {
@@ -1903,7 +2041,7 @@
                         if (textOption) textOption.style.display = type === 'text' ? 'flex' : 'none';
                     });
                 });
-                
+
                 if (modal) modal.classList.add('visible');
             }
 
@@ -1913,11 +2051,11 @@
             function addSource() {
                 const sourceType = document.querySelector('input[name="source-type"]:checked')?.value;
                 const sourceName = document.getElementById('source-name')?.value || `Source ${nextSourceId}`;
-                
+
                 if (!sourceType) return;
-                
+
                 let sourceData = {};
-                
+
                 if (sourceType === 'video') {
                     const deviceId = document.getElementById('source-video-device')?.value;
                     if (!deviceId) {
@@ -1947,7 +2085,7 @@
                     }
                     sourceData = { type: 'text', content: textContent };
                 }
-                
+
                 finishAddSource(sourceName, sourceData);
             }
 
@@ -1992,7 +2130,7 @@
                     alert('삭제할 소스를 선택하세요.');
                     return;
                 }
-                
+
                 const index = sources.findIndex(s => s.id === selectedSourceId);
                 if (index !== -1) {
                     sources.splice(index, 1);
@@ -2006,10 +2144,10 @@
              */
             function moveSourceUp() {
                 if (selectedSourceId === null) return;
-                
+
                 const index = sources.findIndex(s => s.id === selectedSourceId);
                 if (index <= 0) return;
-                
+
                 [sources[index - 1], sources[index]] = [sources[index], sources[index - 1]];
                 renderSources();
             }
@@ -2019,10 +2157,10 @@
              */
             function moveSourceDown() {
                 if (selectedSourceId === null) return;
-                
+
                 const index = sources.findIndex(s => s.id === selectedSourceId);
                 if (index >= sources.length - 1) return;
-                
+
                 [sources[index], sources[index + 1]] = [sources[index + 1], sources[index]];
                 renderSources();
             }
@@ -2033,29 +2171,29 @@
             function setupSourcesPanel() {
                 const sourcesPanel = document.getElementById('sources-panel');
                 if (!sourcesPanel) return;
-                
+
                 // 기존 리스너 제거 후 재등록
                 const newPanel = sourcesPanel.cloneNode(true);
                 sourcesPanel.parentNode.replaceChild(newPanel, sourcesPanel);
-                
+
                 // 이벤트 위임 사용
                 newPanel.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    
+
                     const btn = e.target.closest('button');
                     if (!btn) return;
-                    
+
                     const btnId = btn.id;
                     if (btnId === 'add-source-btn') {
                         openAddSourceModal();
                     } else if (btnId === 'remove-source-btn') {
                         removeSource();
                     } else if (btnId === 'source-settings-btn') {
-                    if (selectedSourceId === null) {
-                        alert('설정할 소스를 선택하세요.');
-                    } else {
-                        alert('소스 설정 기능은 추후 구현 예정입니다.');
+                        if (selectedSourceId === null) {
+                            alert('설정할 소스를 선택하세요.');
+                        } else {
+                            alert('소스 설정 기능은 추후 구현 예정입니다.');
                         }
                     } else if (btnId === 'move-source-up-btn') {
                         moveSourceUp();
@@ -2063,11 +2201,11 @@
                         moveSourceDown();
                     }
                 });
-                
+
                 // 모달 버튼 이벤트
                 const addSourceConfirm = document.getElementById('add-source-confirm');
                 const cancelAddSource = document.getElementById('cancel-add-source');
-                
+
                 if (addSourceConfirm) {
                     addSourceConfirm.addEventListener('click', (e) => {
                         e.preventDefault();
@@ -2075,7 +2213,7 @@
                         addSource();
                     });
                 }
-                
+
                 if (cancelAddSource) {
                     cancelAddSource.addEventListener('click', (e) => {
                         e.preventDefault();
@@ -2083,14 +2221,14 @@
                         closeAddSourceModal();
                     });
                 }
-                
+
                 renderSources();
             }
 
             // ============================================
             // 라즈베리파이 WebSocket 연결 관리 함수
             // ============================================
-            
+
             /**
              * 라즈베리파이에 WebSocket 연결을 시도합니다.
              * 
@@ -2117,7 +2255,7 @@
                         piConnected = true;
                         piReconnectAttempts = 0;
                         updatePiConnectionStatus(true);
-                        
+
                         piWebSocket.send(JSON.stringify({
                             type: 'client_ready',
                             message: 'Electron 클라이언트 연결됨'
@@ -2135,7 +2273,7 @@
 
                     piWebSocket.onclose = (event) => {
                         piConnected = false;
-                        
+
                         // 정상 종료가 아닌 경우에만 재연결 시도
                         if (event.code !== 1000) {
                             if (piReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -2160,7 +2298,7 @@
                         console.error('라즈베리파이 연결 오류:', error);
                         piConnected = false;
                         updatePiConnectionStatus(false, '연결 실패: 네트워크 오류가 발생했습니다.');
-                        
+
                         // 에러 모달 표시
                         showErrorModal(
                             '라즈베리파이에 연결할 수 없습니다.\n\n가능한 원인:\n- IP 주소나 포트가 올바르지 않습니다\n- 라즈베리파이가 실행 중이지 않습니다\n- 방화벽이 연결을 차단하고 있습니다\n- 네트워크 연결이 끊어졌습니다',
@@ -2175,7 +2313,7 @@
                 } catch (error) {
                     console.error('WebSocket 생성 실패:', error);
                     updatePiConnectionStatus(false, '연결 실패: WebSocket을 생성할 수 없습니다.');
-                    
+
                     // 에러 모달 표시
                     showErrorModal(
                         `라즈베리파이 연결에 실패했습니다.\n\n오류: ${error.message || '알 수 없는 오류'}\n\nIP 주소와 포트를 확인하고 다시 시도해주세요.`,
@@ -2203,7 +2341,7 @@
                     piReconnectTimer = null;
                 }
                 updatePiConnectionStatus(false);
-                
+
                 if (piVideoStream) {
                     piVideoStream = null;
                     if (mediaStream) {
@@ -2217,9 +2355,9 @@
              */
             function attemptReconnect(ip, port) {
                 piReconnectAttempts++;
-                
+
                 updatePiConnectionStatus(false, `재연결 시도 중... (${piReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-                
+
                 piReconnectTimer = setTimeout(() => {
                     connectToRaspberryPi(ip, port);
                 }, RECONNECT_DELAY);
@@ -2238,7 +2376,7 @@
                     case 'system_info':
                         break;
                     default:
-                        // Unknown message type
+                    // Unknown message type
                 }
             }
 
@@ -2250,7 +2388,7 @@
 
                 try {
                     const videoFeed = document.getElementById('main-video-feed');
-                    
+
                     if (typeof frameData === 'string') {
                         // Base64 인코딩된 이미지 데이터
                         const img = new Image();
@@ -2260,14 +2398,14 @@
                                 trackingCanvas = document.createElement('canvas');
                                 trackingCtx = trackingCanvas.getContext('2d');
                             }
-                            
+
                             trackingCanvas.width = img.width;
                             trackingCanvas.height = img.height;
                             trackingCtx.drawImage(img, 0, 0);
-                            
+
                             // Canvas를 스트림으로 변환
                             const stream = trackingCanvas.captureStream(30);
-                            
+
                             // 오디오 트랙이 있으면 추가
                             if (mediaStream) {
                                 const audioTracks = mediaStream.getAudioTracks();
@@ -2275,11 +2413,11 @@
                                     stream.addTrack(track);
                                 });
                             }
-                            
+
                             piVideoStream = stream;
                             if (videoFeed) {
                                 videoFeed.srcObject = stream;
-                                
+
                                 // 자동 추적이 활성화되어 있으면 객체 추적 시작
                                 if (autoTrackingEnabled) {
                                     processObjectTracking();
@@ -2287,7 +2425,7 @@
                             }
                         };
                         img.src = `data:image/jpeg;base64,${frameData}`;
-                    } 
+                    }
                     else if (frameData instanceof Blob) {
                         // Blob 데이터를 스트림으로 변환
                         const url = URL.createObjectURL(frameData);
@@ -2298,28 +2436,28 @@
                             tempVideo.autoplay = true;
                             tempVideo.muted = true;
                             tempVideo.playsInline = true;
-                            
+
                             tempVideo.addEventListener('loadedmetadata', () => {
                                 const canvas = document.createElement('canvas');
                                 canvas.width = tempVideo.videoWidth;
                                 canvas.height = tempVideo.videoHeight;
                                 const ctx = canvas.getContext('2d');
-                                
+
                                 const drawFrame = () => {
                                     if (tempVideo.readyState >= 2) {
                                         ctx.drawImage(tempVideo, 0, 0);
                                         const stream = canvas.captureStream(30);
-                                        
+
                                         if (mediaStream) {
                                             const audioTracks = mediaStream.getAudioTracks();
                                             audioTracks.forEach(track => {
                                                 stream.addTrack(track);
                                             });
                                         }
-                                        
+
                                         piVideoStream = stream;
                                         videoFeed.srcObject = stream;
-                                        
+
                                         // 자동 추적이 활성화되어 있으면 객체 추적 시작
                                         if (autoTrackingEnabled) {
                                             processObjectTracking();
@@ -2422,7 +2560,7 @@
             function toggleAutoTracking() {
                 autoTrackingEnabled = !autoTrackingEnabled;
                 const btn = document.getElementById('toggle-auto-tracking');
-                
+
                 if (btn) {
                     btn.textContent = `자동 추적: ${autoTrackingEnabled ? 'ON' : 'OFF'}`;
                     if (autoTrackingEnabled) {
@@ -2512,7 +2650,7 @@
                     const personObjects = objects.filter(obj => obj.class === 'person');
                     if (personObjects.length > 0 && piConnected) {
                         // 가장 큰 사람 객체를 추적
-                        const mainPerson = personObjects.reduce((prev, curr) => 
+                        const mainPerson = personObjects.reduce((prev, curr) =>
                             (curr.width * curr.height) > (prev.width * prev.height) ? curr : prev
                         );
 
@@ -2548,7 +2686,7 @@
             async function detectObjects(canvas) {
                 // TODO: 실제 YOLO 모델을 사용한 객체 감지
                 // 예: const predictions = await yoloModel.detect(canvas);
-                
+
                 // 시뮬레이션: 랜덤 객체 감지 (테스트용)
                 if (Math.random() > 0.7) {
                     return [{
@@ -2619,7 +2757,7 @@
             // ============================================
             // 업데이트 관리 함수
             // ============================================
-            
+
             /**
              * 업데이트를 수동으로 확인합니다.
              */
@@ -2666,7 +2804,7 @@
                     console.error('업데이트 확인 오류:', error);
                     updateChecking.style.display = 'none';
                     updateError.style.display = 'block';
-                    
+
                     // 에러 메시지 표시
                     const errorMessage = document.getElementById('update-error-message');
                     if (errorMessage) {
@@ -2753,7 +2891,7 @@
             // ============================================
             // 초기화 실행
             // ============================================
-            
+
             /**
              * 애플리케이션 초기화 함수
              * 페이지 로드 시 한 번 실행됩니다.
@@ -2762,37 +2900,37 @@
                 try {
                     // 오디오 믹서 컨트롤 설정
                     setupAudioMixerControls();
-                    
+
                     // 장면 패널 설정
                     setupScenesPanel();
-                    
+
                     // 소스 패널 설정
                     setupSourcesPanel();
-                    
+
                     // 라즈베리파이 연결 UI 설정
                     setupPiConnectionUI();
-                    
+
                     // 업데이트 모달 설정
                     setupUpdateModal();
-                    
+
                     // 배경 제거 및 비교 모드 버튼 이벤트
                     const toggleBackgroundRemovalBtn = document.getElementById('toggle-background-removal');
                     const toggleComparisonBtn = document.getElementById('toggle-comparison');
-                    
+
                     if (toggleBackgroundRemovalBtn) {
                         toggleBackgroundRemovalBtn.addEventListener('click', toggleBackgroundRemoval);
                     }
-                    
+
                     if (toggleComparisonBtn) {
                         toggleComparisonBtn.addEventListener('click', toggleComparison);
                     }
-                    
+
                     // 자동 추적 버튼 이벤트
                     const toggleAutoTrackingBtn = document.getElementById('toggle-auto-tracking');
                     if (toggleAutoTrackingBtn) {
                         toggleAutoTrackingBtn.addEventListener('click', toggleAutoTracking);
                     }
-                    
+
                     // 배경 교체 버튼 이벤트
                     const toggleBackgroundReplaceBtn = document.getElementById('toggle-background-replace');
                     if (toggleBackgroundReplaceBtn) {
@@ -2801,7 +2939,7 @@
                             if (modal) modal.classList.add('visible');
                         });
                     }
-                    
+
                     // Transform 메뉴 이벤트
                     const menuTransform = document.getElementById('menu-transform');
                     if (menuTransform) {
@@ -2810,32 +2948,35 @@
                             if (modal) modal.classList.add('visible');
                         });
                     }
-                    
+
                     // 배경 교체 모달 설정
                     setupBackgroundReplaceModal();
-                    
+
                     // Transform 모달 설정
                     setupTransformModal();
-                    
+
                     // 카메라/마이크 장치 목록 가져오기
                     await getDevices();
-                    
+
                     // 저장된 설정 불러오기
                     const savedSettings = loadSettings();
-                    
+
+                    // 화면 로딩 및 장치 초기화 이후 ONNX 모델을 로드합니다.
+                    await loadModel();
+
                     // 저장된 설정이 있으면 적용, 없으면 기본 장치로 스트림 시작
                     if (savedSettings && savedSettings.videoSource && savedSettings.audioSource) {
                         await startStream(savedSettings.videoSource, savedSettings.audioSource);
                     } else {
                         await startStream();
                     }
-                    
+
                     // 스트림 시작 후 오디오 믹서 컨트롤 다시 설정
                     setupAudioMixerControls();
-                    
+
                     // 드롭다운 메뉴 클릭 방식 설정
                     setupDropdownMenus();
-                    
+
                     // 프리뷰 영역 리사이즈 기능 설정
                     setupPreviewResize();
                 } catch (error) {
@@ -2853,12 +2994,12 @@
 
                 menuItems.forEach(menuItem => {
                     const menuSpan = menuItem.querySelector('span');
-                    
+
                     // 메뉴 아이템 클릭 이벤트
                     if (menuSpan) {
                         menuSpan.addEventListener('click', (e) => {
                             e.stopPropagation();
-                            
+
                             // 현재 활성화된 메뉴와 같으면 닫기
                             if (activeMenu === menuItem) {
                                 menuItem.classList.remove('active');
@@ -2908,14 +3049,14 @@
                 const previewArea = document.getElementById('preview-area');
                 const docksContainer = document.getElementById('docks-container');
                 const resizeBar = document.getElementById('docks-resize-bar');
-                
+
                 if (!previewArea || !docksContainer || !resizeBar) return;
-                
+
                 let isResizing = false;
                 let startY = 0;
                 let startPreviewHeight = 0;
                 let startDocksHeight = 0;
-                
+
                 resizeBar.addEventListener('mousedown', (e) => {
                     isResizing = true;
                     startY = e.clientY;
@@ -2925,20 +3066,20 @@
                     document.body.style.cursor = 'ns-resize';
                     document.body.style.userSelect = 'none';
                 });
-                
+
                 document.addEventListener('mousemove', (e) => {
                     if (!isResizing) return;
-                    
+
                     const deltaY = e.clientY - startY;
                     const newPreviewHeight = startPreviewHeight + deltaY;
                     const newDocksHeight = startDocksHeight - deltaY;
-                    
+
                     // 최소/최대 높이 제한
                     const minPreviewHeight = 200;
                     const minDocksHeight = 150;
                     const maxPreviewHeight = window.innerHeight - 200; // 메뉴바, 상태바, 최소 패널 높이 고려
-                    
-                    if (newPreviewHeight >= minPreviewHeight && 
+
+                    if (newPreviewHeight >= minPreviewHeight &&
                         newPreviewHeight <= maxPreviewHeight &&
                         newDocksHeight >= minDocksHeight) {
                         previewArea.style.height = newPreviewHeight + 'px';
@@ -2947,7 +3088,7 @@
                         docksContainer.style.flexGrow = '0';
                     }
                 });
-                
+
                 document.addEventListener('mouseup', () => {
                     if (isResizing) {
                         isResizing = false;
@@ -2960,4 +3101,5 @@
     </script>
 
 </body>
+
 </html>
