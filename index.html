@@ -945,10 +945,9 @@
                     startBackgroundRemoval();
                 } else {
                     stopBackgroundRemoval();
-                }
-
-                if (mediaStream) {
-                    updateVideoDisplay(mediaStream);
+                    if (mediaStream) {      // 배경 제거 끄면 원본 비디오로 업데이트
+                        updateVideoDisplay(mediaStream);
+                    }
                 }
             }
 
@@ -990,6 +989,11 @@
 
                     // 프레임 처리 시작
                     AiProcessBackgroundRemoval(tempVideo);
+
+                    // 처리된 스트림이 준비되었으므로 비디오 화면 업데이트
+                    if (mediaStream) {
+                        updateVideoDisplay(mediaStream);
+                    }
                 });
             }
 
