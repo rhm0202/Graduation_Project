@@ -1023,10 +1023,24 @@
             async function AiProcessBackgroundRemoval(video) {
                 if (!backgroundRemovalEnabled || !backgroundCtx) return;
 
-                // 비디오 프레임을 Canvas에 그리기
-                backgroundCtx.drawImage(video, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
+                // 송출 중인 backgroundCanvas에 직접 그리면 AI 처리시간 동안 원본 프레임이 1프레임 노출될 수 있습니다.
+                // 따라서 임시 캔버스에 그려서 이미지 데이터를 추출합니다.
+                if (!window.hiddenProcessCanvas) {
+                    window.hiddenProcessCanvas = document.createElement('canvas');
+                    window.hiddenProcessCtx = window.hiddenProcessCanvas.getContext('2d', { willReadFrequently: true });
+                }
+                const hCanvas = window.hiddenProcessCanvas;
+                const hCtx = window.hiddenProcessCtx;
 
-                let imageData = backgroundCtx.getImageData(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+                if (hCanvas.width !== backgroundCanvas.width || hCanvas.height !== backgroundCanvas.height) {
+                    hCanvas.width = backgroundCanvas.width;
+                    hCanvas.height = backgroundCanvas.height;
+                }
+
+                hCtx.drawImage(video, 0, 0, hCanvas.width, hCanvas.height);
+                let imageData = hCtx.getImageData(0, 0, hCanvas.width, hCanvas.height);
+
+                let processSuccess = false;
 
                 if (session) {
                     try {
@@ -1078,6 +1092,7 @@
                                 }
                             }
                         }
+                        processSuccess = true;
                     } catch (error) {
                         console.error('AI 세그멘테이션 추론 오류:', error);
                         const debugBar = document.getElementById('ai-debug-bar');
@@ -1085,31 +1100,36 @@
                             debugBar.innerHTML = `❌ 추론 오류: ${error.message}`;
                             debugBar.style.backgroundColor = 'rgba(255,0,0,0.7)';
                         }
+                        // 에러 시 원본 프레임이 나타나는 것을 방지하기 위해 아래 출력 로직을 건너뜁니다.
                     }
                 }
 
-                // 배경 이미지/비디오가 있을 경우 합성을 위한 처리
-                if (backgroundImage || backgroundVideo) {
-                    backgroundCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+                // 세그멘테이션이 성공했거나 세션이 아직 없을 때만 그리기 업데이트
+                // 1프레임씩 원본영상이 송출되는 문제 해결
+                if (processSuccess || !session) {
+                    // 배경 이미지/비디오가 있을 경우 합성을 위한 처리
+                    if (backgroundImage || backgroundVideo) {
+                        backgroundCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
 
-                    // 1. 커스텀 배경 그리기
-                    if (backgroundImage) {
-                        backgroundCtx.drawImage(backgroundImage, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
-                    } else if (backgroundVideo) {
-                        backgroundCtx.drawImage(backgroundVideo, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
+                        // 1. 커스텀 배경 그리기
+                        if (backgroundImage) {
+                            backgroundCtx.drawImage(backgroundImage, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
+                        } else if (backgroundVideo) {
+                            backgroundCtx.drawImage(backgroundVideo, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
+                        }
+
+                        // 2. 세그멘테이션 처리된 사람 이미지를 위에 겹치기
+                        // putImageData는 픽셀 덮어쓰기라 투명도가 반영된 합성이 안 되므로 임시 캔버스로 처리
+                        const fgCanvas = document.createElement('canvas');
+                        fgCanvas.width = backgroundCanvas.width;
+                        fgCanvas.height = backgroundCanvas.height;
+                        fgCanvas.getContext('2d').putImageData(imageData, 0, 0);
+
+                        backgroundCtx.drawImage(fgCanvas, 0, 0);
+                    } else {
+                        // 배경 교체가 되지 않은 단순 배경 투명화
+                        backgroundCtx.putImageData(imageData, 0, 0);
                     }
-
-                    // 2. 세그멘테이션 처리된 사람 이미지를 위에 겹치기
-                    // putImageData는 픽셀 덮어쓰기라 투명도가 반영된 합성이 안 되므로 임시 캔버스로 처리
-                    const fgCanvas = document.createElement('canvas');
-                    fgCanvas.width = backgroundCanvas.width;
-                    fgCanvas.height = backgroundCanvas.height;
-                    fgCanvas.getContext('2d').putImageData(imageData, 0, 0);
-
-                    backgroundCtx.drawImage(fgCanvas, 0, 0);
-                } else {
-                    // 배경 교체가 되지 않은 단순 배경 투명화
-                    backgroundCtx.putImageData(imageData, 0, 0);
                 }
 
                 // 30fps 내외로 다음 프레임 요청
