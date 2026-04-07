@@ -1,3129 +1,714 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:;">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:;"
+    />
     <title>Spotlight Cam - AI 객체 추적 및 배경 제거</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
 
-<body>
-
+  <body>
     <!-- 
         Spotlight Cam 메인 애플리케이션 컨테이너
         전체 UI의 최상위 래퍼 요소
     -->
 
     <div class="spotlight-window">
+      <header class="app-menubar">
+        <div class="menu-item">
+          <span>File</span>
+          <ul class="dropdown-menu">
+            <li id="menu-show-recordings">Show Recordings</li>
+            <li id="menu-settings">Settings</li>
+            <li id="menu-exit">Exit</li>
+          </ul>
+        </div>
+        <div class="menu-item">
+          <span>Edit</span>
+          <ul class="dropdown-menu">
+            <li id="menu-copy">Copy</li>
+            <li id="menu-paste">Paste</li>
+            <li id="menu-transform">Transform</li>
+          </ul>
+        </div>
+        <div class="menu-item">
+          <span>View</span>
+          <ul class="dropdown-menu">
+            <li id="menu-toggle-fullscreen">Toggle Fullscreen</li>
+            <li>Docks</li>
+            <hr />
+            <li id="menu-reload">Force Reload</li>
+            <li id="menu-toggle-devtool">Toggle Developer Tools</li>
+          </ul>
+        </div>
+        <div class="menu-item">
+          <span>Tools</span>
+          <ul class="dropdown-menu">
+            <li>Auto-Configuration Wizard</li>
+            <li>Scripts</li>
+          </ul>
+        </div>
+        <div class="menu-item">
+          <span>Help</span>
+          <ul class="dropdown-menu">
+            <li id="menu-check-updates">Check for Updates</li>
+            <li id="menu-about">About</li>
+          </ul>
+        </div>
+      </header>
 
-        <header class="app-menubar">
-            <div class="menu-item">
-                <span>File</span>
-                <ul class="dropdown-menu">
-                    <li id="menu-show-recordings">Show Recordings</li>
-                    <li id="menu-settings">Settings</li>
-                    <li id="menu-exit">Exit</li>
-                </ul>
+      <main class="main-content">
+        <section class="preview-area" id="preview-area">
+          <!-- 처리 전/후 비교 모드 -->
+          <div id="comparison-container">
+            <div class="comparison-video-wrapper">
+              <div class="comparison-label original-label">원본</div>
+              <video id="original-video" autoplay muted playsinline></video>
             </div>
-            <div class="menu-item">
-                <span>Edit</span>
-                <ul class="dropdown-menu">
-                    <li id="menu-copy">Copy</li>
-                    <li id="menu-paste">Paste</li>
-                    <li id="menu-transform">Transform</li>
-                </ul>
+            <div class="comparison-video-wrapper processed">
+              <div class="comparison-label processed-label">처리 후</div>
+              <video id="processed-video" autoplay muted playsinline></video>
             </div>
-            <div class="menu-item">
-                <span>View</span>
-                <ul class="dropdown-menu">
-                    <li id="menu-toggle-fullscreen">Toggle Fullscreen</li>
-                    <li>Docks</li>
-                    <hr>
-                    <li id="menu-reload"> Force Reload</li>
-                    <li id="menu-toggle-devtool">Toggle Developer Tools</li>
-                </ul>
-            </div>
-            <div class="menu-item">
-                <span>Tools</span>
-                <ul class="dropdown-menu">
-                    <li>Auto-Configuration Wizard</li>
-                    <li>Scripts</li>
-                </ul>
-            </div>
-            <div class="menu-item">
-                <span>Help</span>
-                <ul class="dropdown-menu">
-                    <li id="menu-check-updates">Check for Updates</li>
-                    <li id="menu-about">About</li>
-                </ul>
-            </div>
-        </header>
+          </div>
+          <!-- 일반 모드 -->
+          <video id="main-video-feed" autoplay muted playsinline></video>
+        </section>
 
-        <main class="main-content">
+        <!-- 리사이즈 바 -->
+        <div class="resize-bar" id="docks-resize-bar"></div>
 
-            <section class="preview-area" id="preview-area">
-                <!-- 처리 전/후 비교 모드 -->
-                <div id="comparison-container">
-                    <div class="comparison-video-wrapper">
-                        <div class="comparison-label original-label">원본</div>
-                        <video id="original-video" autoplay muted playsinline></video>
-                    </div>
-                    <div class="comparison-video-wrapper processed">
-                        <div class="comparison-label processed-label">처리 후</div>
-                        <video id="processed-video" autoplay muted playsinline></video>
-                    </div>
+        <section class="docks-container" id="docks-container">
+          <div class="dock-panel" id="scenes-panel">
+            <div class="dock-header">
+              <h3>Scenes</h3>
+            </div>
+            <div class="dock-content">
+              <ul id="scenes-list">
+                <li class="scene-item active" data-scene-id="0">Scene</li>
+              </ul>
+            </div>
+            <div class="dock-toolbar">
+              <button id="add-scene-btn" title="장면 추가">+</button>
+              <button id="remove-scene-btn" title="장면 삭제">-</button>
+              <button id="move-scene-up-btn" title="위로 이동">⮝</button>
+              <button id="move-scene-down-btn" title="아래로 이동">⮟</button>
+            </div>
+          </div>
+
+          <div class="dock-panel" id="sources-panel">
+            <div class="dock-header">
+              <h3>Sources</h3>
+            </div>
+            <div class="dock-content" id="sources-content">
+              <ul id="sources-list"></ul>
+              <div class="center-text" id="sources-empty" style="display: none">
+                <p>
+                  You don't have any sources.<br />Click the + button below,<br />or
+                  right click here to add one.
+                </p>
+                <div class="source-icons">
+                  <span>📁</span>
+                  <span>💻</span>
+                  <span>🎤</span>
                 </div>
-                <!-- 일반 모드 -->
-                <video id="main-video-feed" autoplay muted playsinline></video>
-            </section>
-
-            <!-- 리사이즈 바 -->
-            <div class="resize-bar" id="docks-resize-bar"></div>
-
-            <section class="docks-container" id="docks-container">
-
-                <div class="dock-panel" id="scenes-panel">
-                    <div class="dock-header">
-                        <h3>Scenes</h3>
-                    </div>
-                    <div class="dock-content">
-                        <ul id="scenes-list">
-                            <li class="scene-item active" data-scene-id="0">Scene</li>
-                        </ul>
-                    </div>
-                    <div class="dock-toolbar">
-                        <button id="add-scene-btn" title="장면 추가">+</button>
-                        <button id="remove-scene-btn" title="장면 삭제">-</button>
-                        <button id="move-scene-up-btn" title="위로 이동">⮝</button>
-                        <button id="move-scene-down-btn" title="아래로 이동">⮟</button>
-                    </div>
-                </div>
-
-                <div class="dock-panel" id="sources-panel">
-                    <div class="dock-header">
-                        <h3>Sources</h3>
-                    </div>
-                    <div class="dock-content" id="sources-content">
-                        <ul id="sources-list"></ul>
-                        <div class="center-text" id="sources-empty" style="display: none;">
-                            <p>You don't have any sources.<br>Click the + button below,<br>or right click here to add
-                                one.</p>
-                            <div class="source-icons">
-                                <span>📁</span>
-                                <span>💻</span>
-                                <span>🎤</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="dock-toolbar">
-                        <button id="add-source-btn" title="소스 추가">+</button>
-                        <button id="remove-source-btn" title="소스 삭제">-</button>
-                        <button id="source-settings-btn" title="소스 설정">⚙</button>
-                        <button id="move-source-up-btn" title="위로 이동">⮝</button>
-                        <button id="move-source-down-btn" title="아래로 이동">⮟</button>
-                    </div>
-                </div>
-
-                <div class="dock-panel" id="audio-mixer-panel">
-                    <div class="dock-header">
-                        <h3>Audio Mixer</h3>
-                    </div>
-                    <div class="dock-content">
-                        <div class="audio-track" data-track="desktop">
-                            <div class="track-header">
-                                <span>Desktop Audio</span>
-                                <span class="db-display">0.0 dB</span>
-                                <span class="icon-button">⚙</span>
-                            </div>
-                            <div class="volume-meter">
-                                <div class="meter-fill" data-meter-name="desktop"></div>
-                            </div>
-                            <div class="track-controls">
-                                <span class="icon-button mute-btn" data-mute="desktop">🔇</span>
-                                <input type="range" class="volume-slider" data-volume="desktop" min="-100" max="0"
-                                    value="0">
-                            </div>
-                        </div>
-                        <div class="audio-track" data-track="mic">
-                            <div class="track-header">
-                                <span>Mic/Aux</span>
-                                <span class="db-display">0.0 dB</span>
-                                <span class="icon-button">⚙</span>
-                            </div>
-                            <div class="volume-meter">
-                                <div class="meter-fill" data-meter-name="mic"></div>
-                            </div>
-                            <div class="track-controls">
-                                <span class="icon-button mute-btn" data-mute="mic">🔇</span>
-                                <input type="range" class="volume-slider" data-volume="mic" min="-100" max="0"
-                                    value="0">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="dock-panel" id="controls-panel">
-                    <div class="dock-header">
-                        <h3>Controls</h3>
-                    </div>
-                    <div class="dock-content">
-                        <button class="control-btn" id="start-recording-btn">Start Recording</button>
-                        <button class="control-btn" id="toggle-background-removal">배경 제거: OFF</button>
-                        <button class="control-btn" id="toggle-background-replace">배경 교체</button>
-                        <button class="control-btn" id="toggle-comparison">전/후 비교 보기</button>
-                        <button class="control-btn" id="toggle-auto-tracking">자동 추적: OFF</button>
-                        <button class="control-btn" id="open-settings">Settings</button>
-                        <button class="control-btn" id="exit-button">Exit</button>
-                    </div>
-                </div>
-
-            </section>
-        </main>
-
-        <footer class="status-bar">
-            <div class="status-left">
-                <span>LIVE: 00:00:00</span>
-                <span id="rec-status">REC: 00:00:00</span>
-                <span id="pi-status" style="margin-left: 20px;">
-                    <span id="pi-status-indicator"
-                        style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: var(--color-danger); margin-right: 5px;"></span>
-                    <span id="pi-status-text">라즈베리파이: 연결 안 됨</span>
-                </span>
+              </div>
             </div>
-            <div class="status-right">
-                <span>CPU: 3.8%, 60.00 fps</span>
+            <div class="dock-toolbar">
+              <button id="add-source-btn" title="소스 추가">+</button>
+              <button id="remove-source-btn" title="소스 삭제">-</button>
+              <button id="source-settings-btn" title="소스 설정">⚙</button>
+              <button id="move-source-up-btn" title="위로 이동">⮝</button>
+              <button id="move-source-down-btn" title="아래로 이동">⮟</button>
             </div>
-        </footer>
+          </div>
+
+          <div class="dock-panel" id="audio-mixer-panel">
+            <div class="dock-header">
+              <h3>Audio Mixer</h3>
+            </div>
+            <div class="dock-content">
+              <div class="audio-track" data-track="desktop">
+                <div class="track-header">
+                  <span>Desktop Audio</span>
+                  <span class="db-display">0.0 dB</span>
+                  <span class="icon-button">⚙</span>
+                </div>
+                <div class="volume-meter">
+                  <div class="meter-fill" data-meter-name="desktop"></div>
+                </div>
+                <div class="track-controls">
+                  <span class="icon-button mute-btn" data-mute="desktop"
+                    >🔊</span
+                  >
+                  <input
+                    type="range"
+                    class="volume-slider"
+                    data-volume="desktop"
+                    min="-100"
+                    max="0"
+                    value="0"
+                  />
+                </div>
+              </div>
+              <div class="audio-track" data-track="mic">
+                <div class="track-header">
+                  <span>Mic/Aux</span>
+                  <span class="db-display">0.0 dB</span>
+                  <span class="icon-button">⚙</span>
+                </div>
+                <div class="volume-meter">
+                  <div class="meter-fill" data-meter-name="mic"></div>
+                </div>
+                <div class="track-controls">
+                  <span class="icon-button mute-btn" data-mute="mic">🔊</span>
+                  <input
+                    type="range"
+                    class="volume-slider"
+                    data-volume="mic"
+                    min="-100"
+                    max="0"
+                    value="0"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dock-panel" id="controls-panel">
+            <div class="dock-header">
+              <h3>Controls</h3>
+            </div>
+            <div class="dock-content">
+              <button class="control-btn" id="start-recording-btn">
+                Start Recording
+              </button>
+              <button class="control-btn" id="toggle-background-removal">
+                배경 제거: OFF
+              </button>
+              <button class="control-btn" id="toggle-background-replace">
+                배경 교체
+              </button>
+              <button class="control-btn" id="toggle-comparison">
+                전/후 비교 보기
+              </button>
+              <button class="control-btn" id="toggle-auto-tracking">
+                자동 추적: OFF
+              </button>
+              <button class="control-btn" id="open-settings">Settings</button>
+              <button class="control-btn" id="exit-button">Exit</button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="status-bar">
+        <div class="status-left">
+          <span>LIVE: 00:00:00</span>
+          <span id="rec-status">REC: 00:00:00</span>
+          <span id="pi-status" style="margin-left: 20px">
+            <span
+              id="pi-status-indicator"
+              style="
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background-color: var(--color-danger);
+                margin-right: 5px;
+              "
+            ></span>
+            <span id="pi-status-text">라즈베리파이: 연결 안 됨</span>
+          </span>
+        </div>
+        <div class="status-right">
+          <span id="gpu-name-status"></span>
+          <span id="gpu-status">GPU: --%</span>
+        </div>
+      </footer>
     </div>
 
     <div class="modal-overlay" id="settings-modal">
-        <div class="modal-content">
-            <h2>설정 (Settings)</h2>
+      <div class="modal-content">
+        <h2>설정 (Settings)</h2>
 
-            <fieldset>
-                <legend>비디오 설정</legend>
-                <div class="setting-item">
-                    <label for="video-source">카메라:</label>
-                    <select id="video-source">
-                    </select>
-                </div>
-                <div class="setting-item">
-                    <label for="video-resolution">해상도:</label>
-                    <select id="video-resolution">
-                        <option value="auto">자동</option>
-                        <option value="1080p">1920x1080</option>
-                        <option value="720p">1280x720</option>
-                    </select>
-                </div>
-                <div class="setting-item">
-                    <label for="video-framerate">프레임레이트:</label>
-                    <select id="video-framerate">
-                        <option value="auto">자동</option>
-                        <option value="30">30 fps</option>
-                        <option value="60">60 fps</option>
-                    </select>
-                </div>
-            </fieldset>
+        <fieldset>
+          <legend>비디오 설정</legend>
+          <div class="setting-item">
+            <label for="video-source">카메라:</label>
+            <select id="video-source"></select>
+          </div>
+          <div class="setting-item">
+            <label for="video-resolution">해상도:</label>
+            <select id="video-resolution">
+              <option value="auto">자동</option>
+              <option value="1080p">1920x1080</option>
+              <option value="720p">1280x720</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label for="video-framerate">프레임레이트:</label>
+            <select id="video-framerate">
+              <option value="auto">자동</option>
+              <option value="30">30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </div>
+        </fieldset>
 
-            <fieldset>
-                <legend>오디오 설정</legend>
-                <div class="setting-item">
-                    <label for="audio-source">마이크:</label>
-                    <select id="audio-source">
-                    </select>
-                </div>
-            </fieldset>
+        <fieldset>
+          <legend>오디오 설정</legend>
+          <div class="setting-item">
+            <label for="audio-source">마이크:</label>
+            <select id="audio-source"></select>
+          </div>
+        </fieldset>
 
-            <fieldset>
-                <legend>라즈베리파이 연결</legend>
-                <div class="setting-item">
-                    <label for="raspberry-pi-ip">라즈베리파이 IP 주소:</label>
-                    <div style="display: flex; gap: 5px; flex-grow: 1;">
-                        <input type="text" id="raspberry-pi-ip" placeholder="예: 192.168.1.100"
-                            style="flex-grow: 1; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
-                        <input type="number" id="raspberry-pi-port" placeholder="포트" value="8765" min="1" max="65535"
-                            style="width: 80px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <label>연결 상태:</label>
-                    <div style="display: flex; align-items: center; gap: 10px; flex-grow: 1;">
-                        <span id="pi-connection-status"
-                            style="padding: 5px 10px; border-radius: 3px; font-size: 0.9em; background-color: var(--bg-medium);">연결
-                            안 됨</span>
-                        <button class="control-btn" id="connect-pi-btn" style="flex-shrink: 0;">연결</button>
-                        <button class="control-btn" id="disconnect-pi-btn" style="flex-shrink: 0; display: none;">연결
-                            해제</button>
-                    </div>
-                </div>
-            </fieldset>
+        <fieldset>
+          <legend>GPU 설정</legend>
+          <div class="setting-item">
+            <label for="gpu-select">사용 GPU:</label>
+            <select id="gpu-select">
+              <option value="">불러오는 중...</option>
+            </select>
+          </div>
+        </fieldset>
 
-            <fieldset>
-                <legend>출력 (저장)</legend>
-                <div class="setting-item">
-                    <label for="file-format">파일 형식:</label>
-                    <select id="file-format">
-                        <option value="webm">WebM (권장)</option>
-                        <option value="mp4">MP4 (변환 필요)</option>
-                    </select>
-                </div>
-                <div class="setting-item">
-                    <label>저장 위치:</label>
-                    <div style="display: flex; gap: 5px; flex-grow: 1;">
-                        <input type="text" id="save-path-display" readonly
-                            style="flex-grow: 1; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
-                        <button class="control-btn" id="set-save-path" style="flex-shrink: 0;">선택...</button>
-                    </div>
-                </div>
-            </fieldset>
-
-            <div class="modal-buttons">
-                <button class="control-btn" id="close-settings">닫기</button>
+        <fieldset>
+          <legend>라즈베리파이 연결</legend>
+          <div class="setting-item">
+            <label for="raspberry-pi-ip">라즈베리파이 IP 주소:</label>
+            <div style="display: flex; gap: 5px; flex-grow: 1">
+              <input
+                type="text"
+                id="raspberry-pi-ip"
+                placeholder="예: 192.168.1.100"
+                style="
+                  flex-grow: 1;
+                  background-color: var(--bg-medium);
+                  color: var(--text-primary);
+                  border: 1px solid var(--border-color);
+                  padding: 5px;
+                  border-radius: 3px;
+                  font-size: 0.9em;
+                "
+              />
+              <input
+                type="number"
+                id="raspberry-pi-port"
+                placeholder="포트"
+                value="8765"
+                min="1"
+                max="65535"
+                style="
+                  width: 80px;
+                  background-color: var(--bg-medium);
+                  color: var(--text-primary);
+                  border: 1px solid var(--border-color);
+                  padding: 5px;
+                  border-radius: 3px;
+                  font-size: 0.9em;
+                "
+              />
             </div>
+          </div>
+          <div class="setting-item">
+            <label>연결 상태:</label>
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                flex-grow: 1;
+              "
+            >
+              <span
+                id="pi-connection-status"
+                style="
+                  padding: 5px 10px;
+                  border-radius: 3px;
+                  font-size: 0.9em;
+                  background-color: var(--bg-medium);
+                "
+                >연결 안 됨</span
+              >
+              <button
+                class="control-btn"
+                id="connect-pi-btn"
+                style="flex-shrink: 0"
+              >
+                연결
+              </button>
+              <button
+                class="control-btn"
+                id="disconnect-pi-btn"
+                style="flex-shrink: 0; display: none"
+              >
+                연결 해제
+              </button>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>출력 (저장)</legend>
+          <div class="setting-item">
+            <label for="file-format">파일 형식:</label>
+            <select id="file-format">
+              <option value="webm">WebM (권장)</option>
+              <option value="mp4">MP4 (변환 필요)</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label>저장 위치:</label>
+            <div style="display: flex; gap: 5px; flex-grow: 1">
+              <input
+                type="text"
+                id="save-path-display"
+                readonly
+                style="
+                  flex-grow: 1;
+                  background-color: var(--bg-medium);
+                  color: var(--text-primary);
+                  border: 1px solid var(--border-color);
+                  padding: 5px;
+                  border-radius: 3px;
+                  font-size: 0.9em;
+                "
+              />
+              <button
+                class="control-btn"
+                id="set-save-path"
+                style="flex-shrink: 0"
+              >
+                선택...
+              </button>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="modal-buttons">
+          <button class="control-btn" id="close-settings">닫기</button>
         </div>
+      </div>
     </div>
 
     <div class="modal-overlay" id="add-source-modal">
-        <div class="modal-content">
-            <h2>소스 추가</h2>
-            <fieldset>
-                <legend>소스 타입 선택</legend>
-                <div class="setting-item">
-                    <label>
-                        <input type="radio" name="source-type" value="video" checked>
-                        비디오 캡처 장치
-                    </label>
-                </div>
-                <div class="setting-item">
-                    <label>
-                        <input type="radio" name="source-type" value="image">
-                        이미지
-                    </label>
-                </div>
-                <div class="setting-item">
-                    <label>
-                        <input type="radio" name="source-type" value="text">
-                        텍스트
-                    </label>
-                </div>
-            </fieldset>
-            <fieldset id="source-options">
-                <legend>옵션</legend>
-                <div class="setting-item" id="video-option">
-                    <label for="source-video-device">비디오 장치:</label>
-                    <select id="source-video-device"></select>
-                </div>
-                <div class="setting-item" id="image-option" style="display: none;">
-                    <label for="source-image-file">이미지 파일:</label>
-                    <input type="file" id="source-image-file" accept="image/*">
-                </div>
-                <div class="setting-item" id="text-option" style="display: none;">
-                    <label for="source-text-content">텍스트 내용:</label>
-                    <input type="text" id="source-text-content" placeholder="텍스트를 입력하세요">
-                </div>
-                <div class="setting-item">
-                    <label for="source-name">소스 이름:</label>
-                    <input type="text" id="source-name" placeholder="소스 이름">
-                </div>
-            </fieldset>
-            <div class="modal-buttons">
-                <button class="control-btn" id="add-source-confirm">추가</button>
-                <button class="control-btn" id="cancel-add-source">취소</button>
-            </div>
+      <div class="modal-content">
+        <h2>소스 추가</h2>
+        <fieldset>
+          <legend>소스 타입 선택</legend>
+          <div class="setting-item">
+            <label>
+              <input type="radio" name="source-type" value="video" checked />
+              비디오 캡처 장치
+            </label>
+          </div>
+          <div class="setting-item">
+            <label>
+              <input type="radio" name="source-type" value="image" />
+              이미지
+            </label>
+          </div>
+          <div class="setting-item">
+            <label>
+              <input type="radio" name="source-type" value="text" />
+              텍스트
+            </label>
+          </div>
+        </fieldset>
+        <fieldset id="source-options">
+          <legend>옵션</legend>
+          <div class="setting-item" id="video-option">
+            <label for="source-video-device">비디오 장치:</label>
+            <select id="source-video-device"></select>
+          </div>
+          <div class="setting-item" id="image-option" style="display: none">
+            <label for="source-image-file">이미지 파일:</label>
+            <input type="file" id="source-image-file" accept="image/*" />
+          </div>
+          <div class="setting-item" id="text-option" style="display: none">
+            <label for="source-text-content">텍스트 내용:</label>
+            <input
+              type="text"
+              id="source-text-content"
+              placeholder="텍스트를 입력하세요"
+            />
+          </div>
+          <div class="setting-item">
+            <label for="source-name">소스 이름:</label>
+            <input type="text" id="source-name" placeholder="소스 이름" />
+          </div>
+        </fieldset>
+        <div class="modal-buttons">
+          <button class="control-btn" id="add-source-confirm">추가</button>
+          <button class="control-btn" id="cancel-add-source">취소</button>
         </div>
+      </div>
     </div>
 
-
-    <div class="modal-overlay" id="error-modal" style="display: none;">
-        <div class="modal-content" style="max-width: 500px;">
-            <h2 style="color: var(--color-danger); margin-bottom: 15px;">오류 발생</h2>
-            <div id="error-message" style="margin-bottom: 20px; line-height: 1.6; color: var(--text-primary);">
-                <!-- 에러 메시지가 여기에 표시됩니다 -->
-            </div>
-            <div class="modal-buttons" style="display: flex; gap: 10px; justify-content: flex-end;">
-                <button class="control-btn" id="error-retry-btn" style="display: none;">다시 시도</button>
-                <button class="control-btn" id="error-settings-btn" style="display: none;">설정 열기</button>
-                <button class="control-btn" id="error-close-btn">닫기</button>
-            </div>
+    <div class="modal-overlay" id="error-modal" style="display: none">
+      <div class="modal-content" style="max-width: 500px">
+        <h2 style="color: var(--color-danger); margin-bottom: 15px">
+          오류 발생
+        </h2>
+        <div
+          id="error-message"
+          style="
+            margin-bottom: 20px;
+            line-height: 1.6;
+            color: var(--text-primary);
+          "
+        >
+          <!-- 에러 메시지가 여기에 표시됩니다 -->
         </div>
+        <div
+          class="modal-buttons"
+          style="display: flex; gap: 10px; justify-content: flex-end"
+        >
+          <button
+            class="control-btn"
+            id="error-retry-btn"
+            style="display: none"
+          >
+            다시 시도
+          </button>
+          <button
+            class="control-btn"
+            id="error-settings-btn"
+            style="display: none"
+          >
+            설정 열기
+          </button>
+          <button class="control-btn" id="error-close-btn">닫기</button>
+        </div>
+      </div>
     </div>
 
     <div class="modal-overlay" id="transform-modal">
-        <div class="modal-content">
-            <h2>소스 변형 (Transform)</h2>
+      <div class="modal-content">
+        <h2>소스 변형 (Transform)</h2>
 
-            <fieldset>
-                <legend>위치</legend>
-                <div class="setting-item">
-                    <label for="transform-x">X 위치:</label>
-                    <input type="number" id="transform-x" value="0" step="1"
-                        style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
-                </div>
-                <div class="setting-item">
-                    <label for="transform-y">Y 위치:</label>
-                    <input type="number" id="transform-y" value="0" step="1"
-                        style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
-                </div>
-            </fieldset>
+        <fieldset>
+          <legend>위치</legend>
+          <div class="setting-item">
+            <label for="transform-x">X 위치:</label>
+            <input
+              type="number"
+              id="transform-x"
+              value="0"
+              step="1"
+              style="
+                width: 100px;
+                background-color: var(--bg-medium);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 5px;
+                border-radius: 3px;
+              "
+            />
+          </div>
+          <div class="setting-item">
+            <label for="transform-y">Y 위치:</label>
+            <input
+              type="number"
+              id="transform-y"
+              value="0"
+              step="1"
+              style="
+                width: 100px;
+                background-color: var(--bg-medium);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 5px;
+                border-radius: 3px;
+              "
+            />
+          </div>
+        </fieldset>
 
-            <fieldset>
-                <legend>크기</legend>
-                <div class="setting-item">
-                    <label for="transform-width">너비:</label>
-                    <input type="number" id="transform-width" value="640" step="1"
-                        style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
-                </div>
-                <div class="setting-item">
-                    <label for="transform-height">높이:</label>
-                    <input type="number" id="transform-height" value="480" step="1"
-                        style="width: 100px; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px;">
-                </div>
-                <div class="setting-item">
-                    <label for="transform-scale">크기 비율:</label>
-                    <input type="range" id="transform-scale" min="0.1" max="2" step="0.1" value="1"
-                        style="width: 200px;">
-                    <span id="transform-scale-value">100%</span>
-                </div>
-            </fieldset>
+        <fieldset>
+          <legend>크기</legend>
+          <div class="setting-item">
+            <label for="transform-width">너비:</label>
+            <input
+              type="number"
+              id="transform-width"
+              value="640"
+              step="1"
+              style="
+                width: 100px;
+                background-color: var(--bg-medium);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 5px;
+                border-radius: 3px;
+              "
+            />
+          </div>
+          <div class="setting-item">
+            <label for="transform-height">높이:</label>
+            <input
+              type="number"
+              id="transform-height"
+              value="480"
+              step="1"
+              style="
+                width: 100px;
+                background-color: var(--bg-medium);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 5px;
+                border-radius: 3px;
+              "
+            />
+          </div>
+          <div class="setting-item">
+            <label for="transform-scale">크기 비율:</label>
+            <input
+              type="range"
+              id="transform-scale"
+              min="0.1"
+              max="2"
+              step="0.1"
+              value="1"
+              style="width: 200px"
+            />
+            <span id="transform-scale-value">100%</span>
+          </div>
+        </fieldset>
 
-            <fieldset>
-                <legend>회전</legend>
-                <div class="setting-item">
-                    <label for="transform-rotation">각도:</label>
-                    <input type="range" id="transform-rotation" min="0" max="360" step="1" value="0"
-                        style="width: 200px;">
-                    <span id="transform-rotation-value">0°</span>
-                </div>
-            </fieldset>
+        <fieldset>
+          <legend>회전</legend>
+          <div class="setting-item">
+            <label for="transform-rotation">각도:</label>
+            <input
+              type="range"
+              id="transform-rotation"
+              min="0"
+              max="360"
+              step="1"
+              value="0"
+              style="width: 200px"
+            />
+            <span id="transform-rotation-value">0°</span>
+          </div>
+        </fieldset>
 
-            <div class="modal-buttons">
-                <button class="control-btn" id="transform-reset">초기화</button>
-                <button class="control-btn" id="transform-apply">적용</button>
-                <button class="control-btn" id="transform-close">닫기</button>
-            </div>
+        <div class="modal-buttons">
+          <button class="control-btn" id="transform-reset">초기화</button>
+          <button class="control-btn" id="transform-apply">적용</button>
+          <button class="control-btn" id="transform-close">닫기</button>
         </div>
+      </div>
     </div>
 
     <div class="modal-overlay" id="background-replace-modal">
-        <div class="modal-content">
-            <h2>배경 교체</h2>
+      <div class="modal-content">
+        <h2>배경 교체</h2>
 
-            <fieldset>
-                <legend>배경 타입</legend>
-                <div class="setting-item">
-                    <label>
-                        <input type="radio" name="background-type" value="none" checked>
-                        배경 없음 (투명)
-                    </label>
-                </div>
-                <div class="setting-item">
-                    <label>
-                        <input type="radio" name="background-type" value="image">
-                        이미지
-                    </label>
-                </div>
-                <div class="setting-item">
-                    <label>
-                        <input type="radio" name="background-type" value="video">
-                        비디오
-                    </label>
-                </div>
-                <div class="setting-item">
-                    <label>
-                        <input type="radio" name="background-type" value="color">
-                        단색
-                    </label>
-                </div>
-            </fieldset>
+        <fieldset>
+          <legend>배경 타입</legend>
+          <div class="setting-item">
+            <label>
+              <input type="radio" name="background-type" value="none" checked />
+              배경 없음 (투명)
+            </label>
+          </div>
+          <div class="setting-item">
+            <label>
+              <input type="radio" name="background-type" value="image" />
+              이미지
+            </label>
+          </div>
+          <div class="setting-item">
+            <label>
+              <input type="radio" name="background-type" value="video" />
+              비디오
+            </label>
+          </div>
+          <div class="setting-item">
+            <label>
+              <input type="radio" name="background-type" value="color" />
+              단색
+            </label>
+          </div>
+        </fieldset>
 
-            <fieldset id="background-image-option" style="display: none;">
-                <legend>이미지 선택</legend>
-                <div class="setting-item">
-                    <input type="file" id="background-image-file" accept="image/*">
-                </div>
-            </fieldset>
+        <fieldset id="background-image-option" style="display: none">
+          <legend>이미지 선택</legend>
+          <div class="setting-item">
+            <input type="file" id="background-image-file" accept="image/*" />
+          </div>
+        </fieldset>
 
-            <fieldset id="background-video-option" style="display: none;">
-                <legend>비디오 선택</legend>
-                <div class="setting-item">
-                    <input type="file" id="background-video-file" accept="video/*">
-                </div>
-            </fieldset>
+        <fieldset id="background-video-option" style="display: none">
+          <legend>비디오 선택</legend>
+          <div class="setting-item">
+            <input type="file" id="background-video-file" accept="video/*" />
+          </div>
+        </fieldset>
 
-            <fieldset id="background-color-option" style="display: none;">
-                <legend>색상 선택</legend>
-                <div class="setting-item">
-                    <label for="background-color-picker">색상:</label>
-                    <input type="color" id="background-color-picker" value="#000000">
-                </div>
-            </fieldset>
+        <fieldset id="background-color-option" style="display: none">
+          <legend>색상 선택</legend>
+          <div class="setting-item">
+            <label for="background-color-picker">색상:</label>
+            <input type="color" id="background-color-picker" value="#000000" />
+          </div>
+        </fieldset>
 
-            <div class="modal-buttons">
-                <button class="control-btn" id="background-replace-apply">적용</button>
-                <button class="control-btn" id="background-replace-close">닫기</button>
-            </div>
+        <div class="modal-buttons">
+          <button class="control-btn" id="background-replace-apply">
+            적용
+          </button>
+          <button class="control-btn" id="background-replace-close">
+            닫기
+          </button>
         </div>
+      </div>
     </div>
 
     <div class="modal-overlay" id="add-scene-modal">
-        <div class="modal-content">
-            <h2>장면 추가</h2>
+      <div class="modal-content">
+        <h2>장면 추가</h2>
 
-            <fieldset>
-                <legend>장면 정보</legend>
-                <div class="setting-item">
-                    <label for="scene-name-input">장면 이름:</label>
-                    <input type="text" id="scene-name-input" placeholder="장면 이름을 입력하세요"
-                        style="flex-grow: 1; background-color: var(--bg-medium); color: var(--text-primary); border: 1px solid var(--border-color); padding: 5px; border-radius: 3px; font-size: 0.9em;">
-                </div>
-            </fieldset>
+        <fieldset>
+          <legend>장면 정보</legend>
+          <div class="setting-item">
+            <label for="scene-name-input">장면 이름:</label>
+            <input
+              type="text"
+              id="scene-name-input"
+              placeholder="장면 이름을 입력하세요"
+              style="
+                flex-grow: 1;
+                background-color: var(--bg-medium);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 5px;
+                border-radius: 3px;
+                font-size: 0.9em;
+              "
+            />
+          </div>
+        </fieldset>
 
-            <div class="modal-buttons">
-                <button class="control-btn" id="add-scene-confirm">추가</button>
-                <button class="control-btn" id="cancel-add-scene">취소</button>
-            </div>
+        <div class="modal-buttons">
+          <button class="control-btn" id="add-scene-confirm">추가</button>
+          <button class="control-btn" id="cancel-add-scene">취소</button>
         </div>
+      </div>
     </div>
 
     <script src="./node_modules/onnxruntime-web/dist/ort.all.min.js"></script>
+    <script type="module" src="./renderer/main-renderer.js"></script>
     <script>
-        /**
-         * Spotlight Cam 메인 애플리케이션 스크립트
-         * DOM 로드 완료 후 초기화 및 이벤트 리스너 설정
-         */
-        document.addEventListener("DOMContentLoaded", () => {
-            // ============================================
-            // DOM 요소 참조
-            // ============================================
-            const videoFeed = document.getElementById('main-video-feed');          // 메인 비디오 표시 요소
-            const videoSelect = document.getElementById('video-source');          // 비디오 장치 선택 드롭다운
-            const audioSelect = document.getElementById('audio-source');           // 오디오 장치 선택 드롭다운
-            const sourcesContent = document.getElementById('sources-content');     // 소스 패널 컨텐츠 영역
-            const startRecordingBtn = document.getElementById('start-recording-btn'); // 녹화 시작/중지 버튼
-            const recStatus = document.getElementById('rec-status');               // 녹화 상태 표시 요소
-            const comparisonContainer = document.getElementById('comparison-container'); // 전/후 비교 표시 요소
-
-            // ============================================
-            // 전역 상태 변수
-            // ============================================
-            let mediaStream = null;                    // 현재 활성화된 미디어 스트림 (카메라/마이크)
-            let mediaRecorder = null;                  // MediaRecorder 인스턴스 (녹화 제어)
-            let isRecording = false;                   // 녹화 상태 플래그
-            let recTimer = null;                       // 녹화 시간 업데이트 타이머
-            let recStartTime = 0;                     // 녹화 시작 시간 (타임스탬프)
-            let audioContext = null;                   // Web Audio API 컨텍스트 (오디오 처리)
-            let gainNodes = { desktop: null, mic: null }; // 오디오 볼륨 제어용 GainNode
-            let analysers = { desktop: null, mic: null }; // 각 트랙별 Analyser
-            let audioMuted = { desktop: false, mic: false }; // 오디오 음소거 상태
-            let scenes = [{ id: 0, name: 'Scene' }];  // 장면 목록 배열
-            let currentSceneId = 0;                   // 현재 활성 장면 ID
-            let sources = [];                          // 소스 목록 배열
-            let selectedSourceId = null;               // 현재 선택된 소스 ID
-            let nextSourceId = 1;                      // 다음 소스 ID (자동 증가)
-            let backgroundRemovalEnabled = false;      // 배경 제거 활성화 상태
-            let comparisonMode = false;                 // 전/후 비교 모드 활성화 상태
-            let backgroundImage = null;                 // 배경 교체용 이미지
-            let backgroundVideo = null;                 // 배경 교체용 비디오
-            let processedStream = null;                 // 배경 제거 처리된 스트림
-            let backgroundCanvas = null;                // 배경 제거용 Canvas
-            let backgroundCtx = null;                   // Canvas 컨텍스트
-            let backgroundAnimationFrame = null;        // 애니메이션 프레임 ID
-
-            // ============================================
-            // 라즈베리파이 WebSocket 연결 변수
-            // ============================================
-            let piWebSocket = null;                    // WebSocket 연결 인스턴스
-            let piConnected = false;                   // 연결 상태 플래그
-            let piReconnectAttempts = 0;               // 재연결 시도 횟수
-            let piReconnectTimer = null;              // 재연결 타이머
-            const MAX_RECONNECT_ATTEMPTS = 5;         // 최대 재연결 시도 횟수
-            const RECONNECT_DELAY = 3000;             // 재연결 대기 시간 (3초)
-            let piVideoStream = null;                  // 라즈베리파이에서 수신한 비디오 스트림
-            let autoTrackingEnabled = false;           // 자동 추적 모드 활성화 상태
-            let yoloModel = null;                      // YOLO 모델 (추후 로드)
-            let trackingCanvas = null;                 // 객체 추적용 Canvas
-            let trackingCtx = null;                    // Canvas 컨텍스트
-            let detectedObjects = [];                  // 감지된 객체 목록
-            let trackingAnimationFrame = null;         // 추적 애니메이션 프레임 ID
-            let lastMotorCommand = { pan: 0, tilt: 0 }; // 마지막 모터 명령
-
-            // ============================================
-            // ONNX Runtime 변수 설정
-            // ============================================
-            const MODEL_SIZE = 512;                    // 모델 크기
-            const canvas = document.createElement('canvas'); // Canvas 생성
-            canvas.width = MODEL_SIZE;                 // Canvas 너비
-            canvas.height = MODEL_SIZE;                // Canvas 높이
-
-            let session;
-
-            // Electron API 사용 가능 여부 확인
-            const isElectron = typeof window.electronAPI !== 'undefined' && typeof window.electronAPI.send === 'function';
-
-            /**
-             * AI 모델 로드
-             */
-            async function loadModel() {
-                try {
-                    console.log("AI 모델 로딩 중");
-                    // ONNX 모델 로드
-                    session = await ort.InferenceSession.create('segformer_person_mask.onnx', {
-                        executionProviders: ["webgpu", "webgl", "wasm"],
-                    });
-
-                    const inputs = session.inputNames.join(', ');
-                    const outputs = session.outputNames.join(', ');
-                    // session.executionProviders가 undefined일 수 있으므로 안전하게 처리
-                    console.log(`AI 모델 로드 성공! 입력: [${inputs}] / 출력: [${outputs}]`);
-
-                    // 화면 상단에 AI 모델 상태 표시바 추가
-                    let debugBar = document.getElementById('ai-debug-bar');
-                    if (!debugBar) {
-                        debugBar = document.createElement('div');
-                        debugBar.id = 'ai-debug-bar';
-                        debugBar.style.position = 'fixed';
-                        debugBar.style.top = '10px';
-                        debugBar.style.left = '50%';
-                        debugBar.style.transform = 'translateX(-50%)';
-                        debugBar.style.backgroundColor = 'rgba(0,0,0,0.7)';
-                        debugBar.style.color = '#fff';
-                        debugBar.style.padding = '10px 20px';
-                        debugBar.style.borderRadius = '5px';
-                        debugBar.style.zIndex = '9999';
-                        debugBar.style.fontFamily = 'monospace';
-                        document.body.appendChild(debugBar);
-                    }
-                    debugBar.innerHTML = `✅ AI Ready (GPU Enabled) | In: ${inputs} | Out: ${outputs}`;
-
-                } catch (error) {
-                    console.error('AI 모델 로드 실패:', error);
-                    alert(`AI 불러오기 실패:\n${error.message}`);
-
-                    let debugBar = document.getElementById('ai-debug-bar');
-                    if (!debugBar) {
-                        debugBar = document.createElement('div');
-                        debugBar.id = 'ai-debug-bar';
-                        document.body.appendChild(debugBar);
-                    }
-                    debugBar.innerHTML = `❌ AI 로드 오류: ${error.message}`;
-                    debugBar.style.backgroundColor = 'rgba(255,0,0,0.7)';
-                }
-            }
-
-            /**
-             * 사용 가능한 비디오/오디오 입력 장치 목록을 가져와 드롭다운에 추가합니다.
-             */
-            async function getDevices() {
-                let tempStream = null;
-                try {
-                    // 권한 획득을 위해 임시 스트림 요청 (장치 라벨을 얻기 위해 필요)
-                    tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-
-                    // 장치 목록 가져오기
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-
-                    // 드롭다운 초기화
-                    videoSelect.innerHTML = '';
-                    audioSelect.innerHTML = '';
-
-                    // 기본 옵션 추가
-                    const videoDefaultOption = document.createElement('option');
-                    videoDefaultOption.value = '';
-                    videoDefaultOption.text = '카메라 선택...';
-                    videoSelect.appendChild(videoDefaultOption);
-
-                    const audioDefaultOption = document.createElement('option');
-                    audioDefaultOption.value = '';
-                    audioDefaultOption.text = '마이크 선택...';
-                    audioSelect.appendChild(audioDefaultOption);
-
-                    // 장치 목록 추가
-                    let videoCount = 0;
-                    let audioCount = 0;
-
-                    devices.forEach(device => {
-                        const option = document.createElement('option');
-                        option.value = device.deviceId;
-
-                        if (device.kind === 'videoinput') {
-                            videoCount++;
-                            option.text = device.label || `카메라 ${videoCount}`;
-                            videoSelect.appendChild(option);
-                        } else if (device.kind === 'audioinput') {
-                            audioCount++;
-                            option.text = device.label || `마이크 ${audioCount}`;
-                            audioSelect.appendChild(option);
-                        }
-                    });
-
-                    // 임시 스트림 정리
-                    if (tempStream) {
-                        tempStream.getTracks().forEach(track => track.stop());
-                    }
-
-                    console.log(`장치 목록 로드 완료: 카메라 ${videoCount}개, 마이크 ${audioCount}개`);
-
-                    if (videoCount === 0 && audioCount === 0) {
-                        console.warn('인식된 카메라/마이크가 없습니다.');
-                    }
-                } catch (err) {
-                    console.error("장치 목록을 가져오는 중 오류 발생:", err);
-
-                    // 임시 스트림 정리
-                    if (tempStream) {
-                        tempStream.getTracks().forEach(track => track.stop());
-                    }
-
-                    // 에러 메시지 표시
-                    videoSelect.innerHTML = '<option value="">카메라를 찾을 수 없음</option>';
-                    audioSelect.innerHTML = '<option value="">마이크를 찾을 수 없음</option>';
-                }
-            }
-
-            // ============================================
-            // 미디어 스트림 관리 함수
-            // ============================================
-
-            /**
-             * 선택된 비디오/오디오 장치로 미디어 스트림을 시작합니다.
-             * 
-             * @description
-             * - 기존 스트림이 있으면 모든 트랙을 중지합니다
-             * - 선택된 장치 ID로 새 스트림을 요청합니다
-             * - 스트림을 비디오 요소에 연결합니다
-             * - 오디오 처리 및 녹화기를 재설정합니다
-             * - Studio Mode가 활성화되어 있으면 프리뷰/프로그램 스트림도 업데이트합니다
-             * 
-             * @param {string} [videoDeviceId] - 비디오 장치 ID (없으면 기본 장치 사용)
-             * @param {string} [audioDeviceId] - 오디오 장치 ID (없으면 기본 장치 사용)
-             * 
-             * @throws {Error} 장치 접근이 거부되거나 사용 중인 경우
-             */
-            async function startStream(videoDeviceId, audioDeviceId) {
-                if (mediaStream) {
-                    mediaStream.getTracks().forEach(track => track.stop());
-                }
-
-                // 해상도 및 프레임레이트 설정 가져오기
-                const resolutionSelect = document.getElementById('video-resolution');
-                const framerateSelect = document.getElementById('video-framerate');
-                const resolution = resolutionSelect?.value || 'auto';
-                const framerate = framerateSelect?.value || 'auto';
-
-                // 비디오 constraints 구성
-                let videoConstraints = {};
-
-                // 장치 ID 설정
-                if (videoDeviceId && videoDeviceId.trim()) {
-                    videoConstraints.deviceId = { exact: videoDeviceId };
-                }
-
-                // 해상도 설정
-                if (resolution !== 'auto') {
-                    if (resolution === '1080p') {
-                        videoConstraints.width = { ideal: 1920 };
-                        videoConstraints.height = { ideal: 1080 };
-                    } else if (resolution === '720p') {
-                        videoConstraints.width = { ideal: 1280 };
-                        videoConstraints.height = { ideal: 720 };
-                    }
-                }
-
-                // 프레임레이트 설정
-                if (framerate !== 'auto') {
-                    videoConstraints.frameRate = { ideal: parseInt(framerate, 10) };
-                }
-
-                // 오디오 constraints 구성
-                let audioConstraints = {};
-                if (audioDeviceId && audioDeviceId.trim()) {
-                    audioConstraints.deviceId = { exact: audioDeviceId };
-                }
-
-                // 최종 constraints 구성
-                const constraints = {
-                    video: Object.keys(videoConstraints).length > 0 ? videoConstraints : true,
-                    audio: Object.keys(audioConstraints).length > 0 ? audioConstraints : true
-                };
-
-                try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-                    updateVideoDisplay(mediaStream);
-
-                    setupAudioProcessing(mediaStream);
-                    setupMediaRecorder();
-                    startRecordingBtn.disabled = false;
-
-                    const videoTrack = mediaStream.getVideoTracks()[0];
-                    const audioTrack = mediaStream.getAudioTracks()[0];
-
-                    if (videoTrack) {
-                        const currentVideoId = videoTrack.getSettings().deviceId;
-                        if (currentVideoId) videoSelect.value = currentVideoId;
-                    }
-                    if (audioTrack) {
-                        const currentAudioId = audioTrack.getSettings().deviceId;
-                        if (currentAudioId) audioSelect.value = currentAudioId;
-                    }
-                } catch (err) {
-                    console.error("미디어 장치 접근 오류:", err);
-                    handleMediaError(err);
-                    startRecordingBtn.disabled = true;
-                }
-            }
-
-            /**
-             * 미디어 장치 접근 오류를 처리하고 사용자에게 친화적인 메시지를 표시합니다.
-             * @param {Error} error - 발생한 에러 객체
-             */
-            function handleMediaError(error) {
-                const errorName = error.name || 'UnknownError';
-                let errorMessage = '';
-                let showRetry = true;
-                let showSettings = false;
-
-                // 에러 유형별 메시지 매핑
-                switch (errorName) {
-                    case 'NotAllowedError':
-                        errorMessage = '카메라/마이크 접근이 거부되었습니다.\n\n브라우저 설정에서 권한을 허용해주세요.\n(주소창 왼쪽 자물쇠 아이콘 클릭 → 권한 허용)';
-                        showSettings = true;
-                        break;
-                    case 'NotFoundError':
-                        errorMessage = '카메라/마이크를 찾을 수 없습니다.\n\n장치가 연결되어 있는지 확인해주세요.';
-                        showRetry = true;
-                        break;
-                    case 'NotReadableError':
-                        errorMessage = '카메라/마이크가 다른 프로그램에서 사용 중입니다.\n\n다른 프로그램을 종료한 후 다시 시도해주세요.';
-                        showRetry = true;
-                        break;
-                    case 'OverconstrainedError':
-                        errorMessage = '선택한 해상도/프레임레이트를 지원하지 않습니다.\n\n설정에서 다른 해상도나 프레임레이트를 선택해주세요.';
-                        showSettings = true;
-                        showRetry = false;
-                        break;
-                    case 'TypeError':
-                        errorMessage = '미디어 장치에 접근할 수 없습니다.\n\n장치가 올바르게 연결되어 있는지 확인해주세요.';
-                        showRetry = true;
-                        break;
-                    default:
-                        errorMessage = `카메라/마이크 접근 중 오류가 발생했습니다.\n\n오류 코드: ${errorName}\n${error.message || ''}`;
-                        showRetry = true;
-                }
-
-                // 비디오 피드에 에러 표시
-                const videoFeed = document.getElementById('main-video-feed');
-                if (videoFeed) {
-                    videoFeed.style.backgroundColor = '#330000';
-                }
-
-                // 소스 패널에 에러 메시지 표시
-                const sourcesContent = document.getElementById('sources-content');
-                if (sourcesContent) {
-                    sourcesContent.innerHTML = `<p style="color: #f44; padding: 20px; text-align: center;">${errorMessage.replace(/\n/g, '<br>')}</p>`;
-                }
-
-                // 에러 모달 표시
-                showErrorModal(errorMessage, showRetry, showSettings, () => {
-                    // 다시 시도 콜백
-                    const selectedVideoId = videoSelect.value;
-                    const selectedAudioId = audioSelect.value;
-                    startStream(selectedVideoId, selectedAudioId);
-                });
-            }
-
-            /**
-             * 에러 모달을 표시합니다.
-             * @param {string} message - 에러 메시지
-             * @param {boolean} showRetry - 다시 시도 버튼 표시 여부
-             * @param {boolean} showSettings - 설정 열기 버튼 표시 여부
-             * @param {Function} retryCallback - 다시 시도 버튼 클릭 시 실행할 콜백
-             */
-            function showErrorModal(message, showRetry, showSettings, retryCallback) {
-                const errorModal = document.getElementById('error-modal');
-                const errorMessage = document.getElementById('error-message');
-                const retryBtn = document.getElementById('error-retry-btn');
-                const settingsBtn = document.getElementById('error-settings-btn');
-                const closeBtn = document.getElementById('error-close-btn');
-
-                if (!errorModal || !errorMessage) return;
-
-                // 메시지 설정
-                errorMessage.textContent = message;
-
-                // 버튼 표시/숨김
-                if (retryBtn) {
-                    retryBtn.style.display = showRetry ? 'inline-block' : 'none';
-                    retryBtn.onclick = () => {
-                        if (retryCallback) retryCallback();
-                        errorModal.style.display = 'none';
-                    };
-                }
-
-                if (settingsBtn) {
-                    settingsBtn.style.display = showSettings ? 'inline-block' : 'none';
-                    settingsBtn.onclick = () => {
-                        errorModal.style.display = 'none';
-                        const settingsModal = document.getElementById('settings-modal');
-                        if (settingsModal) {
-                            settingsModal.classList.add('visible');
-                        }
-                    };
-                }
-
-                if (closeBtn) {
-                    closeBtn.onclick = () => {
-                        errorModal.style.display = 'none';
-                    };
-                }
-
-                // 모달 표시
-                errorModal.style.display = 'flex';
-            }
-
-            /**
-             * 비디오 표시를 업데이트합니다 (일반 모드 또는 비교 모드).
-             * @param {MediaStream} stream - 업데이트할 미디어 스트림
-             */
-            function updateVideoDisplay(stream) {
-                const videoFeed = document.getElementById('main-video-feed');
-                const comparisonContainer = document.getElementById('comparison-container');
-                const originalVideo = document.getElementById('original-video');
-                const processedVideo = document.getElementById('processed-video');
-
-                if (comparisonMode && comparisonContainer) {
-                    // 비교 모드: 원본과 처리된 영상을 나란히 표시
-                    comparisonContainer.classList.add('active');
-                    if (videoFeed) videoFeed.style.display = 'none';
-
-                    if (originalVideo) {
-                        originalVideo.srcObject = stream.clone();
-                    }
-                    if (processedVideo) {
-                        // 배경 제거가 활성화되어 있으면 처리된 스트림 사용
-                        if (backgroundRemovalEnabled && processedStream) {
-                            processedVideo.srcObject = processedStream;
-                        } else {
-                            processedVideo.srcObject = stream;
-                        }
-                    }
-                } else {
-                    // 일반 모드: 단일 비디오 표시
-                    if (comparisonContainer) comparisonContainer.classList.remove('active');
-                    if (videoFeed) {
-                        videoFeed.style.display = 'block';
-                        // 배경 제거가 활성화되어 있으면 처리된 스트림 사용
-                        if (backgroundRemovalEnabled && processedStream) {
-                            videoFeed.srcObject = processedStream;
-                        } else {
-                            videoFeed.srcObject = stream;
-                        }
-                    }
-                }
-            }
-
-            /**
-             * 배경 제거 기능을 토글합니다.
-             */
-            function toggleBackgroundRemoval() {
-                backgroundRemovalEnabled = !backgroundRemovalEnabled;
-                const btn = document.getElementById('toggle-background-removal');
-
-                if (btn) {
-                    btn.textContent = `배경 제거: ${backgroundRemovalEnabled ? 'ON' : 'OFF'}`;
-                    if (backgroundRemovalEnabled) {
-                        btn.classList.add('recording');
-                    } else {
-                        btn.classList.remove('recording');
-                    }
-                }
-
-                if (backgroundRemovalEnabled) {
-                    startBackgroundRemoval();
-                } else {
-                    stopBackgroundRemoval();
-                    if (mediaStream) {      // 배경 제거 끄면 원본 비디오로 업데이트
-                        updateVideoDisplay(mediaStream);
-                    }
-                }
-            }
-
-            /**
-             * 배경 제거 처리를 시작합니다.
-             */
-            function startBackgroundRemoval() {
-                if (!mediaStream) return;
-
-                // Canvas 생성 (아직 생성되지 않은 경우)
-                if (!backgroundCanvas) {
-                    backgroundCanvas = canvas;
-                    backgroundCtx = backgroundCanvas.getContext('2d', { willReadFrequently: true });
-                }
-
-                // 비디오 트랙 가져오기
-                const videoTrack = mediaStream.getVideoTracks()[0];
-                if (!videoTrack) return;
-
-                // 비디오 요소 생성 (프레임 캡처용)
-                const tempVideo = document.createElement('video');
-                tempVideo.srcObject = mediaStream;
-                tempVideo.autoplay = true;
-                tempVideo.muted = true;
-                tempVideo.playsInline = true;
-
-                tempVideo.addEventListener('loadedmetadata', () => {
-                    backgroundCanvas.width = tempVideo.videoWidth || 640;
-                    backgroundCanvas.height = tempVideo.videoHeight || 480;
-
-                    // Canvas 스트림 생성
-                    processedStream = backgroundCanvas.captureStream(30); // 30fps
-
-                    // 오디오 트랙 추가
-                    const audioTracks = mediaStream.getAudioTracks();
-                    audioTracks.forEach(track => {
-                        processedStream.addTrack(track);
-                    });
-
-                    // 프레임 처리 시작
-                    AiProcessBackgroundRemoval(tempVideo);
-
-                    // 처리된 스트림이 준비되었으므로 비디오 화면 업데이트
-                    if (mediaStream) {
-                        updateVideoDisplay(mediaStream);
-                    }
-                });
-            }
-
-            /**
-             * 배경 제거 처리를 중지합니다.
-             */
-            function stopBackgroundRemoval() {
-                if (backgroundAnimationFrame) {
-                    cancelAnimationFrame(backgroundAnimationFrame);
-                    backgroundAnimationFrame = null;
-                }
-
-                if (processedStream) {
-                    processedStream.getTracks().forEach(track => {
-                        if (track !== mediaStream.getTracks().find(t => t.id === track.id)) {
-                            track.stop();
-                        }
-                    });
-                    processedStream = null;
-                }
-            }
-
-            /**
-             * 배경 제거 프레임 처리를 수행합니다.
-             * @param {HTMLVideoElement} video - 비디오 요소
-             */
-            async function AiProcessBackgroundRemoval(video) {
-                if (!backgroundRemovalEnabled || !backgroundCtx) return;
-
-                // 송출 중인 backgroundCanvas에 직접 그리면 AI 처리시간 동안 원본 프레임이 1프레임 노출될 수 있습니다.
-                // 따라서 임시 캔버스에 그려서 이미지 데이터를 추출합니다.
-                if (!window.hiddenProcessCanvas) {
-                    window.hiddenProcessCanvas = document.createElement('canvas');
-                    window.hiddenProcessCtx = window.hiddenProcessCanvas.getContext('2d', { willReadFrequently: true });
-                }
-                const hCanvas = window.hiddenProcessCanvas;
-                const hCtx = window.hiddenProcessCtx;
-
-                if (hCanvas.width !== backgroundCanvas.width || hCanvas.height !== backgroundCanvas.height) {
-                    hCanvas.width = backgroundCanvas.width;
-                    hCanvas.height = backgroundCanvas.height;
-                }
-
-                hCtx.drawImage(video, 0, 0, hCanvas.width, hCanvas.height);
-                let imageData = hCtx.getImageData(0, 0, hCanvas.width, hCanvas.height);
-
-                let processSuccess = false;
-
-                if (session) {
-                    try {
-                        const modelWidth = MODEL_SIZE; // 512
-                        const modelHeight = MODEL_SIZE; // 512
-
-                        // 모델 입력을 위한 임시 캔버스 리사이징
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = modelWidth;
-                        tempCanvas.height = modelHeight;
-                        const tempCtx = tempCanvas.getContext('2d');
-                        tempCtx.drawImage(video, 0, 0, modelWidth, modelHeight);
-                        const imgData = tempCtx.getImageData(0, 0, modelWidth, modelHeight);
-
-                        // Float32 텐서 데이터 생성 [1, 3, H, W]
-                        const tensorData = new Float32Array(3 * modelWidth * modelHeight);
-                        for (let i = 0; i < modelWidth * modelHeight; i++) {
-                            // RGB 값을 0~1로 정규화
-                            tensorData[i] = imgData.data[i * 4] / 255.0; // R
-                            tensorData[modelWidth * modelHeight + i] = imgData.data[i * 4 + 1] / 255.0; // G
-                            tensorData[2 * modelWidth * modelHeight + i] = imgData.data[i * 4 + 2] / 255.0; // B
-                        }
-
-                        const inputTensor = new ort.Tensor('float32', tensorData, [1, 3, modelHeight, modelWidth]);
-
-                        // 동적으로 첫 번째 입력, 출력 노드 이름 획득
-                        const inputName = session.inputNames[0];
-                        const outputName = session.outputNames[0];
-                        const feeds = { [inputName]: inputTensor };
-
-                        // 모델 추론 실행
-                        const output = await session.run(feeds);
-                        const outputData = output[outputName].data;
-
-                        // 출력 마스크를 기반으로 원본 이미지의 알파 채널 0퍼센트 매핑
-                        for (let y = 0; y < backgroundCanvas.height; y++) {
-                            for (let x = 0; x < backgroundCanvas.width; x++) {
-                                // 현재 원본 픽셀에 대응하는 세그멘테이션 마스크 위치 계산
-                                const maskX = Math.floor((x / backgroundCanvas.width) * modelWidth);
-                                const maskY = Math.floor((y / backgroundCanvas.height) * modelHeight);
-
-                                // 형태에 따라 인덱싱이 다름 (우선 일반적인 [1, 1, H, W]를 가정하지만 [1, H, W]도 계산 동일)
-                                const maskValue = outputData[maskY * modelWidth + maskX];
-
-                                const originalIndex = (y * backgroundCanvas.width + x) * 4;
-                                // 모델의 출력이 0.5 미만이면 배경/사람이 아닌 것으로 판단하여 투명(알파 0) 처리
-                                if (maskValue < 0.5) {
-                                    imageData.data[originalIndex + 3] = 0;
-                                }
-                            }
-                        }
-                        processSuccess = true;
-                    } catch (error) {
-                        console.error('AI 세그멘테이션 추론 오류:', error);
-                        const debugBar = document.getElementById('ai-debug-bar');
-                        if (debugBar) {
-                            debugBar.innerHTML = `❌ 추론 오류: ${error.message}`;
-                            debugBar.style.backgroundColor = 'rgba(255,0,0,0.7)';
-                        }
-                        // 에러 시 원본 프레임이 나타나는 것을 방지하기 위해 아래 출력 로직을 건너뜁니다.
-                    }
-                }
-
-                // 세그멘테이션이 성공했거나 세션이 아직 없을 때만 그리기 업데이트
-                // 1프레임씩 원본영상이 송출되는 문제 해결
-                if (processSuccess || !session) {
-                    // 배경 이미지/비디오가 있을 경우 합성을 위한 처리
-                    if (backgroundImage || backgroundVideo) {
-                        backgroundCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
-
-                        // 1. 커스텀 배경 그리기
-                        if (backgroundImage) {
-                            backgroundCtx.drawImage(backgroundImage, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
-                        } else if (backgroundVideo) {
-                            backgroundCtx.drawImage(backgroundVideo, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
-                        }
-
-                        // 2. 세그멘테이션 처리된 사람 이미지를 위에 겹치기
-                        // putImageData는 픽셀 덮어쓰기라 투명도가 반영된 합성이 안 되므로 임시 캔버스로 처리
-                        const fgCanvas = document.createElement('canvas');
-                        fgCanvas.width = backgroundCanvas.width;
-                        fgCanvas.height = backgroundCanvas.height;
-                        fgCanvas.getContext('2d').putImageData(imageData, 0, 0);
-
-                        backgroundCtx.drawImage(fgCanvas, 0, 0);
-                    } else {
-                        // 배경 교체가 되지 않은 단순 배경 투명화
-                        backgroundCtx.putImageData(imageData, 0, 0);
-                    }
-                }
-
-                // 30fps 내외로 다음 프레임 요청
-                backgroundAnimationFrame = requestAnimationFrame(() => AiProcessBackgroundRemoval(video));
-            }
-
-            /**
-             * 배경 교체 모달의 이벤트 리스너를 설정합니다.
-             */
-            function setupBackgroundReplaceModal() {
-                const modal = document.getElementById('background-replace-modal');
-                const closeBtn = document.getElementById('background-replace-close');
-                const applyBtn = document.getElementById('background-replace-apply');
-                const imageOption = document.getElementById('background-image-option');
-                const videoOption = document.getElementById('background-video-option');
-                const colorOption = document.getElementById('background-color-option');
-                const imageFile = document.getElementById('background-image-file');
-                const videoFile = document.getElementById('background-video-file');
-                const colorPicker = document.getElementById('background-color-picker');
-                const backgroundTypeRadios = document.querySelectorAll('input[name="background-type"]');
-
-                if (!modal) return;
-
-                // 배경 타입 변경 이벤트
-                backgroundTypeRadios.forEach(radio => {
-                    radio.addEventListener('change', (e) => {
-                        const type = e.target.value;
-                        if (imageOption) imageOption.style.display = type === 'image' ? 'block' : 'none';
-                        if (videoOption) videoOption.style.display = type === 'video' ? 'block' : 'none';
-                        if (colorOption) colorOption.style.display = type === 'color' ? 'block' : 'none';
-                    });
-                });
-
-                // 이미지 파일 선택
-                if (imageFile) {
-                    imageFile.addEventListener('change', (e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                                const img = new Image();
-                                img.onload = () => {
-                                    backgroundImage = img;
-                                };
-                                img.src = event.target.result;
-                            };
-                            reader.readAsDataURL(file);
-                        }
-                    });
-                }
-
-                // 비디오 파일 선택
-                if (videoFile) {
-                    videoFile.addEventListener('change', (e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                            const url = URL.createObjectURL(file);
-                            const video = document.createElement('video');
-                            video.src = url;
-                            video.autoplay = true;
-                            video.loop = true;
-                            video.muted = true;
-                            backgroundVideo = video;
-                        }
-                    });
-                }
-
-                // 적용 버튼
-                if (applyBtn) {
-                    applyBtn.addEventListener('click', () => {
-                        const selectedType = document.querySelector('input[name="background-type"]:checked')?.value;
-
-                        if (selectedType === 'none') {
-                            backgroundImage = null;
-                            backgroundVideo = null;
-                        } else if (selectedType === 'color' && colorPicker) {
-                            // 단색 배경은 Canvas에 직접 그리기
-                            const color = colorPicker.value;
-                            if (backgroundCanvas && backgroundCtx) {
-                                backgroundCtx.fillStyle = color;
-                                backgroundCtx.fillRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
-                            }
-                        }
-
-                        if (modal) modal.classList.remove('visible');
-                    });
-                }
-
-                // 닫기 버튼
-                if (closeBtn) {
-                    closeBtn.addEventListener('click', () => {
-                        if (modal) modal.classList.remove('visible');
-                    });
-                }
-            }
-
-            /**
-             * Transform 모달의 이벤트 리스너를 설정합니다.
-             */
-            function setupTransformModal() {
-                const modal = document.getElementById('transform-modal');
-                const closeBtn = document.getElementById('transform-close');
-                const applyBtn = document.getElementById('transform-apply');
-                const resetBtn = document.getElementById('transform-reset');
-                const scaleSlider = document.getElementById('transform-scale');
-                const scaleValue = document.getElementById('transform-scale-value');
-                const rotationSlider = document.getElementById('transform-rotation');
-                const rotationValue = document.getElementById('transform-rotation-value');
-
-                if (!modal) return;
-
-                // 크기 비율 슬라이더
-                if (scaleSlider && scaleValue) {
-                    scaleSlider.addEventListener('input', (e) => {
-                        scaleValue.textContent = Math.round(e.target.value * 100) + '%';
-                    });
-                }
-
-                // 회전 슬라이더
-                if (rotationSlider && rotationValue) {
-                    rotationSlider.addEventListener('input', (e) => {
-                        rotationValue.textContent = e.target.value + '°';
-                    });
-                }
-
-                // 초기화 버튼
-                if (resetBtn) {
-                    resetBtn.addEventListener('click', () => {
-                        const xInput = document.getElementById('transform-x');
-                        const yInput = document.getElementById('transform-y');
-                        const widthInput = document.getElementById('transform-width');
-                        const heightInput = document.getElementById('transform-height');
-
-                        if (xInput) xInput.value = 0;
-                        if (yInput) yInput.value = 0;
-                        if (widthInput) widthInput.value = 640;
-                        if (heightInput) heightInput.value = 480;
-                        if (scaleSlider) scaleSlider.value = 1;
-                        if (scaleValue) scaleValue.textContent = '100%';
-                        if (rotationSlider) rotationSlider.value = 0;
-                        if (rotationValue) rotationValue.textContent = '0°';
-                    });
-                }
-
-                // 적용 버튼
-                if (applyBtn) {
-                    applyBtn.addEventListener('click', () => {
-                        // TODO: 선택된 소스에 변형 적용
-                        // 현재는 UI만 구현, 실제 소스 변형은 추후 구현
-                        if (modal) modal.classList.remove('visible');
-                    });
-                }
-
-                // 닫기 버튼
-                if (closeBtn) {
-                    closeBtn.addEventListener('click', () => {
-                        if (modal) modal.classList.remove('visible');
-                    });
-                }
-            }
-
-            /**
-             * 전/후 비교 모드를 토글합니다.
-             */
-            function toggleComparison() {
-                comparisonMode = !comparisonMode;
-                const btn = document.getElementById('toggle-comparison');
-
-                if (btn) {
-                    if (comparisonMode) {
-                        btn.textContent = '전/후 비교 숨기기';
-                        btn.classList.add('recording');
-                    } else {
-                        btn.textContent = '전/후 비교 보기';
-                        btn.classList.remove('recording');
-                    }
-                }
-
-                if (mediaStream) {
-                    updateVideoDisplay(mediaStream);
-                }
-            }
-
-            /**
-             * 오디오 스트림을 처리하고 볼륨 미터를 설정합니다.
-             * Web Audio API를 사용하여 오디오 분석 및 볼륨 제어를 수행합니다.
-             * @param {MediaStream} stream - 처리할 미디어 스트림
-             */
-            function setupAudioProcessing(stream) {
-                const desktopMeter = document.querySelector('[data-meter-name="desktop"]');
-                const micMeter = document.querySelector('[data-meter-name="mic"]');
-
-                if (audioContext && audioContext.state !== 'closed') {
-                    audioContext.close();
-                }
-
-                audioContext = new AudioContext();
-                const source = audioContext.createMediaStreamSource(stream);
-
-                // 각 트랙별로 별도의 GainNode와 Analyser 생성
-                gainNodes.mic = audioContext.createGain();
-                gainNodes.desktop = audioContext.createGain();
-                gainNodes.mic.gain.value = 1.0;
-                gainNodes.desktop.gain.value = 1.0;
-
-                // Mic용 Analyser
-                analysers.mic = audioContext.createAnalyser();
-                analysers.mic.fftSize = 256;
-
-                // Desktop용 Analyser
-                analysers.desktop = audioContext.createAnalyser();
-                analysers.desktop.fftSize = 256;
-
-                // 오디오 연결: source -> 각 gainNode -> 각 analyser -> destination
-                source.connect(gainNodes.mic);
-                source.connect(gainNodes.desktop);
-                gainNodes.mic.connect(analysers.mic);
-                gainNodes.desktop.connect(analysers.desktop);
-                analysers.mic.connect(audioContext.destination);
-                analysers.desktop.connect(audioContext.destination);
-
-                const micBufferLength = analysers.mic.frequencyBinCount;
-                const micDataArray = new Uint8Array(micBufferLength);
-
-                const desktopBufferLength = analysers.desktop.frequencyBinCount;
-                const desktopDataArray = new Uint8Array(desktopBufferLength);
-
-                function updateMeter() {
-                    if (!audioContext) return;
-
-                    // Mic 미터 업데이트
-                    const micMeter = document.querySelector('[data-meter-name="mic"]');
-                    if (analysers.mic && micMeter) {
-                        if (!audioMuted.mic) {
-                            analysers.mic.getByteTimeDomainData(micDataArray);
-                            let micMaxVal = 0;
-                            for (let i = 0; i < micBufferLength; i++) {
-                                const v = Math.abs(micDataArray[i] - 128);
-                                if (v > micMaxVal) {
-                                    micMaxVal = v;
-                                }
-                            }
-                            const micVolumePercent = Math.min((micMaxVal / 128) * 100, 100);
-                            micMeter.style.width = micVolumePercent + '%';
-                        } else {
-                            micMeter.style.width = '0%';
-                        }
-                    }
-
-                    // Desktop 미터 업데이트
-                    const desktopMeter = document.querySelector('[data-meter-name="desktop"]');
-                    if (analysers.desktop && desktopMeter) {
-                        if (!audioMuted.desktop) {
-                            analysers.desktop.getByteTimeDomainData(desktopDataArray);
-                            let desktopMaxVal = 0;
-                            for (let i = 0; i < desktopBufferLength; i++) {
-                                const v = Math.abs(desktopDataArray[i] - 128);
-                                if (v > desktopMaxVal) {
-                                    desktopMaxVal = v;
-                                }
-                            }
-                            const desktopVolumePercent = Math.min((desktopMaxVal / 128) * 100, 100);
-                            desktopMeter.style.width = desktopVolumePercent + '%';
-                        } else {
-                            desktopMeter.style.width = '0%';
-                        }
-                    }
-
-                    requestAnimationFrame(updateMeter);
-                }
-                updateMeter();
-            }
-
-            /**
-             * 오디오 트랙의 볼륨을 설정합니다.
-             * @param {string} trackType - 트랙 타입 ('desktop' 또는 'mic')
-             * @param {number} dbValue - 데시벨 값 (-100 ~ 0)
-             */
-            function setVolume(trackType, dbValue) {
-                if (!gainNodes[trackType]) return;
-
-                const gain = dbValue === -100 ? 0 : Math.pow(10, dbValue / 20);
-                gainNodes[trackType].gain.value = gain;
-
-                const dbDisplay = document.querySelector(`[data-track="${trackType}"] .db-display`);
-                if (dbDisplay) {
-                    dbDisplay.textContent = `${dbValue.toFixed(1)} dB`;
-                }
-            }
-
-            /**
-             * 오디오 트랙의 음소거 상태를 토글합니다.
-             * @param {string} trackType - 트랙 타입 ('desktop' 또는 'mic')
-             */
-            function toggleMute(trackType) {
-                if (!gainNodes[trackType]) {
-                    console.error(`GainNode를 찾을 수 없습니다: ${trackType}`);
-                    return;
-                }
-
-                audioMuted[trackType] = !audioMuted[trackType];
-                const muteBtn = document.querySelector(`[data-mute="${trackType}"]`);
-                const slider = document.querySelector(`[data-volume="${trackType}"]`);
-
-
-                if (audioMuted[trackType]) {
-                    gainNodes[trackType].gain.value = 0;
-                    if (muteBtn) {
-                        muteBtn.textContent = '🔇';
-                        muteBtn.style.opacity = '1';
-                        muteBtn.setAttribute('data-muted', 'true');
-                    }
-                } else {
-                    const dbValue = parseFloat(slider.value);
-                    setVolume(trackType, dbValue);
-                    if (muteBtn) {
-                        muteBtn.textContent = '🔊';
-                        muteBtn.style.opacity = '0.5';
-                        muteBtn.setAttribute('data-muted', 'false');
-                    }
-                }
-            }
-
-            /**
-             * 오디오 믹서 컨트롤(볼륨 슬라이더, 음소거 버튼)의 이벤트 리스너를 설정합니다.
-             */
-            function setupAudioMixerControls() {
-                // 이벤트 위임 사용 - 한 번만 등록
-                const audioMixerPanel = document.getElementById('audio-mixer-panel');
-                if (!audioMixerPanel) return;
-
-                // 기존 리스너 제거 후 재등록
-                const newPanel = audioMixerPanel.cloneNode(true);
-                audioMixerPanel.parentNode.replaceChild(newPanel, audioMixerPanel);
-
-                // 볼륨 슬라이더 이벤트 위임
-                newPanel.addEventListener('input', (e) => {
-                    if (e.target.classList.contains('volume-slider')) {
-                        const trackType = e.target.dataset.volume;
-                        const dbValue = parseFloat(e.target.value);
-                        if (trackType && !audioMuted[trackType]) {
-                            setVolume(trackType, dbValue);
-                        }
-                    }
-                });
-
-                // 음소거 버튼 이벤트 위임
-                newPanel.addEventListener('click', (e) => {
-                    const muteBtn = e.target.closest('.mute-btn');
-                    if (muteBtn) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const trackType = muteBtn.dataset.mute;
-                        if (trackType) {
-                            toggleMute(trackType);
-                        }
-                    }
-                });
-            }
-
-            /**
-             * MediaRecorder를 초기화하고 이벤트 핸들러를 설정합니다.
-             */
-            function setupMediaRecorder() {
-                if (!mediaStream) return;
-
-                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                    mediaRecorder.stop();
-                }
-
-                try {
-                    mediaRecorder = new MediaRecorder(mediaStream, {
-                        mimeType: 'video/webm; codecs=vp9,opus'
-                    });
-                } catch (e) {
-                    console.warn("VP9 미지원, 기본 코덱으로 대체합니다.");
-                    mediaRecorder = new MediaRecorder(mediaStream);
-                }
-
-                mediaRecorder.ondataavailable = async (event) => {
-                    if (event.data.size > 0 && isElectron) {
-                        const buffer = await event.data.arrayBuffer();
-                        window.electronAPI.send('video-chunk', new Uint8Array(buffer));
-                    }
-                };
-
-                mediaRecorder.onstart = () => {
-                    if (isElectron) window.electronAPI.send('start-recording');
-
-                    startRecordingBtn.textContent = 'Stop Recording';
-                    startRecordingBtn.classList.add('recording');
-                    isRecording = true;
-
-                    recStartTime = Date.now();
-                    recStatus.classList.add('recording');
-                    recTimer = setInterval(updateRecTimer, 1000);
-                };
-
-                mediaRecorder.onstop = () => {
-                    if (isElectron) window.electronAPI.send('stop-recording');
-
-                    startRecordingBtn.textContent = 'Start Recording';
-                    startRecordingBtn.classList.remove('recording');
-                    isRecording = false;
-
-                    clearInterval(recTimer);
-                    recStatus.classList.remove('recording');
-                    recStatus.textContent = 'REC: 00:00:00';
-                };
-            }
-
-            startRecordingBtn.addEventListener('click', () => {
-                if (!mediaRecorder) {
-                    console.error("MediaRecorder 초기화 실패");
-                    return;
-                }
-                if (isRecording) {
-                    mediaRecorder.stop();
-                } else {
-                    mediaRecorder.start(1000);
-                }
-            });
-
-            /**
-             * 녹화 타이머를 업데이트하여 경과 시간을 표시합니다.
-             */
-            function updateRecTimer() {
-                const seconds = Math.floor((Date.now() - recStartTime) / 1000);
-                const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
-                const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
-                const s = String(seconds % 60).padStart(2, '0');
-                recStatus.textContent = `REC: ${h}:${m}:${s}`;
-            }
-
-            videoSelect.addEventListener('change', (e) => {
-                const selectedVideoId = e.target.value;
-                const selectedAudioId = audioSelect.value;
-                startStream(selectedVideoId, selectedAudioId);
-                saveSettings(); // 설정 변경 시 자동 저장
-            });
-
-            audioSelect.addEventListener('change', (e) => {
-                const selectedAudioId = e.target.value;
-                const selectedVideoId = videoSelect.value;
-                startStream(selectedVideoId, selectedAudioId);
-                saveSettings(); // 설정 변경 시 자동 저장
-            });
-
-            // 해상도 변경 이벤트 리스너
-            const resolutionSelect = document.getElementById('video-resolution');
-            if (resolutionSelect) {
-                resolutionSelect.addEventListener('change', () => {
-                    const selectedVideoId = videoSelect.value;
-                    const selectedAudioId = audioSelect.value;
-                    startStream(selectedVideoId, selectedAudioId);
-                    saveSettings();
-                });
-            }
-
-            // 프레임레이트 변경 이벤트 리스너
-            const framerateSelect = document.getElementById('video-framerate');
-            if (framerateSelect) {
-                framerateSelect.addEventListener('change', () => {
-                    const selectedVideoId = videoSelect.value;
-                    const selectedAudioId = audioSelect.value;
-                    startStream(selectedVideoId, selectedAudioId);
-                    saveSettings();
-                });
-            }
-
-
-            // ============================================
-            // 설정 저장/불러오기 함수
-            // ============================================
-
-            /**
-             * 설정을 localStorage에 저장합니다.
-             */
-            function saveSettings() {
-                try {
-                    const settings = {
-                        videoSource: videoSelect.value,
-                        audioSource: audioSelect.value,
-                        videoResolution: document.getElementById('video-resolution')?.value || 'auto',
-                        videoFramerate: document.getElementById('video-framerate')?.value || 'auto',
-                        raspberryPiIp: document.getElementById('raspberry-pi-ip')?.value || '',
-                        raspberryPiPort: document.getElementById('raspberry-pi-port')?.value || '8765',
-                        fileFormat: document.getElementById('file-format')?.value || 'webm',
-                        savePath: document.getElementById('save-path-display')?.value || 'C:\\VideoRecoding',
-                        timestamp: Date.now()
-                    };
-                    localStorage.setItem('spotlightCamSettings', JSON.stringify(settings));
-                } catch (error) {
-                    console.error('설정 저장 실패:', error);
-                }
-            }
-
-            /**
-             * localStorage에서 설정을 불러옵니다.
-             */
-            function loadSettings() {
-                try {
-                    const saved = localStorage.getItem('spotlightCamSettings');
-                    if (!saved) return null;
-
-                    const settings = JSON.parse(saved);
-
-                    // 설정 적용
-                    if (settings.videoSource && videoSelect) {
-                        videoSelect.value = settings.videoSource;
-                    }
-                    if (settings.audioSource && audioSelect) {
-                        audioSelect.value = settings.audioSource;
-                    }
-                    if (settings.videoResolution) {
-                        const resolutionSelect = document.getElementById('video-resolution');
-                        if (resolutionSelect) resolutionSelect.value = settings.videoResolution;
-                    }
-                    if (settings.videoFramerate) {
-                        const framerateSelect = document.getElementById('video-framerate');
-                        if (framerateSelect) framerateSelect.value = settings.videoFramerate;
-                    }
-                    if (settings.raspberryPiIp) {
-                        const piIpInput = document.getElementById('raspberry-pi-ip');
-                        if (piIpInput) piIpInput.value = settings.raspberryPiIp;
-                    }
-                    if (settings.raspberryPiPort) {
-                        const piPortInput = document.getElementById('raspberry-pi-port');
-                        if (piPortInput) piPortInput.value = settings.raspberryPiPort;
-                    }
-                    if (settings.fileFormat) {
-                        const fileFormatSelect = document.getElementById('file-format');
-                        if (fileFormatSelect) fileFormatSelect.value = settings.fileFormat;
-                    }
-
-                    return settings;
-                } catch (error) {
-                    console.error('설정 불러오기 실패:', error);
-                    return null;
-                }
-            }
-
-            const openSettingsBtn = document.getElementById('open-settings');
-            const closeSettingsBtn = document.getElementById('close-settings');
-            const settingsModal = document.getElementById('settings-modal');
-            const setSavePathBtn = document.getElementById('set-save-path');
-            const savePathDisplay = document.getElementById('save-path-display');
-
-            openSettingsBtn.addEventListener('click', async () => {
-                settingsModal.classList.add('visible');
-
-                // 설정 모달이 열릴 때 장치 목록 새로고침
-                await getDevices();
-
-                // 저장된 설정 불러오기
-                const savedSettings = loadSettings();
-
-                if (isElectron && window.electronAPI.invoke) {
-                    try {
-                        const currentPath = await window.electronAPI.invoke('get-save-path');
-                        if (savePathDisplay) {
-                            savePathDisplay.value = savedSettings?.savePath || currentPath || 'C:\\VideoRecoding';
-                        }
-                    } catch (err) {
-                        console.error('저장 경로 가져오기 실패:', err);
-                        if (savePathDisplay) {
-                            savePathDisplay.value = savedSettings?.savePath || 'C:\\VideoRecoding';
-                        }
-                    }
-                } else {
-                    if (savePathDisplay) {
-                        savePathDisplay.value = savedSettings?.savePath || 'C:\\VideoRecoding';
-                    }
-                }
-            });
-
-            closeSettingsBtn.addEventListener('click', () => {
-                // 닫기 전에 설정 저장
-                saveSettings();
-                settingsModal.classList.remove('visible');
-            });
-
-            setSavePathBtn.addEventListener('click', async () => {
-                if (isElectron && window.electronAPI.invoke) {
-                    try {
-                        const selectedPath = await window.electronAPI.invoke('select-save-path');
-                        if (selectedPath && savePathDisplay) {
-                            savePathDisplay.value = selectedPath;
-                            saveSettings(); // 저장 경로 변경 시 자동 저장
-                        }
-                    } catch (err) {
-                        console.error('저장 경로 선택 실패:', err);
-                    }
-                } else {
-                    alert('Electron 환경에서만 사용 가능합니다.');
-                }
-            });
-
-            // 다른 설정 필드 변경 시 자동 저장
-            const piIpInput = document.getElementById('raspberry-pi-ip');
-            const piPortInput = document.getElementById('raspberry-pi-port');
-            const fileFormatSelect = document.getElementById('file-format');
-
-            if (piIpInput) {
-                piIpInput.addEventListener('change', saveSettings);
-                piIpInput.addEventListener('blur', saveSettings);
-            }
-            if (piPortInput) {
-                piPortInput.addEventListener('change', saveSettings);
-                piPortInput.addEventListener('blur', saveSettings);
-            }
-            if (fileFormatSelect) {
-                fileFormatSelect.addEventListener('change', saveSettings);
-            }
-
-
-            const exitButton = document.getElementById('exit-button');
-            const menuExitButton = document.getElementById('menu-exit');
-            const exitFunc = () => {
-                if (isElectron) {
-                    window.electronAPI.send('exit-app');
-                } else {
-                    alert("프로그램을 종료합니다. (목업)");
-                }
-            };
-            exitButton.addEventListener('click', exitFunc);
-            menuExitButton.addEventListener('click', exitFunc);
-
-            const menuEvents = ['menu-copy', 'menu-paste', 'menu-toggle-fullscreen', 'menu-reload', 'menu-toggle-devtools'];
-            menuEvents.forEach(evt => {
-                document.getElementById(evt)?.addEventListener('click', () => {
-                    if (isElectron) window.electronAPI.send(evt);
-                });
-            });
-
-            /**
-             * 녹화 파일 목록을 표시합니다.
-             */
-            function showRecordings() {
-                if (isElectron && window.electronAPI.invoke) {
-                    window.electronAPI.invoke('show-recordings').then(files => {
-                        if (files && files.length > 0) {
-                            const fileList = files.map(f => `• ${f}`).join('\n');
-                            alert(`녹화 파일 목록:\n\n${fileList}`);
-                        } else {
-                            alert('저장된 녹화 파일이 없습니다.');
-                        }
-                    }).catch(err => {
-                        console.error('녹화 파일 목록 가져오기 실패:', err);
-                        alert('녹화 파일 목록을 가져올 수 없습니다.');
-                    });
-                } else {
-                    alert('Electron 환경에서만 사용 가능합니다.');
-                }
-            }
-
-            const menuShowRecordings = document.getElementById('menu-show-recordings');
-            const menuSettings = document.getElementById('menu-settings');
-            const menuCheckUpdates = document.getElementById('menu-check-updates');
-            const menuAbout = document.getElementById('menu-about');
-
-            if (menuShowRecordings) menuShowRecordings.addEventListener('click', showRecordings);
-            if (menuSettings) menuSettings.addEventListener('click', () => {
-                document.getElementById('open-settings')?.click();
-            });
-            if (menuCheckUpdates) menuCheckUpdates.addEventListener('click', checkForUpdatesManually);
-            if (menuAbout) menuAbout.addEventListener('click', () => {
-                alert('Spotlight Cam v' + (isElectron ? require('electron').remote?.app?.getVersion() || '1.0.0' : '1.0.0') + '\n\n크로마키를 대체하는 AI 객체 추적 및 배경 제거 시스템\n\n팀: Anywhere Studio');
-            });
-
-            /**
-             * 장면 목록을 UI에 렌더링합니다.
-             */
-            function renderScenes() {
-                const scenesList = document.getElementById('scenes-list');
-                if (!scenesList) return;
-
-                scenesList.innerHTML = '';
-                scenes.forEach((scene) => {
-                    const li = document.createElement('li');
-                    li.className = 'scene-item';
-                    li.dataset.sceneId = scene.id;
-                    li.textContent = scene.name;
-                    if (scene.id === currentSceneId) {
-                        li.classList.add('active');
-                    }
-                    li.addEventListener('click', () => switchScene(scene.id));
-                    scenesList.appendChild(li);
-                });
-            }
-
-            /**
-             * Scene 추가 모달을 엽니다.
-             */
-            function openAddSceneModal() {
-                const modal = document.getElementById('add-scene-modal');
-                const sceneNameInput = document.getElementById('scene-name-input');
-
-                if (modal) {
-                    modal.classList.add('visible');
-                    // 기본 장면 이름 설정
-                    if (sceneNameInput) {
-                        sceneNameInput.value = `Scene ${scenes.length + 1}`;
-                        sceneNameInput.focus();
-                        sceneNameInput.select();
-                    }
-                } else {
-                    console.error('Scene 추가 모달을 찾을 수 없습니다!');
-                }
-            }
-
-            /**
-             * Scene 추가 모달을 닫습니다.
-             */
-            function closeAddSceneModal() {
-                const modal = document.getElementById('add-scene-modal');
-                const sceneNameInput = document.getElementById('scene-name-input');
-
-                if (modal) modal.classList.remove('visible');
-                if (sceneNameInput) sceneNameInput.value = '';
-            }
-
-            /**
-             * 새 장면을 추가합니다.
-             */
-            function addScene() {
-                const sceneNameInput = document.getElementById('scene-name-input');
-                const sceneName = sceneNameInput?.value?.trim();
-
-                if (!sceneName) {
-                    alert('장면 이름을 입력하세요.');
-                    if (sceneNameInput) sceneNameInput.focus();
-                    return;
-                }
-
-                const newId = Math.max(...scenes.map(s => s.id), -1) + 1;
-                scenes.push({ id: newId, name: sceneName });
-                renderScenes();
-                switchScene(newId);
-                closeAddSceneModal();
-            }
-
-            /**
-             * 현재 활성 장면을 삭제합니다.
-             */
-            function removeScene() {
-                if (scenes.length <= 1) {
-                    alert('최소 하나의 장면이 필요합니다.');
-                    return;
-                }
-
-                const sceneIndex = scenes.findIndex(s => s.id === currentSceneId);
-                if (sceneIndex === -1) return;
-
-                scenes.splice(sceneIndex, 1);
-
-                if (sceneIndex >= scenes.length) {
-                    currentSceneId = scenes[scenes.length - 1].id;
-                } else {
-                    currentSceneId = scenes[sceneIndex].id;
-                }
-
-                renderScenes();
-            }
-
-            /**
-             * 현재 장면을 목록에서 위로 이동합니다.
-             */
-            function moveSceneUp() {
-                const sceneIndex = scenes.findIndex(s => s.id === currentSceneId);
-                if (sceneIndex <= 0) return;
-
-                [scenes[sceneIndex - 1], scenes[sceneIndex]] = [scenes[sceneIndex], scenes[sceneIndex - 1]];
-                renderScenes();
-            }
-
-            /**
-             * 현재 장면을 목록에서 아래로 이동합니다.
-             */
-            function moveSceneDown() {
-                const sceneIndex = scenes.findIndex(s => s.id === currentSceneId);
-                if (sceneIndex >= scenes.length - 1) return;
-
-                [scenes[sceneIndex], scenes[sceneIndex + 1]] = [scenes[sceneIndex + 1], scenes[sceneIndex]];
-                renderScenes();
-            }
-
-            /**
-             * 지정된 장면으로 전환합니다.
-             * @param {number} sceneId - 전환할 장면 ID
-             */
-            function switchScene(sceneId) {
-                const scene = scenes.find(s => s.id === sceneId);
-                if (!scene) return;
-
-                currentSceneId = sceneId;
-                renderScenes();
-            }
-
-            /**
-             * 장면 패널의 버튼 이벤트 리스너를 설정합니다.
-             */
-            function setupScenesPanel() {
-                const scenesPanel = document.getElementById('scenes-panel');
-                if (!scenesPanel) return;
-
-                // 기존 리스너 제거 후 재등록
-                const newPanel = scenesPanel.cloneNode(true);
-                scenesPanel.parentNode.replaceChild(newPanel, scenesPanel);
-
-                // 이벤트 위임 사용
-                newPanel.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const btn = e.target.closest('button');
-                    if (!btn) return;
-
-                    const btnId = btn.id;
-                    if (btnId === 'add-scene-btn') {
-                        openAddSceneModal();
-                    } else if (btnId === 'remove-scene-btn') {
-                        removeScene();
-                    } else if (btnId === 'move-scene-up-btn') {
-                        moveSceneUp();
-                    } else if (btnId === 'move-scene-down-btn') {
-                        moveSceneDown();
-                    }
-                });
-
-                // Scene 추가 모달 버튼 이벤트
-                const addSceneConfirmBtn = document.getElementById('add-scene-confirm');
-                const cancelAddSceneBtn = document.getElementById('cancel-add-scene');
-                const sceneNameInput = document.getElementById('scene-name-input');
-
-                if (addSceneConfirmBtn) {
-                    addSceneConfirmBtn.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        addScene();
-                    });
-                }
-
-                if (cancelAddSceneBtn) {
-                    cancelAddSceneBtn.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        closeAddSceneModal();
-                    });
-                }
-
-                if (sceneNameInput) {
-                    sceneNameInput.addEventListener('keypress', (e) => {
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            addScene();
-                        }
-                    });
-                }
-
-                renderScenes();
-            }
-
-            /**
-             * 소스 목록을 UI에 렌더링합니다.
-             */
-            function renderSources() {
-                const sourcesList = document.getElementById('sources-list');
-                const sourcesEmpty = document.getElementById('sources-empty');
-
-                if (!sourcesList) return;
-
-                sourcesList.innerHTML = '';
-
-                if (sources.length === 0) {
-                    sourcesList.style.display = 'none';
-                    if (sourcesEmpty) sourcesEmpty.style.display = 'block';
-                } else {
-                    sourcesList.style.display = 'block';
-                    if (sourcesEmpty) sourcesEmpty.style.display = 'none';
-
-                    sources.forEach((source) => {
-                        const li = document.createElement('li');
-                        li.className = 'source-item';
-                        li.dataset.sourceId = source.id;
-                        if (source.id === selectedSourceId) {
-                            li.classList.add('selected');
-                        }
-
-                        const icon = document.createElement('span');
-                        icon.className = 'source-icon';
-                        if (source.type === 'video') icon.textContent = '📹';
-                        else if (source.type === 'image') icon.textContent = '🖼️';
-                        else if (source.type === 'text') icon.textContent = '📝';
-
-                        const name = document.createElement('span');
-                        name.className = 'source-name';
-                        name.textContent = source.name;
-
-                        li.appendChild(icon);
-                        li.appendChild(name);
-                        li.addEventListener('click', () => selectSource(source.id));
-                        sourcesList.appendChild(li);
-                    });
-                }
-            }
-
-            /**
-             * 소스 추가 모달을 엽니다.
-             */
-            function openAddSourceModal() {
-                const modal = document.getElementById('add-source-modal');
-                const videoOption = document.getElementById('video-option');
-                const imageOption = document.getElementById('image-option');
-                const textOption = document.getElementById('text-option');
-                const sourceVideoDevice = document.getElementById('source-video-device');
-
-                // 비디오 장치 목록 채우기
-                if (sourceVideoDevice) {
-                    sourceVideoDevice.innerHTML = '';
-                    videoSelect.querySelectorAll('option').forEach(option => {
-                        const newOption = option.cloneNode(true);
-                        sourceVideoDevice.appendChild(newOption);
-                    });
-                }
-
-                // 라디오 버튼 이벤트
-                document.querySelectorAll('input[name="source-type"]').forEach(radio => {
-                    radio.addEventListener('change', (e) => {
-                        const type = e.target.value;
-                        if (videoOption) videoOption.style.display = type === 'video' ? 'flex' : 'none';
-                        if (imageOption) imageOption.style.display = type === 'image' ? 'flex' : 'none';
-                        if (textOption) textOption.style.display = type === 'text' ? 'flex' : 'none';
-                    });
-                });
-
-                if (modal) modal.classList.add('visible');
-            }
-
-            /**
-             * 소스를 추가합니다.
-             */
-            function addSource() {
-                const sourceType = document.querySelector('input[name="source-type"]:checked')?.value;
-                const sourceName = document.getElementById('source-name')?.value || `Source ${nextSourceId}`;
-
-                if (!sourceType) return;
-
-                let sourceData = {};
-
-                if (sourceType === 'video') {
-                    const deviceId = document.getElementById('source-video-device')?.value;
-                    if (!deviceId) {
-                        alert('비디오 장치를 선택하세요.');
-                        return;
-                    }
-                    sourceData = { type: 'video', deviceId: deviceId };
-                } else if (sourceType === 'image') {
-                    const fileInput = document.getElementById('source-image-file');
-                    if (!fileInput?.files?.[0]) {
-                        alert('이미지 파일을 선택하세요.');
-                        return;
-                    }
-                    const file = fileInput.files[0];
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        sourceData = { type: 'image', imageUrl: e.target.result, fileName: file.name };
-                        finishAddSource(sourceName, sourceData);
-                    };
-                    reader.readAsDataURL(file);
-                    return;
-                } else if (sourceType === 'text') {
-                    const textContent = document.getElementById('source-text-content')?.value;
-                    if (!textContent) {
-                        alert('텍스트 내용을 입력하세요.');
-                        return;
-                    }
-                    sourceData = { type: 'text', content: textContent };
-                }
-
-                finishAddSource(sourceName, sourceData);
-            }
-
-            /**
-             * 소스 추가를 완료합니다.
-             */
-            function finishAddSource(name, data) {
-                const newSource = {
-                    id: nextSourceId++,
-                    name: name,
-                    ...data
-                };
-                sources.push(newSource);
-                renderSources();
-                closeAddSourceModal();
-            }
-
-            /**
-             * 소스 추가 모달을 닫습니다.
-             */
-            function closeAddSourceModal() {
-                const modal = document.getElementById('add-source-modal');
-                if (modal) modal.classList.remove('visible');
-                document.getElementById('source-name').value = '';
-                document.getElementById('source-text-content').value = '';
-                document.getElementById('source-image-file').value = '';
-            }
-
-            /**
-             * 소스를 선택합니다.
-             */
-            function selectSource(sourceId) {
-                selectedSourceId = sourceId;
-                renderSources();
-            }
-
-            /**
-             * 선택된 소스를 삭제합니다.
-             */
-            function removeSource() {
-                if (selectedSourceId === null) {
-                    alert('삭제할 소스를 선택하세요.');
-                    return;
-                }
-
-                const index = sources.findIndex(s => s.id === selectedSourceId);
-                if (index !== -1) {
-                    sources.splice(index, 1);
-                    selectedSourceId = null;
-                    renderSources();
-                }
-            }
-
-            /**
-             * 선택된 소스를 위로 이동합니다.
-             */
-            function moveSourceUp() {
-                if (selectedSourceId === null) return;
-
-                const index = sources.findIndex(s => s.id === selectedSourceId);
-                if (index <= 0) return;
-
-                [sources[index - 1], sources[index]] = [sources[index], sources[index - 1]];
-                renderSources();
-            }
-
-            /**
-             * 선택된 소스를 아래로 이동합니다.
-             */
-            function moveSourceDown() {
-                if (selectedSourceId === null) return;
-
-                const index = sources.findIndex(s => s.id === selectedSourceId);
-                if (index >= sources.length - 1) return;
-
-                [sources[index], sources[index + 1]] = [sources[index + 1], sources[index]];
-                renderSources();
-            }
-
-            /**
-             * 소스 패널의 버튼 이벤트 리스너를 설정합니다.
-             */
-            function setupSourcesPanel() {
-                const sourcesPanel = document.getElementById('sources-panel');
-                if (!sourcesPanel) return;
-
-                // 기존 리스너 제거 후 재등록
-                const newPanel = sourcesPanel.cloneNode(true);
-                sourcesPanel.parentNode.replaceChild(newPanel, sourcesPanel);
-
-                // 이벤트 위임 사용
-                newPanel.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const btn = e.target.closest('button');
-                    if (!btn) return;
-
-                    const btnId = btn.id;
-                    if (btnId === 'add-source-btn') {
-                        openAddSourceModal();
-                    } else if (btnId === 'remove-source-btn') {
-                        removeSource();
-                    } else if (btnId === 'source-settings-btn') {
-                        if (selectedSourceId === null) {
-                            alert('설정할 소스를 선택하세요.');
-                        } else {
-                            alert('소스 설정 기능은 추후 구현 예정입니다.');
-                        }
-                    } else if (btnId === 'move-source-up-btn') {
-                        moveSourceUp();
-                    } else if (btnId === 'move-source-down-btn') {
-                        moveSourceDown();
-                    }
-                });
-
-                // 모달 버튼 이벤트
-                const addSourceConfirm = document.getElementById('add-source-confirm');
-                const cancelAddSource = document.getElementById('cancel-add-source');
-
-                if (addSourceConfirm) {
-                    addSourceConfirm.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        addSource();
-                    });
-                }
-
-                if (cancelAddSource) {
-                    cancelAddSource.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        closeAddSourceModal();
-                    });
-                }
-
-                renderSources();
-            }
-
-            // ============================================
-            // 라즈베리파이 WebSocket 연결 관리 함수
-            // ============================================
-
-            /**
-             * 라즈베리파이에 WebSocket 연결을 시도합니다.
-             * 
-             * @description
-             * - 사용자가 입력한 IP 주소와 포트로 WebSocket 연결을 생성합니다
-             * - 연결 성공 시 비디오 스트림 수신을 시작합니다
-             * - 연결 실패 시 자동 재연결을 시도합니다
-             * - 연결 상태를 UI에 업데이트합니다
-             * 
-             * @param {string} ip - 라즈베리파이 IP 주소
-             * @param {number} port - WebSocket 포트 번호 (기본: 8765)
-             */
-            function connectToRaspberryPi(ip, port = 8765) {
-                if (piWebSocket && piWebSocket.readyState === WebSocket.OPEN) {
-                    return;
-                }
-
-                const wsUrl = `ws://${ip}:${port}`;
-
-                try {
-                    piWebSocket = new WebSocket(wsUrl);
-
-                    piWebSocket.onopen = () => {
-                        piConnected = true;
-                        piReconnectAttempts = 0;
-                        updatePiConnectionStatus(true);
-
-                        piWebSocket.send(JSON.stringify({
-                            type: 'client_ready',
-                            message: 'Electron 클라이언트 연결됨'
-                        }));
-                    };
-
-                    piWebSocket.onmessage = (event) => {
-                        try {
-                            const data = JSON.parse(event.data);
-                            handlePiMessage(data);
-                        } catch (err) {
-                            handlePiVideoFrame(event.data);
-                        }
-                    };
-
-                    piWebSocket.onclose = (event) => {
-                        piConnected = false;
-
-                        // 정상 종료가 아닌 경우에만 재연결 시도
-                        if (event.code !== 1000) {
-                            if (piReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                                attemptReconnect(ip, port);
-                            } else {
-                                updatePiConnectionStatus(false, '연결 실패: 재연결 시도 횟수를 초과했습니다.');
-                                showErrorModal(
-                                    '라즈베리파이 연결이 끊어졌습니다.\n\n재연결을 여러 번 시도했지만 실패했습니다.\n\nIP 주소와 포트를 확인하고 수동으로 다시 연결해주세요.',
-                                    true,
-                                    true,
-                                    () => {
-                                        connectToRaspberryPi(ip, port);
-                                    }
-                                );
-                            }
-                        } else {
-                            updatePiConnectionStatus(false, '연결이 종료되었습니다.');
-                        }
-                    };
-
-                    piWebSocket.onerror = (error) => {
-                        console.error('라즈베리파이 연결 오류:', error);
-                        piConnected = false;
-                        updatePiConnectionStatus(false, '연결 실패: 네트워크 오류가 발생했습니다.');
-
-                        // 에러 모달 표시
-                        showErrorModal(
-                            '라즈베리파이에 연결할 수 없습니다.\n\n가능한 원인:\n- IP 주소나 포트가 올바르지 않습니다\n- 라즈베리파이가 실행 중이지 않습니다\n- 방화벽이 연결을 차단하고 있습니다\n- 네트워크 연결이 끊어졌습니다',
-                            true,
-                            true,
-                            () => {
-                                connectToRaspberryPi(ip, port);
-                            }
-                        );
-                    };
-
-                } catch (error) {
-                    console.error('WebSocket 생성 실패:', error);
-                    updatePiConnectionStatus(false, '연결 실패: WebSocket을 생성할 수 없습니다.');
-
-                    // 에러 모달 표시
-                    showErrorModal(
-                        `라즈베리파이 연결에 실패했습니다.\n\n오류: ${error.message || '알 수 없는 오류'}\n\nIP 주소와 포트를 확인하고 다시 시도해주세요.`,
-                        true,
-                        true,
-                        () => {
-                            connectToRaspberryPi(ip, port);
-                        }
-                    );
-                }
-            }
-
-            /**
-             * 라즈베리파이 WebSocket 연결을 해제합니다.
-             */
-            function disconnectFromRaspberryPi() {
-                if (piWebSocket) {
-                    piWebSocket.close(1000, '사용자 요청으로 연결 종료');
-                    piWebSocket = null;
-                }
-                piConnected = false;
-                piReconnectAttempts = 0;
-                if (piReconnectTimer) {
-                    clearTimeout(piReconnectTimer);
-                    piReconnectTimer = null;
-                }
-                updatePiConnectionStatus(false);
-
-                if (piVideoStream) {
-                    piVideoStream = null;
-                    if (mediaStream) {
-                        videoFeed.srcObject = mediaStream;
-                    }
-                }
-            }
-
-            /**
-             * 라즈베리파이 연결 재시도를 수행합니다.
-             */
-            function attemptReconnect(ip, port) {
-                piReconnectAttempts++;
-
-                updatePiConnectionStatus(false, `재연결 시도 중... (${piReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-
-                piReconnectTimer = setTimeout(() => {
-                    connectToRaspberryPi(ip, port);
-                }, RECONNECT_DELAY);
-            }
-
-            /**
-             * 라즈베리파이로부터 수신한 메시지를 처리합니다.
-             */
-            function handlePiMessage(data) {
-                switch (data.type) {
-                    case 'video_frame':
-                        handlePiVideoFrame(data.frame);
-                        break;
-                    case 'motor_status':
-                        break;
-                    case 'system_info':
-                        break;
-                    default:
-                    // Unknown message type
-                }
-            }
-
-            /**
-             * 라즈베리파이로부터 수신한 비디오 프레임을 처리합니다.
-             */
-            function handlePiVideoFrame(frameData) {
-                if (!frameData) return;
-
-                try {
-                    const videoFeed = document.getElementById('main-video-feed');
-
-                    if (typeof frameData === 'string') {
-                        // Base64 인코딩된 이미지 데이터
-                        const img = new Image();
-                        img.onload = () => {
-                            // Canvas를 사용하여 이미지를 비디오 스트림으로 변환
-                            if (!trackingCanvas) {
-                                trackingCanvas = document.createElement('canvas');
-                                trackingCtx = trackingCanvas.getContext('2d');
-                            }
-
-                            trackingCanvas.width = img.width;
-                            trackingCanvas.height = img.height;
-                            trackingCtx.drawImage(img, 0, 0);
-
-                            // Canvas를 스트림으로 변환
-                            const stream = trackingCanvas.captureStream(30);
-
-                            // 오디오 트랙이 있으면 추가
-                            if (mediaStream) {
-                                const audioTracks = mediaStream.getAudioTracks();
-                                audioTracks.forEach(track => {
-                                    stream.addTrack(track);
-                                });
-                            }
-
-                            piVideoStream = stream;
-                            if (videoFeed) {
-                                videoFeed.srcObject = stream;
-
-                                // 자동 추적이 활성화되어 있으면 객체 추적 시작
-                                if (autoTrackingEnabled) {
-                                    processObjectTracking();
-                                }
-                            }
-                        };
-                        img.src = `data:image/jpeg;base64,${frameData}`;
-                    }
-                    else if (frameData instanceof Blob) {
-                        // Blob 데이터를 스트림으로 변환
-                        const url = URL.createObjectURL(frameData);
-                        if (videoFeed) {
-                            // Blob을 비디오 요소로 로드
-                            const tempVideo = document.createElement('video');
-                            tempVideo.src = url;
-                            tempVideo.autoplay = true;
-                            tempVideo.muted = true;
-                            tempVideo.playsInline = true;
-
-                            tempVideo.addEventListener('loadedmetadata', () => {
-                                const canvas = document.createElement('canvas');
-                                canvas.width = tempVideo.videoWidth;
-                                canvas.height = tempVideo.videoHeight;
-                                const ctx = canvas.getContext('2d');
-
-                                const drawFrame = () => {
-                                    if (tempVideo.readyState >= 2) {
-                                        ctx.drawImage(tempVideo, 0, 0);
-                                        const stream = canvas.captureStream(30);
-
-                                        if (mediaStream) {
-                                            const audioTracks = mediaStream.getAudioTracks();
-                                            audioTracks.forEach(track => {
-                                                stream.addTrack(track);
-                                            });
-                                        }
-
-                                        piVideoStream = stream;
-                                        videoFeed.srcObject = stream;
-
-                                        // 자동 추적이 활성화되어 있으면 객체 추적 시작
-                                        if (autoTrackingEnabled) {
-                                            processObjectTracking();
-                                        }
-                                    } else {
-                                        requestAnimationFrame(drawFrame);
-                                    }
-                                };
-                                drawFrame();
-                            });
-                        }
-                    }
-                } catch (error) {
-                    console.error('비디오 프레임 처리 오류:', error);
-                }
-            }
-
-            /**
-             * 라즈베리파이 연결 상태를 UI에 업데이트합니다.
-             */
-            function updatePiConnectionStatus(connected, message) {
-                const statusIndicator = document.getElementById('pi-status-indicator');
-                const statusText = document.getElementById('pi-status-text');
-                const connectionStatus = document.getElementById('pi-connection-status');
-                const connectBtn = document.getElementById('connect-pi-btn');
-                const disconnectBtn = document.getElementById('disconnect-pi-btn');
-
-                if (connected) {
-                    if (statusIndicator) {
-                        statusIndicator.style.backgroundColor = 'var(--color-success)';
-                        statusIndicator.classList.remove('disconnected');
-                        statusIndicator.classList.add('connected');
-                    }
-                    if (statusText) {
-                        statusText.textContent = '라즈베리파이: 연결됨';
-                    }
-                    if (connectionStatus) {
-                        connectionStatus.textContent = '연결됨';
-                        connectionStatus.style.backgroundColor = 'var(--color-success)';
-                        connectionStatus.style.color = 'white';
-                    }
-                    if (connectBtn) connectBtn.style.display = 'none';
-                    if (disconnectBtn) disconnectBtn.style.display = 'inline-block';
-                } else {
-                    if (statusIndicator) {
-                        statusIndicator.style.backgroundColor = 'var(--color-danger)';
-                        statusIndicator.classList.remove('connected');
-                        statusIndicator.classList.add('disconnected');
-                    }
-                    if (statusText) {
-                        statusText.textContent = message || '라즈베리파이: 연결 안 됨';
-                    }
-                    if (connectionStatus) {
-                        connectionStatus.textContent = message || '연결 안 됨';
-                        connectionStatus.style.backgroundColor = 'var(--bg-medium)';
-                        connectionStatus.style.color = 'var(--text-secondary)';
-                    }
-                    if (connectBtn) connectBtn.style.display = 'inline-block';
-                    if (disconnectBtn) disconnectBtn.style.display = 'none';
-                }
-            }
-
-            /**
-             * 라즈베리파이로 모터 제어 명령을 전송합니다.
-             * @param {number} pan - 팬 각도 (-90 ~ 90)
-             * @param {number} tilt - 틸트 각도 (-90 ~ 90)
-             */
-            function sendMotorControl(pan, tilt) {
-                if (!piConnected || !piWebSocket || piWebSocket.readyState !== WebSocket.OPEN) {
-                    console.warn('라즈베리파이가 연결되지 않았습니다.');
-                    return;
-                }
-
-                // 각도 제한
-                pan = Math.max(-90, Math.min(90, pan));
-                tilt = Math.max(-90, Math.min(90, tilt));
-
-                // 마지막 명령과 차이가 작으면 전송하지 않음 (과도한 명령 방지)
-                const panDiff = Math.abs(pan - lastMotorCommand.pan);
-                const tiltDiff = Math.abs(tilt - lastMotorCommand.tilt);
-                if (panDiff < 1 && tiltDiff < 1) {
-                    return;
-                }
-
-                lastMotorCommand = { pan, tilt };
-
-                const command = {
-                    type: 'motor_control',
-                    pan: pan,
-                    tilt: tilt,
-                    timestamp: Date.now()
-                };
-
-                piWebSocket.send(JSON.stringify(command));
-            }
-
-            /**
-             * 자동 추적 모드를 토글합니다.
-             */
-            function toggleAutoTracking() {
-                autoTrackingEnabled = !autoTrackingEnabled;
-                const btn = document.getElementById('toggle-auto-tracking');
-
-                if (btn) {
-                    btn.textContent = `자동 추적: ${autoTrackingEnabled ? 'ON' : 'OFF'}`;
-                    if (autoTrackingEnabled) {
-                        btn.classList.add('recording');
-                        startAutoTracking();
-                    } else {
-                        btn.classList.remove('recording');
-                        stopAutoTracking();
-                    }
-                }
-            }
-
-            /**
-             * 자동 추적을 시작합니다.
-             */
-            function startAutoTracking() {
-                if (!mediaStream && !piVideoStream) {
-                    console.warn('비디오 스트림이 없습니다.');
-                    return;
-                }
-
-                // 추적용 Canvas 생성
-                if (!trackingCanvas) {
-                    trackingCanvas = document.createElement('canvas');
-                    trackingCtx = trackingCanvas.getContext('2d', { willReadFrequently: true });
-                }
-
-                // YOLO 모델 로드 (시뮬레이션)
-                // 실제로는 TensorFlow.js나 다른 라이브러리를 사용해야 함
-                loadYOLOModel();
-
-                // 추적 시작
-                processObjectTracking();
-            }
-
-            /**
-             * 자동 추적을 중지합니다.
-             */
-            function stopAutoTracking() {
-                if (trackingAnimationFrame) {
-                    cancelAnimationFrame(trackingAnimationFrame);
-                    trackingAnimationFrame = null;
-                }
-                detectedObjects = [];
-            }
-
-            /**
-             * YOLO 모델을 로드합니다 (시뮬레이션).
-             * 실제로는 TensorFlow.js를 사용하여 모델을 로드해야 합니다.
-             */
-            async function loadYOLOModel() {
-                // TODO: 실제 YOLO 모델 로드
-                // 예: const model = await tf.loadLayersModel('path/to/yolo/model.json');
-                console.log('YOLO 모델 로드 (시뮬레이션)');
-                yoloModel = { loaded: true }; // 시뮬레이션
-            }
-
-            /**
-             * 객체 추적을 처리합니다.
-             */
-            function processObjectTracking() {
-                if (!autoTrackingEnabled) return;
-
-                const videoElement = document.getElementById('main-video-feed');
-                if (!videoElement || !videoElement.videoWidth) {
-                    trackingAnimationFrame = requestAnimationFrame(processObjectTracking);
-                    return;
-                }
-
-                // Canvas 크기 설정
-                if (!trackingCanvas || !trackingCtx) {
-                    trackingAnimationFrame = requestAnimationFrame(processObjectTracking);
-                    return;
-                }
-
-                trackingCanvas.width = videoElement.videoWidth || 640;
-                trackingCanvas.height = videoElement.videoHeight || 480;
-
-                // 비디오 프레임을 Canvas에 그리기
-                trackingCtx.drawImage(videoElement, 0, 0, trackingCanvas.width, trackingCanvas.height);
-
-                // YOLO 객체 감지 (시뮬레이션)
-                detectObjects(trackingCanvas).then(objects => {
-                    detectedObjects = objects;
-
-                    // 사람 객체가 감지되면 모터 제어
-                    const personObjects = objects.filter(obj => obj.class === 'person');
-                    if (personObjects.length > 0 && piConnected) {
-                        // 가장 큰 사람 객체를 추적
-                        const mainPerson = personObjects.reduce((prev, curr) =>
-                            (curr.width * curr.height) > (prev.width * prev.height) ? curr : prev
-                        );
-
-                        // 객체 중심점 계산
-                        const centerX = mainPerson.x + mainPerson.width / 2;
-                        const centerY = mainPerson.y + mainPerson.height / 2;
-                        const canvasCenterX = trackingCanvas.width / 2;
-                        const canvasCenterY = trackingCanvas.height / 2;
-
-                        // 중심점 차이 계산
-                        const diffX = centerX - canvasCenterX;
-                        const diffY = centerY - canvasCenterY;
-
-                        // 모터 각도 계산 (정규화)
-                        const panAngle = (diffX / canvasCenterX) * 45; // 최대 45도
-                        const tiltAngle = -(diffY / canvasCenterY) * 45; // 틸트는 반대 방향
-
-                        // 모터 제어 명령 전송
-                        sendMotorControl(panAngle, tiltAngle);
-                    }
-
-                    // 다음 프레임 처리
-                    trackingAnimationFrame = requestAnimationFrame(processObjectTracking);
-                });
-            }
-
-            /**
-             * 객체를 감지합니다 (YOLO 시뮬레이션).
-             * 실제로는 YOLO 모델을 사용하여 객체를 감지해야 합니다.
-             * @param {HTMLCanvasElement} canvas - 분석할 Canvas
-             * @returns {Promise<Array>} 감지된 객체 목록
-             */
-            async function detectObjects(canvas) {
-                // TODO: 실제 YOLO 모델을 사용한 객체 감지
-                // 예: const predictions = await yoloModel.detect(canvas);
-
-                // 시뮬레이션: 랜덤 객체 감지 (테스트용)
-                if (Math.random() > 0.7) {
-                    return [{
-                        class: 'person',
-                        confidence: 0.85,
-                        x: Math.random() * (canvas.width - 100),
-                        y: Math.random() * (canvas.height - 100),
-                        width: 80 + Math.random() * 40,
-                        height: 120 + Math.random() * 40
-                    }];
-                }
-                return [];
-            }
-
-            /**
-             * 라즈베리파이 연결 관련 UI 이벤트 리스너를 설정합니다.
-             */
-            function setupPiConnectionUI() {
-                const connectBtn = document.getElementById('connect-pi-btn');
-                const disconnectBtn = document.getElementById('disconnect-pi-btn');
-                const piIpInput = document.getElementById('raspberry-pi-ip');
-                const piPortInput = document.getElementById('raspberry-pi-port');
-
-                if (connectBtn) {
-                    connectBtn.addEventListener('click', () => {
-                        const ip = piIpInput?.value.trim();
-                        const port = parseInt(piPortInput?.value || '8765');
-
-                        if (!ip) {
-                            alert('라즈베리파이 IP 주소를 입력하세요.');
-                            return;
-                        }
-
-                        const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
-                        if (!ipPattern.test(ip)) {
-                            alert('올바른 IP 주소 형식을 입력하세요.\n예: 192.168.1.100');
-                            return;
-                        }
-
-                        connectToRaspberryPi(ip, port);
-                    });
-                }
-
-                if (disconnectBtn) {
-                    disconnectBtn.addEventListener('click', () => {
-                        disconnectFromRaspberryPi();
-                    });
-                }
-
-                if (piIpInput) {
-                    piIpInput.addEventListener('keypress', (e) => {
-                        if (e.key === 'Enter') {
-                            connectBtn?.click();
-                        }
-                    });
-                }
-                if (piPortInput) {
-                    piPortInput.addEventListener('keypress', (e) => {
-                        if (e.key === 'Enter') {
-                            connectBtn?.click();
-                        }
-                    });
-                }
-
-                updatePiConnectionStatus(false);
-            }
-
-            // ============================================
-            // 업데이트 관리 함수
-            // ============================================
-
-            /**
-             * 업데이트를 수동으로 확인합니다.
-             */
-            async function checkForUpdatesManually() {
-                const updateModal = document.getElementById('update-modal');
-                const updateChecking = document.getElementById('update-checking');
-                const updateAvailable = document.getElementById('update-available');
-                const updateLatest = document.getElementById('update-latest');
-                const updateError = document.getElementById('update-error');
-
-                if (!updateModal) return;
-                updateModal.classList.add('visible');
-                updateChecking.style.display = 'block';
-                updateAvailable.style.display = 'none';
-                updateLatest.style.display = 'none';
-                updateError.style.display = 'none';
-
-                try {
-                    if (!isElectron || !window.electronAPI.invoke) {
-                        updateChecking.style.display = 'none';
-                        updateError.style.display = 'block';
-                        return;
-                    }
-
-                    const updateInfo = await window.electronAPI.invoke('check-for-updates');
-                    updateChecking.style.display = 'none';
-
-                    if (!updateInfo) {
-                        updateError.style.display = 'block';
-                        return;
-                    }
-
-                    if (updateInfo.available) {
-                        document.getElementById('update-current-version').textContent = updateInfo.currentVersion;
-                        document.getElementById('update-latest-version').textContent = updateInfo.latestVersion;
-                        document.getElementById('update-release-date').textContent = updateInfo.releaseDate || '날짜 정보 없음';
-                        document.getElementById('update-release-notes').textContent = updateInfo.releaseNotes || '업데이트가 사용 가능합니다.';
-                        updateAvailable.style.display = 'block';
-                    } else {
-                        document.getElementById('update-current-version-latest').textContent = updateInfo.currentVersion;
-                        updateLatest.style.display = 'block';
-                    }
-                } catch (error) {
-                    console.error('업데이트 확인 오류:', error);
-                    updateChecking.style.display = 'none';
-                    updateError.style.display = 'block';
-
-                    // 에러 메시지 표시
-                    const errorMessage = document.getElementById('update-error-message');
-                    if (errorMessage) {
-                        if (error.message && error.message.includes('network') || error.message && error.message.includes('timeout')) {
-                            errorMessage.textContent = '업데이트 서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.';
-                        } else {
-                            errorMessage.textContent = `업데이트 확인 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`;
-                        }
-                    }
-                }
-            }
-
-            /**
-             * 업데이트 다운로드를 시작합니다.
-             */
-            function downloadUpdate(downloadUrl) {
-                if (isElectron && window.electronAPI.send) {
-                    window.electronAPI.send('download-update', downloadUrl);
-                } else {
-                    window.open(downloadUrl, '_blank');
-                }
-            }
-
-            /**
-             * 업데이트 모달의 이벤트 리스너를 설정합니다.
-             */
-            function setupUpdateModal() {
-                const updateModal = document.getElementById('update-modal');
-                const updateDownloadBtn = document.getElementById('update-download-btn');
-                const updateCloseBtn = document.getElementById('update-close-btn');
-                const updateCloseLatestBtn = document.getElementById('update-close-latest-btn');
-                const updateRetryBtn = document.getElementById('update-retry-btn');
-                const updateCloseErrorBtn = document.getElementById('update-close-error-btn');
-
-                if (updateDownloadBtn) {
-                    updateDownloadBtn.addEventListener('click', async () => {
-                        try {
-                            const updateInfo = await window.electronAPI.invoke('check-for-updates');
-                            if (updateInfo && updateInfo.available && updateInfo.downloadUrl) {
-                                downloadUpdate(updateInfo.downloadUrl);
-                                updateModal.classList.remove('visible');
-                            } else {
-                                alert('다운로드 URL을 가져올 수 없습니다.');
-                            }
-                        } catch (error) {
-                            console.error('다운로드 URL 가져오기 실패:', error);
-                            alert('업데이트 다운로드에 실패했습니다.');
-                        }
-                    });
-                }
-
-                if (updateCloseBtn) updateCloseBtn.addEventListener('click', () => updateModal.classList.remove('visible'));
-                if (updateCloseLatestBtn) updateCloseLatestBtn.addEventListener('click', () => updateModal.classList.remove('visible'));
-                if (updateRetryBtn) updateRetryBtn.addEventListener('click', () => checkForUpdatesManually());
-                if (updateCloseErrorBtn) updateCloseErrorBtn.addEventListener('click', () => updateModal.classList.remove('visible'));
-            }
-
-            /**
-             * 자동으로 업데이트를 확인합니다.
-             */
-            async function checkForUpdatesAuto(silent = true) {
-                try {
-                    if (!isElectron || !window.electronAPI.invoke) return;
-
-                    const updateInfo = await window.electronAPI.invoke('check-for-updates');
-
-                    if (updateInfo && updateInfo.available) {
-                        const shouldUpdate = confirm(
-                            `새로운 업데이트가 사용 가능합니다!\n\n` +
-                            `현재 버전: ${updateInfo.currentVersion}\n` +
-                            `최신 버전: ${updateInfo.latestVersion}\n\n` +
-                            `지금 다운로드하시겠습니까?`
-                        );
-
-                        if (shouldUpdate) {
-                            checkForUpdatesManually();
-                        }
-                    }
-                } catch (error) {
-                    console.error('자동 업데이트 확인 실패:', error);
-                }
-            }
-
-            // ============================================
-            // 초기화 실행
-            // ============================================
-
-            /**
-             * 애플리케이션 초기화 함수
-             * 페이지 로드 시 한 번 실행됩니다.
-             */
-            (async function init() {
-                try {
-                    // 오디오 믹서 컨트롤 설정
-                    setupAudioMixerControls();
-
-                    // 장면 패널 설정
-                    setupScenesPanel();
-
-                    // 소스 패널 설정
-                    setupSourcesPanel();
-
-                    // 라즈베리파이 연결 UI 설정
-                    setupPiConnectionUI();
-
-                    // 업데이트 모달 설정
-                    setupUpdateModal();
-
-                    // 배경 제거 및 비교 모드 버튼 이벤트
-                    const toggleBackgroundRemovalBtn = document.getElementById('toggle-background-removal');
-                    const toggleComparisonBtn = document.getElementById('toggle-comparison');
-
-                    if (toggleBackgroundRemovalBtn) {
-                        toggleBackgroundRemovalBtn.addEventListener('click', toggleBackgroundRemoval);
-                    }
-
-                    if (toggleComparisonBtn) {
-                        toggleComparisonBtn.addEventListener('click', toggleComparison);
-                    }
-
-                    // 자동 추적 버튼 이벤트
-                    const toggleAutoTrackingBtn = document.getElementById('toggle-auto-tracking');
-                    if (toggleAutoTrackingBtn) {
-                        toggleAutoTrackingBtn.addEventListener('click', toggleAutoTracking);
-                    }
-
-                    // 배경 교체 버튼 이벤트
-                    const toggleBackgroundReplaceBtn = document.getElementById('toggle-background-replace');
-                    if (toggleBackgroundReplaceBtn) {
-                        toggleBackgroundReplaceBtn.addEventListener('click', () => {
-                            const modal = document.getElementById('background-replace-modal');
-                            if (modal) modal.classList.add('visible');
-                        });
-                    }
-
-                    // Transform 메뉴 이벤트
-                    const menuTransform = document.getElementById('menu-transform');
-                    if (menuTransform) {
-                        menuTransform.addEventListener('click', () => {
-                            const modal = document.getElementById('transform-modal');
-                            if (modal) modal.classList.add('visible');
-                        });
-                    }
-
-                    // 배경 교체 모달 설정
-                    setupBackgroundReplaceModal();
-
-                    // Transform 모달 설정
-                    setupTransformModal();
-
-                    // 카메라/마이크 장치 목록 가져오기
-                    await getDevices();
-
-                    // 저장된 설정 불러오기
-                    const savedSettings = loadSettings();
-
-                    // 화면 로딩 및 장치 초기화 이후 ONNX 모델을 로드합니다.
-                    await loadModel();
-
-                    // 저장된 설정이 있으면 적용, 없으면 기본 장치로 스트림 시작
-                    if (savedSettings && savedSettings.videoSource && savedSettings.audioSource) {
-                        await startStream(savedSettings.videoSource, savedSettings.audioSource);
-                    } else {
-                        await startStream();
-                    }
-
-                    // 스트림 시작 후 오디오 믹서 컨트롤 다시 설정
-                    setupAudioMixerControls();
-
-                    // 드롭다운 메뉴 클릭 방식 설정
-                    setupDropdownMenus();
-
-                    // 프리뷰 영역 리사이즈 기능 설정
-                    setupPreviewResize();
-                } catch (error) {
-                    console.error('초기화 중 오류 발생:', error);
-                }
-            })();
-
-            /**
-             * 드롭다운 메뉴를 클릭 방식으로 초기화합니다.
-             * 메뉴 아이템을 클릭하면 드롭다운이 열리고, 다른 곳을 클릭하면 닫힙니다.
-             */
-            function setupDropdownMenus() {
-                const menuItems = document.querySelectorAll('.menu-item');
-                let activeMenu = null;
-
-                menuItems.forEach(menuItem => {
-                    const menuSpan = menuItem.querySelector('span');
-
-                    // 메뉴 아이템 클릭 이벤트
-                    if (menuSpan) {
-                        menuSpan.addEventListener('click', (e) => {
-                            e.stopPropagation();
-
-                            // 현재 활성화된 메뉴와 같으면 닫기
-                            if (activeMenu === menuItem) {
-                                menuItem.classList.remove('active');
-                                activeMenu = null;
-                            } else {
-                                // 다른 메뉴가 열려있으면 닫기
-                                if (activeMenu) {
-                                    activeMenu.classList.remove('active');
-                                }
-                                // 현재 메뉴 열기
-                                menuItem.classList.add('active');
-                                activeMenu = menuItem;
-                            }
-                        });
-                    }
-
-                    // 드롭다운 메뉴 항목 클릭 시 메뉴 닫기
-                    const dropdownItems = menuItem.querySelectorAll('.dropdown-menu li');
-                    dropdownItems.forEach(item => {
-                        item.addEventListener('click', (e) => {
-                            // 메뉴 항목의 실제 클릭 이벤트는 그대로 실행되도록
-                            // 약간의 지연 후 메뉴 닫기
-                            setTimeout(() => {
-                                menuItem.classList.remove('active');
-                                activeMenu = null;
-                            }, 100);
-                        });
-                    });
-                });
-
-                // 외부 클릭 시 드롭다운 닫기
-                document.addEventListener('click', (e) => {
-                    // 클릭한 요소가 메뉴 아이템이나 드롭다운 내부가 아니면
-                    if (!e.target.closest('.menu-item')) {
-                        if (activeMenu) {
-                            activeMenu.classList.remove('active');
-                            activeMenu = null;
-                        }
-                    }
-                });
-            }
-
-            /**
-             * 하단 패널 상단 리사이즈 바를 통해 프리뷰 영역과 하단 패널의 크기를 조절합니다.
-             */
-            function setupPreviewResize() {
-                const previewArea = document.getElementById('preview-area');
-                const docksContainer = document.getElementById('docks-container');
-                const resizeBar = document.getElementById('docks-resize-bar');
-
-                if (!previewArea || !docksContainer || !resizeBar) return;
-
-                let isResizing = false;
-                let startY = 0;
-                let startPreviewHeight = 0;
-                let startDocksHeight = 0;
-
-                resizeBar.addEventListener('mousedown', (e) => {
-                    isResizing = true;
-                    startY = e.clientY;
-                    startPreviewHeight = previewArea.offsetHeight;
-                    startDocksHeight = docksContainer.offsetHeight;
-                    e.preventDefault();
-                    document.body.style.cursor = 'ns-resize';
-                    document.body.style.userSelect = 'none';
-                });
-
-                document.addEventListener('mousemove', (e) => {
-                    if (!isResizing) return;
-
-                    const deltaY = e.clientY - startY;
-                    const newPreviewHeight = startPreviewHeight + deltaY;
-                    const newDocksHeight = startDocksHeight - deltaY;
-
-                    // 최소/최대 높이 제한
-                    const minPreviewHeight = 200;
-                    const minDocksHeight = 150;
-                    const maxPreviewHeight = window.innerHeight - 200; // 메뉴바, 상태바, 최소 패널 높이 고려
-
-                    if (newPreviewHeight >= minPreviewHeight &&
-                        newPreviewHeight <= maxPreviewHeight &&
-                        newDocksHeight >= minDocksHeight) {
-                        previewArea.style.height = newPreviewHeight + 'px';
-                        previewArea.style.flexGrow = '0';
-                        docksContainer.style.height = newDocksHeight + 'px';
-                        docksContainer.style.flexGrow = '0';
-                    }
-                });
-
-                document.addEventListener('mouseup', () => {
-                    if (isResizing) {
-                        isResizing = false;
-                        document.body.style.cursor = '';
-                        document.body.style.userSelect = '';
-                    }
-                });
-            }
-        });
+      document.addEventListener("DOMContentLoaded", () => {
+        // 렌더러 로직은 renderer/main-renderer.js (ES Module)로 분리되었습니다.
+      });
     </script>
-
-</body>
-
+  </body>
 </html>

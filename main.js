@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
+const { exec } = require('child_process');
 
 //webGPU 가속 활성화
 app.commandLine.appendSwitch('enable-unsafe-webgpu');
@@ -35,8 +36,41 @@ function createWindow() {
   mainWindow.loadFile('index.html');
 }
 
-app.whenReady().then(() => {
+let selectedGpuName = null;
+
+function startGpuMonitoring(win) {
+  const cmd = `powershell -NoProfile -Command "try { $s = (Get-Counter '\\GPU Engine(*engtype_3D)\\Utilization Percentage' -ErrorAction Stop).CounterSamples | Where-Object { $_.CookedValue -gt 0 }; if ($s) { [math]::Round(($s | Measure-Object CookedValue -Sum).Sum, 1) } else { 0 } } catch { 0 }"`;
+
+  setInterval(() => {
+    exec(cmd, { timeout: 4000 }, (err, stdout) => {
+      if (!err && !win.isDestroyed()) {
+        const usage = Math.min(parseFloat(stdout.trim()) || 0, 100);
+        win.webContents.send('gpu-usage', usage);
+      }
+    });
+  }, 2000);
+}
+
+app.whenReady().then(async () => {
   createWindow();
+  const win = BrowserWindow.getAllWindows()[0];
+  startGpuMonitoring(win);
+
+  // GPU 이름 전송 (렌더러 준비 후)
+  const gpuInfo = await app.getGPUInfo('basic');
+  const gpuName = gpuInfo?.gpuDevice?.[0]?.driverVendor
+    ? `${gpuInfo.gpuDevice[0].driverVendor}`
+    : null;
+
+  // PowerShell로 정확한 GPU 이름 조회
+  exec(
+    `powershell -NoProfile -Command "(Get-WmiObject Win32_VideoController | Select-Object -First 1 -ExpandProperty Name)"`,
+    { timeout: 5000 },
+    (err, stdout) => {
+      const name = !err && stdout.trim() ? stdout.trim() : (gpuName || 'Unknown GPU');
+      if (!win.isDestroyed()) win.webContents.send('gpu-name', name);
+    }
+  );
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -434,7 +468,42 @@ ipcMain.handle('check-for-updates', async (event) => {
  * @param {Object} event - IPC 이벤트 객체
  * @param {string} downloadUrl - 다운로드 URL
  */
-ipcMain.on('download-update', (event, downloadUrl) => {
+ipcMain.on('download-update', (_event, downloadUrl) => {
   console.log('업데이트 다운로드:', downloadUrl);
   shell.openExternal(downloadUrl);
+});
+
+/**
+ * 시스템에 설치된 GPU 목록 조회 IPC 핸들러
+ * @returns {Promise<Array<{index: number, name: string}>>} GPU 목록
+ */
+ipcMain.handle('get-gpu-list', () => {
+  return new Promise((resolve) => {
+    exec(
+      `powershell -NoProfile -Command "Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty Name"`,
+      { timeout: 5000 },
+      (err, stdout) => {
+        if (err || !stdout.trim()) {
+          resolve([{ index: 0, name: 'Unknown GPU' }]);
+          return;
+        }
+        const gpus = stdout.trim().split('\n')
+          .map((name, index) => ({ index, name: name.trim() }))
+          .filter(g => g.name);
+        resolve(gpus);
+      }
+    );
+  });
+});
+
+/**
+ * 선택된 GPU 설정 IPC 핸들러
+ * @param {string} name - 선택된 GPU 이름
+ */
+ipcMain.on('set-selected-gpu', (event, name) => {
+  selectedGpuName = name;
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('gpu-name', name);
+  }
 });
