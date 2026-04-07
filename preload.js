@@ -21,7 +21,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'menu-toggle-fullscreen',
       'menu-reload',
       'menu-toggle-devtools',
-      'download-update'
+      'download-update',
+      'set-selected-gpu'
     ];
     if (validChannels.includes(channel)) {
       ipcRenderer.send(channel, data);
@@ -37,11 +38,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'select-save-path', 
       'get-save-path', 
       'show-recordings', 
-      'check-for-updates'
+      'check-for-updates',
+      'get-gpu-list'
     ];
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);
     }
     return Promise.reject(new Error('Invalid channel'));
+  },
+  onGpuUsage: (callback) => {
+    ipcRenderer.on('gpu-usage', (_event, value) => callback(value));
+  },
+  onGpuName: (callback) => {
+    ipcRenderer.on('gpu-name', (_event, name) => callback(name));
   },
 });
