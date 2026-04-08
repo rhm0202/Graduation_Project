@@ -20,7 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'menu-paste',
       'menu-toggle-fullscreen',
       'menu-reload',
-      'menu-toggle-devtools',
+
       'download-update',
       'set-selected-gpu'
     ];

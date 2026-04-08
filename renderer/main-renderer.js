@@ -5,14 +5,12 @@
 import { getDevices, startStream, setupMediaControls } from './media.js';
 import { setupAudioMixerControls } from './audio.js';
 import { setupRecordingControls } from './recording.js';
-import { setupScenesPanel } from './scenes.js';
-import { setupSourcesPanel } from './sources.js';
 import { setupPiConnectionUI } from './rpi.js';
 import { toggleAutoTracking } from './tracking.js';
 import { loadModel, toggleBackgroundRemoval, toggleComparison, setupBackgroundReplaceModal } from './background.js';
 import { setupSettingsModal, loadSettings } from './settings.js';
 import { setupUpdateModal } from './updates.js';
-import { setupDropdownMenus, setupPreviewResize, setupTransformModal, setupAppMenus, setupGpuStatusListeners } from './ui.js';
+import { setupDropdownMenus, setupPreviewResize, setupAppMenus, setupGpuStatusListeners } from './ui.js';
 
 // GPU 상태 리스너는 DOMContentLoaded와 무관하게 즉시 등록
 setupGpuStatusListeners();
@@ -27,12 +25,6 @@ setupGpuStatusListeners();
 
     // 녹화 컨트롤
     setupRecordingControls();
-
-    // 장면 패널
-    setupScenesPanel();
-
-    // 소스 패널
-    setupSourcesPanel();
 
     // 라즈베리파이 연결 UI
     setupPiConnectionUI();
@@ -59,9 +51,6 @@ setupGpuStatusListeners();
 
     // 배경 교체 모달
     setupBackgroundReplaceModal();
-
-    // Transform 모달
-    setupTransformModal();
 
     // 앱 메뉴 (종료, 복사 등)
     setupAppMenus();

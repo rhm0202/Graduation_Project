@@ -27,29 +27,15 @@
             <li id="menu-exit">Exit</li>
           </ul>
         </div>
-        <div class="menu-item">
-          <span>Edit</span>
-          <ul class="dropdown-menu">
-            <li id="menu-copy">Copy</li>
-            <li id="menu-paste">Paste</li>
-            <li id="menu-transform">Transform</li>
-          </ul>
-        </div>
+
         <div class="menu-item">
           <span>View</span>
           <ul class="dropdown-menu">
             <li id="menu-toggle-fullscreen">Toggle Fullscreen</li>
-            <li>Docks</li>
+            <li id="menu-toggle-docks">Docks</li>
             <hr />
             <li id="menu-reload">Force Reload</li>
-            <li id="menu-toggle-devtool">Toggle Developer Tools</li>
-          </ul>
-        </div>
-        <div class="menu-item">
-          <span>Tools</span>
-          <ul class="dropdown-menu">
-            <li>Auto-Configuration Wizard</li>
-            <li>Scripts</li>
+
           </ul>
         </div>
         <div class="menu-item">
@@ -82,50 +68,6 @@
         <div class="resize-bar" id="docks-resize-bar"></div>
 
         <section class="docks-container" id="docks-container">
-          <div class="dock-panel" id="scenes-panel">
-            <div class="dock-header">
-              <h3>Scenes</h3>
-            </div>
-            <div class="dock-content">
-              <ul id="scenes-list">
-                <li class="scene-item active" data-scene-id="0">Scene</li>
-              </ul>
-            </div>
-            <div class="dock-toolbar">
-              <button id="add-scene-btn" title="장면 추가">+</button>
-              <button id="remove-scene-btn" title="장면 삭제">-</button>
-              <button id="move-scene-up-btn" title="위로 이동">⮝</button>
-              <button id="move-scene-down-btn" title="아래로 이동">⮟</button>
-            </div>
-          </div>
-
-          <div class="dock-panel" id="sources-panel">
-            <div class="dock-header">
-              <h3>Sources</h3>
-            </div>
-            <div class="dock-content" id="sources-content">
-              <ul id="sources-list"></ul>
-              <div class="center-text" id="sources-empty" style="display: none">
-                <p>
-                  You don't have any sources.<br />Click the + button below,<br />or
-                  right click here to add one.
-                </p>
-                <div class="source-icons">
-                  <span>📁</span>
-                  <span>💻</span>
-                  <span>🎤</span>
-                </div>
-              </div>
-            </div>
-            <div class="dock-toolbar">
-              <button id="add-source-btn" title="소스 추가">+</button>
-              <button id="remove-source-btn" title="소스 삭제">-</button>
-              <button id="source-settings-btn" title="소스 설정">⚙</button>
-              <button id="move-source-up-btn" title="위로 이동">⮝</button>
-              <button id="move-source-down-btn" title="아래로 이동">⮟</button>
-            </div>
-          </div>
-
           <div class="dock-panel" id="audio-mixer-panel">
             <div class="dock-header">
               <h3>Audio Mixer</h3>
@@ -177,15 +119,13 @@
               </div>
             </div>
           </div>
+          <!--기존의 controls 패널 오른쪽에 새로운 controls 패널 만들기-->
 
           <div class="dock-panel" id="controls-panel">
             <div class="dock-header">
               <h3>Controls</h3>
             </div>
             <div class="dock-content">
-              <button class="control-btn" id="start-recording-btn">
-                Start Recording
-              </button>
               <button class="control-btn" id="toggle-background-removal">
                 배경 제거: OFF
               </button>
@@ -197,6 +137,16 @@
               </button>
               <button class="control-btn" id="toggle-auto-tracking">
                 자동 추적: OFF
+              </button>
+            </div>
+          </div>
+          <div class="dock-panel" id="recordings-panel">
+            <div class="dock-header">
+              <h3>Recordings</h3>
+            </div>
+            <div class="dock-content">
+              <button class="control-btn" id="start-recording-btn">
+                Start Recording
               </button>
               <button class="control-btn" id="open-settings">Settings</button>
               <button class="control-btn" id="exit-button">Exit</button>
@@ -396,60 +346,6 @@
       </div>
     </div>
 
-    <div class="modal-overlay" id="add-source-modal">
-      <div class="modal-content">
-        <h2>소스 추가</h2>
-        <fieldset>
-          <legend>소스 타입 선택</legend>
-          <div class="setting-item">
-            <label>
-              <input type="radio" name="source-type" value="video" checked />
-              비디오 캡처 장치
-            </label>
-          </div>
-          <div class="setting-item">
-            <label>
-              <input type="radio" name="source-type" value="image" />
-              이미지
-            </label>
-          </div>
-          <div class="setting-item">
-            <label>
-              <input type="radio" name="source-type" value="text" />
-              텍스트
-            </label>
-          </div>
-        </fieldset>
-        <fieldset id="source-options">
-          <legend>옵션</legend>
-          <div class="setting-item" id="video-option">
-            <label for="source-video-device">비디오 장치:</label>
-            <select id="source-video-device"></select>
-          </div>
-          <div class="setting-item" id="image-option" style="display: none">
-            <label for="source-image-file">이미지 파일:</label>
-            <input type="file" id="source-image-file" accept="image/*" />
-          </div>
-          <div class="setting-item" id="text-option" style="display: none">
-            <label for="source-text-content">텍스트 내용:</label>
-            <input
-              type="text"
-              id="source-text-content"
-              placeholder="텍스트를 입력하세요"
-            />
-          </div>
-          <div class="setting-item">
-            <label for="source-name">소스 이름:</label>
-            <input type="text" id="source-name" placeholder="소스 이름" />
-          </div>
-        </fieldset>
-        <div class="modal-buttons">
-          <button class="control-btn" id="add-source-confirm">추가</button>
-          <button class="control-btn" id="cancel-add-source">취소</button>
-        </div>
-      </div>
-    </div>
-
     <div class="modal-overlay" id="error-modal" style="display: none">
       <div class="modal-content" style="max-width: 500px">
         <h2 style="color: var(--color-danger); margin-bottom: 15px">
@@ -484,124 +380,6 @@
             설정 열기
           </button>
           <button class="control-btn" id="error-close-btn">닫기</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-overlay" id="transform-modal">
-      <div class="modal-content">
-        <h2>소스 변형 (Transform)</h2>
-
-        <fieldset>
-          <legend>위치</legend>
-          <div class="setting-item">
-            <label for="transform-x">X 위치:</label>
-            <input
-              type="number"
-              id="transform-x"
-              value="0"
-              step="1"
-              style="
-                width: 100px;
-                background-color: var(--bg-medium);
-                color: var(--text-primary);
-                border: 1px solid var(--border-color);
-                padding: 5px;
-                border-radius: 3px;
-              "
-            />
-          </div>
-          <div class="setting-item">
-            <label for="transform-y">Y 위치:</label>
-            <input
-              type="number"
-              id="transform-y"
-              value="0"
-              step="1"
-              style="
-                width: 100px;
-                background-color: var(--bg-medium);
-                color: var(--text-primary);
-                border: 1px solid var(--border-color);
-                padding: 5px;
-                border-radius: 3px;
-              "
-            />
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>크기</legend>
-          <div class="setting-item">
-            <label for="transform-width">너비:</label>
-            <input
-              type="number"
-              id="transform-width"
-              value="640"
-              step="1"
-              style="
-                width: 100px;
-                background-color: var(--bg-medium);
-                color: var(--text-primary);
-                border: 1px solid var(--border-color);
-                padding: 5px;
-                border-radius: 3px;
-              "
-            />
-          </div>
-          <div class="setting-item">
-            <label for="transform-height">높이:</label>
-            <input
-              type="number"
-              id="transform-height"
-              value="480"
-              step="1"
-              style="
-                width: 100px;
-                background-color: var(--bg-medium);
-                color: var(--text-primary);
-                border: 1px solid var(--border-color);
-                padding: 5px;
-                border-radius: 3px;
-              "
-            />
-          </div>
-          <div class="setting-item">
-            <label for="transform-scale">크기 비율:</label>
-            <input
-              type="range"
-              id="transform-scale"
-              min="0.1"
-              max="2"
-              step="0.1"
-              value="1"
-              style="width: 200px"
-            />
-            <span id="transform-scale-value">100%</span>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>회전</legend>
-          <div class="setting-item">
-            <label for="transform-rotation">각도:</label>
-            <input
-              type="range"
-              id="transform-rotation"
-              min="0"
-              max="360"
-              step="1"
-              value="0"
-              style="width: 200px"
-            />
-            <span id="transform-rotation-value">0°</span>
-          </div>
-        </fieldset>
-
-        <div class="modal-buttons">
-          <button class="control-btn" id="transform-reset">초기화</button>
-          <button class="control-btn" id="transform-apply">적용</button>
-          <button class="control-btn" id="transform-close">닫기</button>
         </div>
       </div>
     </div>
@@ -671,37 +449,6 @@
       </div>
     </div>
 
-    <div class="modal-overlay" id="add-scene-modal">
-      <div class="modal-content">
-        <h2>장면 추가</h2>
-
-        <fieldset>
-          <legend>장면 정보</legend>
-          <div class="setting-item">
-            <label for="scene-name-input">장면 이름:</label>
-            <input
-              type="text"
-              id="scene-name-input"
-              placeholder="장면 이름을 입력하세요"
-              style="
-                flex-grow: 1;
-                background-color: var(--bg-medium);
-                color: var(--text-primary);
-                border: 1px solid var(--border-color);
-                padding: 5px;
-                border-radius: 3px;
-                font-size: 0.9em;
-              "
-            />
-          </div>
-        </fieldset>
-
-        <div class="modal-buttons">
-          <button class="control-btn" id="add-scene-confirm">추가</button>
-          <button class="control-btn" id="cancel-add-scene">취소</button>
-        </div>
-      </div>
-    </div>
 
     <script src="./node_modules/onnxruntime-web/dist/ort.all.min.js"></script>
     <script type="module" src="./renderer/main-renderer.js"></script>
