@@ -138,7 +138,20 @@ export function setupAudioMixerControls() {
     if (e.target.classList.contains('volume-slider')) {
       const trackType = e.target.dataset.volume;
       const dbValue = parseFloat(e.target.value);
-      if (trackType && !state.audioMuted[trackType]) setVolume(trackType, dbValue);
+      if (!trackType) return;
+
+      if (state.audioMuted[trackType]) {
+        // 음소거 상태에서 슬라이더를 움직이면 음소거 해제
+        state.audioMuted[trackType] = false;
+        const muteBtn = newPanel.querySelector(`[data-mute="${trackType}"]`);
+        if (muteBtn) {
+          muteBtn.textContent = '🔊';
+          muteBtn.style.opacity = '0.5';
+          muteBtn.setAttribute('data-muted', 'false');
+        }
+      }
+      
+      setVolume(trackType, dbValue);
     }
   });
 

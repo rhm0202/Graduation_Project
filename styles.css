@@ -211,6 +211,14 @@ body {
 
 
 /* 3-2. 하단 독 컨테이너 */
+.docks-container.docks-hidden {
+    display: none;
+}
+
+.resize-bar.docks-hidden {
+    display: none;
+}
+
 .docks-container {
     display: flex;
     gap: 10px;
@@ -275,10 +283,9 @@ body {
 }
 
 /* --- 개별 독 패널 크기 조정 (Flexbox) --- */
-#scenes-panel { flex-basis: 15%; }
-#sources-panel { flex-basis: 20%; }
 #audio-mixer-panel { flex-basis: 30%; }
 #controls-panel { flex-basis: 20%; }
+#recordings-panel { flex-basis: 20%; }
 
 /* 처리 전/후 비교 컨테이너 */
 #comparison-container {
@@ -350,33 +357,6 @@ body {
     background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
     color: white;
     font-weight: 500;
-}
-
-/* 소스(Sources) */
-.center-text { text-align: center; color: var(--text-secondary); }
-.source-icons { font-size: 1.5em; margin-top: 15px; }
-.source-icons span { margin: 0 10px; }
-.source-item {
-    padding: 8px 12px;
-    margin: 2px 0;
-    border-radius: 3px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.source-item:hover {
-    background-color: var(--bg-medium);
-}
-.source-item.selected {
-    background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
-    color: white;
-}
-.source-icon {
-    font-size: 1.2em;
-}
-.source-name {
-    flex-grow: 1;
 }
 
 /* 오디오 믹서(Audio Mixer) */

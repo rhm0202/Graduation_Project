@@ -27,15 +27,6 @@ export const state = {
   backgroundAnimationFrame: null,
   session: null,
 
-  // 장면
-  scenes: [{ id: 0, name: 'Scene' }],
-  currentSceneId: 0,
-
-  // 소스
-  sources: [],
-  selectedSourceId: null,
-  nextSourceId: 1,
-
   // 라즈베리파이
   piWebSocket: null,
   piConnected: false,
@@ -58,5 +49,5 @@ export const RECONNECT_DELAY = 3000;
 export const MODEL_SIZE = 512;
 
 export const isElectron =
-  typeof window.electronAPI !== 'undefined' &&
-  typeof window.electronAPI.send === 'function';
+  typeof window.electronAPI !== "undefined" &&
+  typeof window.electronAPI.send === "function";

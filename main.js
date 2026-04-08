@@ -136,22 +136,6 @@ ipcMain.on('exit-app', () => {
 });
 
 /**
- * 메뉴 > Edit > Copy IPC 핸들러
- */
-ipcMain.on('menu-copy', (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  win?.webContents.copy();
-});
-
-/**
- * 메뉴 > Edit > Paste IPC 핸들러
- */
-ipcMain.on('menu-paste', (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  win?.webContents.paste();
-});
-
-/**
  * 메뉴 > View > Toggle Fullscreen IPC 핸들러
  */
 ipcMain.on('menu-toggle-fullscreen', (event) => {
@@ -169,13 +153,6 @@ ipcMain.on('menu-reload', (event) => {
   win?.webContents.reload();
 });
 
-/**
- * 메뉴 > View > Toggle Developer Tools IPC 핸들러
- */
-ipcMain.on('menu-toggle-devtools', (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  win?.webContents.toggleDevTools();
-});
 
 /**
  * 저장 위치 선택 다이얼로그 IPC 핸들러
