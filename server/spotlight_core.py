@@ -104,6 +104,9 @@ async def receive_from_pi():
                 finally:
                     logger.warning(f"RPi 연결 끊김 (수신 프레임: {frame_count}장)")
                     sender.cancel()
+                    # 재연결 시 오래된 명령이 전송되지 않도록 큐 비우기
+                    while not pi_outbound_queue.empty():
+                        pi_outbound_queue.get_nowait()
 
         except Exception as e:
             logger.error(f"RPi 연결 오류: {e} — 3초 후 재접속 시도")
