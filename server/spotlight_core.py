@@ -1,6 +1,4 @@
 import cv2
-import threading
-import time
 import json
 import asyncio
 import websockets
@@ -21,10 +19,12 @@ WS_PORT = 8765
 output_frame = None
 
 # 두 비동기 작업(수신/송신)이 `output_frame` 변수에 다가갈 때 서로 충돌나지 않게 막는 자물쇠
-lock = threading.Lock()
+# (이벤트 루프 시작 후 main()에서 초기화)
+lock: asyncio.Lock = None
 
 # 외부의 다른 모듈 요구나 데스크탑 앱에서 온 제어 신호를 라즈베리파이로 보내기 위해 차곡차곡 쌓아두는 '우체통' 역할
-pi_outbound_queue = asyncio.Queue()
+# (이벤트 루프 시작 후 main()에서 초기화)
+pi_outbound_queue: asyncio.Queue = None
 
 # ==========================================
 # [공용 API] 라즈베리파이로 전송 기능 노출
@@ -92,7 +92,7 @@ async def receive_from_pi():
                                 # 이 프레임을 다시 가벼운 70 압축률의 JPG 형태로 치환해서 PC 메모리 글로벌 변수에 업데이트함
                                 ret, encoded_img = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
                                 if ret:
-                                    with lock: # 다른 송신 로직이 쓰지 못하게 잠깐 잠그고 안전하게 업데이트!
+                                    async with lock: # 다른 송신 로직이 쓰지 못하게 잠깐 잠그고 안전하게 업데이트!
                                         output_frame = encoded_img.tobytes()
                         else:
                             pass # 이미지 외 찌꺼기 텍스트 통신은 여기서 처리 (필요시)
@@ -115,7 +115,7 @@ async def desktop_sender_task(websocket):
     try:
         while True:
             # 아까 라즈베리파이 쪽 함수에서 업데이트해준 영상 데이터를 자물쇠 걸고 안전하게 꺼내옵니다.
-            with lock:
+            async with lock:
                 current_frame = output_frame
                 
             if current_frame is not None:
@@ -179,6 +179,10 @@ async def start_desktop_server():
 # 프로그램 최초 시작 지점 (메인 런쳐)
 # ==========================================
 async def main():
+    global lock, pi_outbound_queue
+    lock = asyncio.Lock()
+    pi_outbound_queue = asyncio.Queue()
+
     # 1. 물리적 파이에서 받아오는 수신 클라이언트 루틴 시작 예약 (비동기)
     receiver_task = asyncio.create_task(receive_from_pi())
     
