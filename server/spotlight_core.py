@@ -41,6 +41,7 @@ logger.addHandler(_console_handler)
 output_frame = None          # RPi에서 수신한 최신 프레임
 lock: asyncio.Lock = None    # output_frame 동시 접근 방지
 pi_outbound_queue: asyncio.Queue = None  # PC → RPi 전송 대기열
+tracking_state = "off"       # 추적 기능 활성화 상태 (Electron 앱에서 설정)
 
 # ==========================================
 # 공용 API
@@ -89,7 +90,13 @@ async def receive_from_pi():
                             frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
                             if frame is not None:
-                                # TODO: 여기에 YOLO 처리 추가 예정
+                                # TODO: YOLO 처리 추가 예정
+                                # YOLO 구현 후 아래 형식으로 send_to_pi() 호출:
+                                # await send_to_pi({
+                                #     "tracking": tracking_state,
+                                #     "control": {"pan": <보정값>, "tilt": <보정값>},
+                                #     "status": "tracking" | "lost" | "searching"
+                                # })
 
                                 # JPEG 품질 70으로 재압축 후 전역 변수에 저장
                                 ret, encoded_img = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
@@ -135,6 +142,7 @@ async def desktop_sender_task(websocket):
 
 async def ws_handler(websocket):
     """Electron 앱 접속 시 호출. 영상 송신과 제어 수신을 동시 처리."""
+    global tracking_state
     logger.info("Desktop App 연결됨")
     sender = asyncio.create_task(desktop_sender_task(websocket))
 
@@ -142,8 +150,16 @@ async def ws_handler(websocket):
         async for message in websocket:
             try:
                 data = json.loads(message)
-                await send_to_pi(data)  # 앱에서 온 제어 명령을 RPi로 중계
-                logger.debug(f"Desktop App → RPi 중계: {data}")
+
+                if "tracking" in data:
+                    tracking_state = data["tracking"]
+                    status = "searching" if tracking_state == "on" else "lost"
+                    await send_to_pi({"tracking": tracking_state, "status": status})
+                    logger.debug(f"추적 상태 변경: {tracking_state}")
+                else:
+                    await send_to_pi(data)
+                    logger.debug(f"Desktop App → RPi 중계: {data}")
+
             except json.JSONDecodeError:
                 pass
     except websockets.exceptions.ConnectionClosed:
