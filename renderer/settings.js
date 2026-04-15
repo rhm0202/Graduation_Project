@@ -15,8 +15,9 @@ export function saveSettings() {
       audioSource: document.getElementById('audio-source')?.value || '',
       videoResolution: document.getElementById('video-resolution')?.value || 'auto',
       videoFramerate: document.getElementById('video-framerate')?.value || 'auto',
-      raspberryPiIp: document.getElementById('raspberry-pi-ip')?.value || '',
-      raspberryPiPort: document.getElementById('raspberry-pi-port')?.value || '8765',
+      // [구버전] RPi 직접 연결 시 IP/Port 저장 — spotlight_core.py 방식에서는 localhost 고정이므로 불필요
+      // raspberryPiIp: document.getElementById('raspberry-pi-ip')?.value || '',
+      // raspberryPiPort: document.getElementById('raspberry-pi-port')?.value || '8765',
       fileFormat: document.getElementById('file-format')?.value || 'webm',
       savePath: document.getElementById('save-path-display')?.value || 'C:\\VideoRecoding',
       timestamp: Date.now(),
@@ -42,16 +43,17 @@ export function loadSettings() {
     const audioSelect = document.getElementById('audio-source');
     const resolutionSelect = document.getElementById('video-resolution');
     const framerateSelect = document.getElementById('video-framerate');
-    const piIpInput = document.getElementById('raspberry-pi-ip');
-    const piPortInput = document.getElementById('raspberry-pi-port');
+    // [구버전] RPi 직접 연결 시 IP/Port 복원 — spotlight_core.py 방식에서는 불필요
+    // const piIpInput = document.getElementById('raspberry-pi-ip');
+    // const piPortInput = document.getElementById('raspberry-pi-port');
     const fileFormatSelect = document.getElementById('file-format');
 
     if (settings.videoSource && videoSelect) videoSelect.value = settings.videoSource;
     if (settings.audioSource && audioSelect) audioSelect.value = settings.audioSource;
     if (settings.videoResolution && resolutionSelect) resolutionSelect.value = settings.videoResolution;
     if (settings.videoFramerate && framerateSelect) framerateSelect.value = settings.videoFramerate;
-    if (settings.raspberryPiIp && piIpInput) piIpInput.value = settings.raspberryPiIp;
-    if (settings.raspberryPiPort && piPortInput) piPortInput.value = settings.raspberryPiPort;
+    // [구버전] if (settings.raspberryPiIp && piIpInput) piIpInput.value = settings.raspberryPiIp;
+    // [구버전] if (settings.raspberryPiPort && piPortInput) piPortInput.value = settings.raspberryPiPort;
     if (settings.fileFormat && fileFormatSelect) fileFormatSelect.value = settings.fileFormat;
 
     return settings;
@@ -70,8 +72,9 @@ export function setupSettingsModal() {
   const settingsModal = document.getElementById('settings-modal');
   const setSavePathBtn = document.getElementById('set-save-path');
   const savePathDisplay = document.getElementById('save-path-display');
-  const piIpInput = document.getElementById('raspberry-pi-ip');
-  const piPortInput = document.getElementById('raspberry-pi-port');
+  // [구버전] RPi 직접 연결 시 IP/Port 입력 요소 — spotlight_core.py 방식에서는 불필요
+  // const piIpInput = document.getElementById('raspberry-pi-ip');
+  // const piPortInput = document.getElementById('raspberry-pi-port');
   const fileFormatSelect = document.getElementById('file-format');
 
   // GPU 목록 로드 및 선택 처리
@@ -145,14 +148,15 @@ export function setupSettingsModal() {
     }
   });
 
-  if (piIpInput) {
-    piIpInput.addEventListener('change', saveSettings);
-    piIpInput.addEventListener('blur', saveSettings);
-  }
-  if (piPortInput) {
-    piPortInput.addEventListener('change', saveSettings);
-    piPortInput.addEventListener('blur', saveSettings);
-  }
+  // [구버전] IP/Port 변경 시 자동 저장 — spotlight_core.py 방식에서는 불필요
+  // if (piIpInput) {
+  //   piIpInput.addEventListener('change', saveSettings);
+  //   piIpInput.addEventListener('blur', saveSettings);
+  // }
+  // if (piPortInput) {
+  //   piPortInput.addEventListener('change', saveSettings);
+  //   piPortInput.addEventListener('blur', saveSettings);
+  // }
   if (fileFormatSelect) {
     fileFormatSelect.addEventListener('change', saveSettings);
   }
