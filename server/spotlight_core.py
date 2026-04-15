@@ -136,7 +136,7 @@ async def desktop_sender_task(websocket):
                 }
                 await websocket.send(json.dumps(message))
 
-            await asyncio.sleep(0.033)  # 30fps
+            await asyncio.sleep(0.016)  # 60fps
     except websockets.exceptions.ConnectionClosed:
         pass
 

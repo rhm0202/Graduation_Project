@@ -115,21 +115,22 @@ function handlePiVideoFrame(frameData) {
     if (typeof frameData === 'string') {
       const img = new Image();
       img.onload = () => {
+        // 최초 1회만 canvas/stream/srcObject 설정
         if (!state.trackingCanvas) {
           state.trackingCanvas = document.createElement('canvas');
+          state.trackingCanvas.width = img.width;
+          state.trackingCanvas.height = img.height;
           state.trackingCtx = state.trackingCanvas.getContext('2d');
-        }
-        state.trackingCanvas.width = img.width;
-        state.trackingCanvas.height = img.height;
-        state.trackingCtx.drawImage(img, 0, 0);
 
-        const stream = state.trackingCanvas.captureStream(30);
-        state.mediaStream?.getAudioTracks().forEach((t) => stream.addTrack(t));
-        state.piVideoStream = stream;
-        if (videoFeed) {
-          videoFeed.srcObject = stream;
-          if (state.autoTrackingEnabled) processObjectTracking();
+          const stream = state.trackingCanvas.captureStream(60);
+          state.mediaStream?.getAudioTracks().forEach((t) => stream.addTrack(t));
+          state.piVideoStream = stream;
+          if (videoFeed) videoFeed.srcObject = stream;
         }
+
+        // 매 프레임마다 canvas에 그리기만 함
+        state.trackingCtx.drawImage(img, 0, 0);
+        if (state.autoTrackingEnabled) processObjectTracking();
       };
       img.src = `data:image/jpeg;base64,${frameData}`;
 
