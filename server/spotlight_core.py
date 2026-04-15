@@ -1,9 +1,7 @@
-import cv2
 import json
 import asyncio
 import websockets
 import base64
-import numpy as np
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -11,7 +9,7 @@ from logging.handlers import RotatingFileHandler
 # ==========================================
 # 설정
 # ==========================================
-RPI_WS_URL = "ws://192.168.137.2:8000"  # RPi WebSocket 주소 (Wi-Fi 환경에 맞춰 변경)
+RPI_WS_URL = "ws://192.168.137.59:8000"  # RPi WebSocket 주소 (Wi-Fi)
 WS_PORT = 8765                           # Electron 앱과 통신할 포트
 
 # ==========================================
@@ -40,6 +38,7 @@ logger.addHandler(_console_handler)
 # ==========================================
 output_frame = None          # RPi에서 수신한 최신 프레임
 lock: asyncio.Lock = None    # output_frame 동시 접근 방지
+frame_event: asyncio.Event = None        # 새 프레임 도착 알림
 pi_outbound_queue: asyncio.Queue = None  # PC → RPi 전송 대기열
 tracking_state = "off"       # 추적 기능 활성화 상태 (Electron 앱에서 설정)
 
@@ -85,27 +84,19 @@ async def receive_from_pi():
                 try:
                     async for message in websocket:
                         if isinstance(message, bytes):
-                            # 바이너리 → OpenCV 이미지
-                            nparr = np.frombuffer(message, np.uint8)
-                            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-                            if frame is not None:
-                                # TODO: YOLO 처리 추가 예정
-                                # YOLO 구현 후 아래 형식으로 send_to_pi() 호출:
-                                # await send_to_pi({
-                                #     "tracking": tracking_state,
-                                #     "control": {"pan": <보정값>, "tilt": <보정값>},
-                                #     "status": "tracking" | "lost" | "searching"
-                                # })
-
-                                # JPEG 품질 70으로 재압축 후 전역 변수에 저장
-                                ret, encoded_img = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-                                if ret:
-                                    async with lock:
-                                        output_frame = encoded_img.tobytes()
-                                    frame_count += 1
-                                    if frame_count % 100 == 0:
-                                        logger.debug(f"RPi 프레임 수신: {frame_count}장")
+                            # RPi JPEG을 재인코딩 없이 바로 저장
+                            # TODO: YOLO 처리 시 아래 주석 해제 후 cv2.imdecode → 처리 → cv2.imencode 추가
+                            # await send_to_pi({
+                            #     "tracking": tracking_state,
+                            #     "control": {"pan": <보정값>, "tilt": <보정값>},
+                            #     "status": "tracking" | "lost" | "searching"
+                            # })
+                            async with lock:
+                                output_frame = message
+                            frame_event.set()  # 새 프레임 도착 알림
+                            frame_count += 1
+                            if frame_count % 100 == 0:
+                                logger.debug(f"RPi 프레임 수신: {frame_count}장")
                         else:
                             pass  # 텍스트 메시지 처리 (필요 시 구현)
                 finally:
@@ -123,18 +114,20 @@ async def receive_from_pi():
 # 2. Electron 앱 통신
 # ==========================================
 async def desktop_sender_task(websocket):
-    """최신 프레임을 Base64로 인코딩해 Electron 앱으로 전송하는 루프 (약 30fps)."""
+    """새 프레임이 있을 때만 Electron 앱으로 전송 (30fps 폴링)."""
+    last_frame = None
     try:
         while True:
             async with lock:
                 current_frame = output_frame
 
-            if current_frame is not None:
+            if current_frame is not None and current_frame is not last_frame:
                 message = {
                     "type": "video_frame",
                     "frame": base64.b64encode(current_frame).decode('utf-8')
                 }
                 await websocket.send(json.dumps(message))
+                last_frame = current_frame
 
             await asyncio.sleep(0.033)  # 30fps
     except websockets.exceptions.ConnectionClosed:
@@ -178,8 +171,9 @@ async def start_desktop_server():
 # 진입점
 # ==========================================
 async def main():
-    global lock, pi_outbound_queue
+    global lock, frame_event, pi_outbound_queue
     lock = asyncio.Lock()
+    frame_event = asyncio.Event()
     pi_outbound_queue = asyncio.Queue()
 
     receiver_task = asyncio.create_task(receive_from_pi())
