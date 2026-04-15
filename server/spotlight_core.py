@@ -11,7 +11,7 @@ from logging.handlers import RotatingFileHandler
 # ==========================================
 # 설정
 # ==========================================
-RPI_WS_URL = "ws://192.168.137.2:8000"  # RPi WebSocket 주소 (Wi-Fi 환경에 맞춰 변경)
+RPI_WS_URL = "ws://192.168.137.59:8000"  # RPi WebSocket 주소 (Wi-Fi 환경에 맞춰 변경)
 WS_PORT = 8765                           # Electron 앱과 통신할 포트
 
 # ==========================================
