@@ -3,10 +3,11 @@
  * YOLO 기반 객체 감지(시뮬레이션) 및 자동 추적 모드를 담당합니다.
  */
 import { state } from './state.js';
-import { sendMotorControl } from './rpi.js';
+import { sendMotorControl, sendTrackingState } from './rpi.js';
 
 /**
  * 자동 추적 모드를 토글합니다.
+ * spotlight_core.py에 tracking on/off 상태를 전송합니다.
  */
 export function toggleAutoTracking() {
   state.autoTrackingEnabled = !state.autoTrackingEnabled;
@@ -15,6 +16,7 @@ export function toggleAutoTracking() {
     btn.textContent = `자동 추적: ${state.autoTrackingEnabled ? 'ON' : 'OFF'}`;
     btn.classList.toggle('recording', state.autoTrackingEnabled);
   }
+  sendTrackingState(state.autoTrackingEnabled);
   if (state.autoTrackingEnabled) startAutoTracking();
   else stopAutoTracking();
 }
