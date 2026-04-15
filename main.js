@@ -8,6 +8,8 @@ const { exec } = require('child_process');
 //webGPU 가속 활성화
 app.commandLine.appendSwitch('enable-unsafe-webgpu');
 app.commandLine.appendSwitch('enable-features', 'Vulkan');
+app.commandLine.appendSwitch('disable-gpu-sandbox');
+app.commandLine.appendSwitch('disable-gpu');
 
 let writableStream = null;
 let savePath = 'C:\\VideoRecoding';
