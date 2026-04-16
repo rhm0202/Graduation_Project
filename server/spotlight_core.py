@@ -5,7 +5,7 @@ import base64
 import logging
 import os
 from logging.handlers import RotatingFileHandler
-from correction_module import CorrectionCalculator
+from moduls.correction_module import CorrectionCalculator
 
 # ==========================================
 # 설정
