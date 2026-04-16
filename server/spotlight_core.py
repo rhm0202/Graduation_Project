@@ -40,6 +40,7 @@ output_frame = None          # RPi에서 수신한 최신 프레임
 lock: asyncio.Lock = None    # output_frame 동시 접근 방지
 frame_event: asyncio.Event = None        # 새 프레임 도착 알림
 pi_outbound_queue: asyncio.Queue = None  # PC → RPi 전송 대기열
+pi_to_desktop_queue: asyncio.Queue = None  # RPi → Electron 메시지 전달 대기열
 tracking_state = "off"       # 추적 기능 활성화 상태 (Electron 앱에서 설정)
 
 # ==========================================
@@ -98,7 +99,13 @@ async def receive_from_pi():
                             if frame_count % 100 == 0:
                                 logger.debug(f"RPi 프레임 수신: {frame_count}장")
                         else:
-                            pass  # 텍스트 메시지 처리 (필요 시 구현)
+                            # RPi → Electron 메시지 전달 (예: motor_corrected)
+                            try:
+                                data = json.loads(message)
+                                await pi_to_desktop_queue.put(data)
+                                logger.debug(f"RPi → Desktop 중계: {data}")
+                            except json.JSONDecodeError:
+                                pass
                 finally:
                     logger.warning(f"RPi 연결 끊김 (수신 프레임: {frame_count}장)")
                     sender.cancel()
@@ -114,10 +121,18 @@ async def receive_from_pi():
 # 2. Electron 앱 통신
 # ==========================================
 async def desktop_sender_task(websocket):
-    """새 프레임이 있을 때만 Electron 앱으로 전송 (60fps 폴링)."""
+    """새 프레임이 있을 때만 Electron 앱으로 전송 (60fps 폴링).
+    RPi에서 오는 제어 응답(motor_corrected 등)도 함께 전달한다.
+    """
     last_frame = None
     try:
         while True:
+            # RPi → Electron 메시지 전달 (큐에 쌓인 것 모두 소진)
+            while not pi_to_desktop_queue.empty():
+                data = pi_to_desktop_queue.get_nowait()
+                await websocket.send(json.dumps(data))
+
+            # 비디오 프레임 전송
             async with lock:
                 current_frame = output_frame
 
@@ -171,10 +186,11 @@ async def start_desktop_server():
 # 진입점
 # ==========================================
 async def main():
-    global lock, frame_event, pi_outbound_queue
+    global lock, frame_event, pi_outbound_queue, pi_to_desktop_queue
     lock = asyncio.Lock()
     frame_event = asyncio.Event()
     pi_outbound_queue = asyncio.Queue()
+    pi_to_desktop_queue = asyncio.Queue()
 
     receiver_task = asyncio.create_task(receive_from_pi())
     server_task = asyncio.create_task(start_desktop_server())
