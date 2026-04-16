@@ -114,7 +114,7 @@ async def receive_from_pi():
 # 2. Electron 앱 통신
 # ==========================================
 async def desktop_sender_task(websocket):
-    """새 프레임이 있을 때만 Electron 앱으로 전송 (30fps 폴링)."""
+    """새 프레임이 있을 때만 Electron 앱으로 전송 (60fps 폴링)."""
     last_frame = None
     try:
         while True:
@@ -129,7 +129,7 @@ async def desktop_sender_task(websocket):
                 await websocket.send(json.dumps(message))
                 last_frame = current_frame
 
-            await asyncio.sleep(0.033)  # 30fps
+            await asyncio.sleep(0.016)  # 60fps
     except websockets.exceptions.ConnectionClosed:
         pass
 
