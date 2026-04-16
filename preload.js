@@ -35,11 +35,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   invoke: (channel, ...args) => {
     const validChannels = [
-      'select-save-path', 
-      'get-save-path', 
-      'show-recordings', 
+      'select-save-path',
+      'get-save-path',
+      'show-recordings',
       'check-for-updates',
-      'get-gpu-list'
+      'get-gpu-list',
+      'get-desktop-sources'
     ];
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);

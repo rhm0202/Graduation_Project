@@ -34,6 +34,19 @@ export const state = {
   piReconnectTimer: null,
   piVideoStream: null,
 
+  // 활성 스트림 (레거시 — masterStream으로 대체됨, 일부 호환용 유지)
+  activeStream: null,
+  activeCameraSource: 'local',
+  displayStream: null,
+
+  // OBS 소스 시스템
+  sources: [],                 // Source 객체 배열 (sources[0] = 최상단 레이어)
+  selectedSourceId: null,      // 현재 선택된 소스 ID (배경 제거 등 조작 대상)
+  masterCanvas: null,          // 컴포지팅 출력 캔버스
+  masterCtx: null,             // 마스터 캔버스 2D 컨텍스트
+  masterStream: null,          // masterCanvas.captureStream() → 화면 표시 + 녹화 소스
+  bgColor: null,               // 배경 제거 후 적용할 단색 (hex)
+
   // 객체 추적
   autoTrackingEnabled: false,
   yoloModel: null,

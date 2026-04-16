@@ -1,251 +1,260 @@
 /**
  * 미디어 스트림 관리 모듈
- * 카메라/마이크 장치 목록 조회, 스트림 시작/중지, 오류 처리를 담당합니다.
+ * 카메라/마이크 장치 목록 조회, 스트림 시작, 오류 처리를 담당합니다.
+ * 영상 출력은 sources.js의 마스터 캔버스 컴포지터가 담당합니다.
  */
-import { state } from './state.js';
-import { setupAudioProcessing } from './audio.js';
-import { setupMediaRecorder } from './recording.js';
-import { saveSettings } from './settings.js';
+import { state } from "./state.js";
+import { setupAudioProcessing } from "./audio.js";
+import { saveSettings } from "./settings.js";
+import { addWebcamSource } from "./sources.js";
 
 /**
- * 사용 가능한 비디오/오디오 입력 장치 목록을 가져와 드롭다운에 추가합니다.
+ * 사용 가능한 비디오/오디오 입력 장치 목록을 가져와 설정 모달 드롭다운에 추가합니다.
  */
 export async function getDevices() {
-  const videoSelect = document.getElementById('video-source');
-  const audioSelect = document.getElementById('audio-source');
+  const videoSelect = document.getElementById("video-source");
+  const audioSelect = document.getElementById("audio-source");
   let tempStream = null;
 
   try {
-    tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    tempStream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
     const devices = await navigator.mediaDevices.enumerateDevices();
 
-    videoSelect.innerHTML = '';
-    audioSelect.innerHTML = '';
+    videoSelect.innerHTML = "";
+    audioSelect.innerHTML = "";
 
-    const videoDefault = document.createElement('option');
-    videoDefault.value = '';
-    videoDefault.text = '카메라 선택...';
+    const videoDefault = document.createElement("option");
+    videoDefault.value = "";
+    videoDefault.text = "카메라 선택...";
     videoSelect.appendChild(videoDefault);
 
-    const audioDefault = document.createElement('option');
-    audioDefault.value = '';
-    audioDefault.text = '마이크 선택...';
+    const audioDefault = document.createElement("option");
+    audioDefault.value = "";
+    audioDefault.text = "마이크 선택...";
     audioSelect.appendChild(audioDefault);
 
-    let videoCount = 0;
-    let audioCount = 0;
-
-    devices.forEach((device) => {
-      const option = document.createElement('option');
-      option.value = device.deviceId;
-      if (device.kind === 'videoinput') {
-        videoCount++;
-        option.text = device.label || `카메라 ${videoCount}`;
-        videoSelect.appendChild(option);
-      } else if (device.kind === 'audioinput') {
-        audioCount++;
-        option.text = device.label || `마이크 ${audioCount}`;
-        audioSelect.appendChild(option);
+    let vc = 0,
+      ac = 0;
+    devices.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.deviceId;
+      if (d.kind === "videoinput") {
+        vc++;
+        opt.text = d.label || `카메라 ${vc}`;
+        videoSelect.appendChild(opt);
+      } else if (d.kind === "audioinput") {
+        ac++;
+        opt.text = d.label || `마이크 ${ac}`;
+        audioSelect.appendChild(opt);
       }
     });
 
     if (tempStream) tempStream.getTracks().forEach((t) => t.stop());
-    console.log(`장치 목록 로드 완료: 카메라 ${videoCount}개, 마이크 ${audioCount}개`);
+
+    // 윈도우 환경에서 카메라 하드웨어 버퍼가 완전히 해제될 때까지 잠시 대기
+    await new Promise((resolve) => setTimeout(resolve, 300));
   } catch (err) {
-    console.error('장치 목록을 가져오는 중 오류 발생:', err);
+    console.error("장치 목록 조회 오류:", err);
     if (tempStream) tempStream.getTracks().forEach((t) => t.stop());
-    videoSelect.innerHTML = '<option value="">카메라를 찾을 수 없음</option>';
-    audioSelect.innerHTML = '<option value="">마이크를 찾을 수 없음</option>';
+    if (videoSelect)
+      videoSelect.innerHTML = '<option value="">카메라를 찾을 수 없음</option>';
+    if (audioSelect)
+      audioSelect.innerHTML = '<option value="">마이크를 찾을 수 없음</option>';
   }
 }
 
 /**
- * 선택된 비디오/오디오 장치로 미디어 스트림을 시작합니다.
+ * 선택된 장치로 스트림을 시작합니다.
+ * sources.js의 addWebcamSource를 통해 마스터 캔버스에 반영됩니다.
  * @param {string} [videoDeviceId]
  * @param {string} [audioDeviceId]
  */
 export async function startStream(videoDeviceId, audioDeviceId) {
-  const startRecordingBtn = document.getElementById('start-recording-btn');
-  const videoSelect = document.getElementById('video-source');
-  const audioSelect = document.getElementById('audio-source');
+  const videoSelect = document.getElementById("video-source");
+  const audioSelect = document.getElementById("audio-source");
+  const startRecordingBtn = document.getElementById("start-recording-btn");
 
-  if (state.mediaStream) {
-    state.mediaStream.getTracks().forEach((t) => t.stop());
+  // 오디오 전용 스트림 (믹서용)
+  try {
+    const audioConstraints = audioDeviceId?.trim()
+      ? { deviceId: { exact: audioDeviceId } }
+      : true;
+    const audioStream = await navigator.mediaDevices.getUserMedia({
+      video: false,
+      audio: audioConstraints,
+    });
+    setupAudioProcessing(audioStream);
+  } catch (e) {
+    console.warn("오디오 스트림 초기화 오류:", e);
   }
 
-  const resolution = document.getElementById('video-resolution')?.value || 'auto';
-  const framerate = document.getElementById('video-framerate')?.value || 'auto';
+  // 웹캠 소스 추가 (sources.js — 마스터 캔버스에 합성됨)
+  const src = await addWebcamSource(videoDeviceId, null);
 
-  let videoConstraints = {};
-  if (videoDeviceId?.trim()) videoConstraints.deviceId = { exact: videoDeviceId };
-  if (resolution === '1080p') { videoConstraints.width = { ideal: 1920 }; videoConstraints.height = { ideal: 1080 }; }
-  else if (resolution === '720p') { videoConstraints.width = { ideal: 1280 }; videoConstraints.height = { ideal: 720 }; }
-  if (framerate !== 'auto') videoConstraints.frameRate = { ideal: parseInt(framerate, 10) };
-
-  let audioConstraints = {};
-  if (audioDeviceId?.trim()) audioConstraints.deviceId = { exact: audioDeviceId };
-
-  const constraints = {
-    video: Object.keys(videoConstraints).length > 0 ? videoConstraints : true,
-    audio: Object.keys(audioConstraints).length > 0 ? audioConstraints : true,
-  };
-
-  try {
-    state.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-    updateVideoDisplay(state.mediaStream);
-    setupAudioProcessing(state.mediaStream);
-    setupMediaRecorder();
+  if (src) {
     if (startRecordingBtn) startRecordingBtn.disabled = false;
-
-    const videoTrack = state.mediaStream.getVideoTracks()[0];
-    const audioTrack = state.mediaStream.getAudioTracks()[0];
-    if (videoTrack && videoSelect) videoSelect.value = videoTrack.getSettings().deviceId || '';
-    if (audioTrack && audioSelect) audioSelect.value = audioTrack.getSettings().deviceId || '';
-  } catch (err) {
-    console.error('미디어 장치 접근 오류:', err);
-    handleMediaError(err);
+    const videoTrack = src.stream?.getVideoTracks()[0];
+    const audioTrack = src.stream?.getAudioTracks()[0];
+    if (videoTrack && videoSelect)
+      videoSelect.value = videoTrack.getSettings().deviceId || "";
+    if (audioTrack && audioSelect)
+      audioSelect.value = audioTrack.getSettings().deviceId || "";
+  } else {
     if (startRecordingBtn) startRecordingBtn.disabled = true;
   }
 }
 
 /**
- * 비디오 표시를 업데이트합니다 (일반 모드 또는 비교 모드).
- * @param {MediaStream} stream
+ * 현재 화면에 표시되는 스트림을 반환합니다 (= masterStream).
  */
-export function updateVideoDisplay(stream) {
-  const videoFeed = document.getElementById('main-video-feed');
-  const comparisonContainer = document.getElementById('comparison-container');
-  const originalVideo = document.getElementById('original-video');
-  const processedVideo = document.getElementById('processed-video');
+export function getDisplayStream() {
+  return state.masterStream ?? state.displayStream;
+}
+
+/**
+ * 비디오 표시를 업데이트합니다.
+ * 마스터 캔버스가 초기화된 경우 항상 masterStream을 사용합니다.
+ */
+export function updateVideoDisplay() {
+  const stream = state.masterStream ?? state.activeStream;
+  if (!stream) return;
+  state.displayStream = stream;
+
+  const videoFeed = document.getElementById("main-video-feed");
+  const comparisonContainer = document.getElementById("comparison-container");
 
   if (state.comparisonMode && comparisonContainer) {
-    comparisonContainer.classList.add('active');
-    if (videoFeed) videoFeed.style.display = 'none';
-    if (originalVideo) originalVideo.srcObject = stream.clone();
-    if (processedVideo) {
-      processedVideo.srcObject =
-        state.backgroundRemovalEnabled && state.processedStream
-          ? state.processedStream
-          : stream;
-    }
+    comparisonContainer.classList.add("active");
+    if (videoFeed) videoFeed.style.display = "none";
+    // 비교 모드: 원본(선택 소스 raw) vs 처리 후(masterStream)
+    const selected = state.sources?.find(
+      (s) => s.id === state.selectedSourceId,
+    );
+    const originalVideo = document.getElementById("original-video");
+    const processedVideo = document.getElementById("processed-video");
+    if (originalVideo) originalVideo.srcObject = selected?.stream ?? stream;
+    if (processedVideo) processedVideo.srcObject = stream;
   } else {
-    comparisonContainer?.classList.remove('active');
+    comparisonContainer?.classList.remove("active");
     if (videoFeed) {
-      videoFeed.style.display = 'block';
-      videoFeed.srcObject =
-        state.backgroundRemovalEnabled && state.processedStream
-          ? state.processedStream
-          : stream;
+      videoFeed.style.display = "block";
+      videoFeed.srcObject = stream;
     }
   }
+
+  document.dispatchEvent(new CustomEvent("displayStreamChanged"));
 }
 
 /**
  * 미디어 장치 접근 오류를 처리합니다.
- * @param {Error} error
  */
 export function handleMediaError(error) {
-  const videoSelect = document.getElementById('video-source');
-  const audioSelect = document.getElementById('audio-source');
-  const errorName = error.name || 'UnknownError';
-  let errorMessage = '';
+  const videoSelect = document.getElementById("video-source");
+  const audioSelect = document.getElementById("audio-source");
+  const errorName = error.name || "UnknownError";
+  let msg = "";
   let showRetry = true;
   let showSettings = false;
 
   switch (errorName) {
-    case 'NotAllowedError':
-      errorMessage = '카메라/마이크 접근이 거부되었습니다.\n\n브라우저 설정에서 권한을 허용해주세요.\n(주소창 왼쪽 자물쇠 아이콘 클릭 → 권한 허용)';
+    case "NotAllowedError":
+      msg = "카메라/마이크 접근이 거부되었습니다.";
       showSettings = true;
       break;
-    case 'NotFoundError':
-      errorMessage = '카메라/마이크를 찾을 수 없습니다.\n\n장치가 연결되어 있는지 확인해주세요.';
+    case "NotFoundError":
+      msg = "카메라/마이크를 찾을 수 없습니다.";
       break;
-    case 'NotReadableError':
-      errorMessage = '카메라/마이크가 다른 프로그램에서 사용 중입니다.\n\n다른 프로그램을 종료한 후 다시 시도해주세요.';
+    case "NotReadableError":
+      msg = "카메라/마이크가 다른 프로그램에서 사용 중입니다.";
       break;
-    case 'OverconstrainedError':
-      errorMessage = '선택한 해상도/프레임레이트를 지원하지 않습니다.\n\n설정에서 다른 해상도나 프레임레이트를 선택해주세요.';
+    case "OverconstrainedError":
+      msg = "선택한 해상도/프레임레이트를 지원하지 않습니다.";
       showSettings = true;
       showRetry = false;
       break;
-    case 'TypeError':
-      errorMessage = '미디어 장치에 접근할 수 없습니다.\n\n장치가 올바르게 연결되어 있는지 확인해주세요.';
-      break;
     default:
-      errorMessage = `카메라/마이크 접근 중 오류가 발생했습니다.\n\n오류 코드: ${errorName}\n${error.message || ''}`;
+      msg = `카메라/마이크 접근 오류: ${errorName}\n${error.message || ""}`;
   }
 
-  const videoFeed = document.getElementById('main-video-feed');
-  if (videoFeed) videoFeed.style.backgroundColor = '#330000';
-
-  const sourcesContent = document.getElementById('sources-content');
-  if (sourcesContent) {
-    sourcesContent.innerHTML = `<p style="color: #f44; padding: 20px; text-align: center;">${errorMessage.replace(/\n/g, '<br>')}</p>`;
-  }
-
-  showErrorModal(errorMessage, showRetry, showSettings, () => {
-    startStream(videoSelect?.value, audioSelect?.value);
-  });
+  showErrorModal(msg, showRetry, showSettings, () =>
+    startStream(videoSelect?.value, audioSelect?.value),
+  );
 }
 
 /**
  * 에러 모달을 표시합니다.
  */
-export function showErrorModal(message, showRetry, showSettings, retryCallback) {
-  const errorModal = document.getElementById('error-modal');
-  const errorMessage = document.getElementById('error-message');
-  const retryBtn = document.getElementById('error-retry-btn');
-  const settingsBtn = document.getElementById('error-settings-btn');
-  const closeBtn = document.getElementById('error-close-btn');
-
+export function showErrorModal(
+  message,
+  showRetry,
+  showSettings,
+  retryCallback,
+) {
+  const errorModal = document.getElementById("error-modal");
+  const errorMessage = document.getElementById("error-message");
+  const retryBtn = document.getElementById("error-retry-btn");
+  const settingsBtn = document.getElementById("error-settings-btn");
+  const closeBtn = document.getElementById("error-close-btn");
   if (!errorModal || !errorMessage) return;
 
   errorMessage.textContent = message;
-
   if (retryBtn) {
-    retryBtn.style.display = showRetry ? 'inline-block' : 'none';
-    retryBtn.onclick = () => { retryCallback?.(); errorModal.style.display = 'none'; };
+    retryBtn.style.display = showRetry ? "inline-block" : "none";
+    retryBtn.onclick = () => {
+      retryCallback?.();
+      errorModal.style.display = "none";
+    };
   }
   if (settingsBtn) {
-    settingsBtn.style.display = showSettings ? 'inline-block' : 'none';
+    settingsBtn.style.display = showSettings ? "inline-block" : "none";
     settingsBtn.onclick = () => {
-      errorModal.style.display = 'none';
-      document.getElementById('settings-modal')?.classList.add('visible');
+      errorModal.style.display = "none";
+      document.getElementById("settings-modal")?.classList.add("visible");
     };
   }
   if (closeBtn) {
-    closeBtn.onclick = () => { errorModal.style.display = 'none'; };
+    closeBtn.onclick = () => {
+      errorModal.style.display = "none";
+    };
   }
-
-  errorModal.style.display = 'flex';
+  errorModal.style.display = "flex";
 }
 
 /**
  * 비디오/오디오 장치 변경 이벤트 리스너를 초기화합니다.
  */
 export function setupMediaControls() {
-  const videoSelect = document.getElementById('video-source');
-  const audioSelect = document.getElementById('audio-source');
-  const resolutionSelect = document.getElementById('video-resolution');
-  const framerateSelect = document.getElementById('video-framerate');
+  const videoSelect = document.getElementById("video-source");
+  const audioSelect = document.getElementById("audio-source");
+  const resolutionSelect = document.getElementById("video-resolution");
+  const framerateSelect = document.getElementById("video-framerate");
 
-  videoSelect?.addEventListener('change', (e) => {
+  videoSelect?.addEventListener("change", (e) => {
     startStream(e.target.value, audioSelect?.value);
     saveSettings();
   });
-
-  audioSelect?.addEventListener('change', (e) => {
+  audioSelect?.addEventListener("change", (e) => {
     startStream(videoSelect?.value, e.target.value);
     saveSettings();
   });
-
-  resolutionSelect?.addEventListener('change', () => {
+  resolutionSelect?.addEventListener("change", () => {
     startStream(videoSelect?.value, audioSelect?.value);
     saveSettings();
   });
-
-  framerateSelect?.addEventListener('change', () => {
+  framerateSelect?.addEventListener("change", () => {
     startStream(videoSelect?.value, audioSelect?.value);
     saveSettings();
   });
 }
+
+// ─── 이전 버전 호환 (sources.js 없이 media.js만 쓰던 코드용) ───
+/** @deprecated sources.js의 addCameraOption 사용 */
+export function addCameraOption() {}
+/** @deprecated sources.js의 removeCameraOption 사용 */
+export function removeCameraOption() {}
+/** @deprecated media.js의 populateCameraSelect/setupCameraSelect는 sources.js 패널로 대체됨 */
+export function populateCameraSelect() {}
+export function setupCameraSelect() {}

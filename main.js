@@ -1,4 +1,11 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  shell,
+  desktopCapturer,
+} = require("electron");
 const path = require("path");
 const fs = require("fs");
 const https = require("https");
@@ -174,6 +181,24 @@ ipcMain.handle("select-save-path", async (event) => {
     return savePath;
   }
   return null;
+});
+
+/**
+ * 데스크탑 캡처 소스 목록 조회 IPC 핸들러
+ * @param {Object} event - IPC 이벤트 객체
+ * @param {string[]} types - ['screen', 'window'] 중 선택
+ * @returns {Promise<Array<{id, name, thumbnail}>>}
+ */
+ipcMain.handle("get-desktop-sources", async (_event, types) => {
+  const sources = await desktopCapturer.getSources({
+    types: types || ["screen", "window"],
+    thumbnailSize: { width: 320, height: 180 },
+  });
+  return sources.map((s) => ({
+    id: s.id,
+    name: s.name,
+    thumbnail: s.thumbnail.toDataURL(),
+  }));
 });
 
 /**

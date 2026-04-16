@@ -3,6 +3,7 @@
  * 모든 모듈을 가져와 애플리케이션을 초기화합니다.
  */
 import { getDevices, startStream, setupMediaControls } from './media.js';
+import { initMasterCanvas, setupSourcesPanel } from './sources.js';
 import { setupAudioMixerControls } from './audio.js';
 import { setupRecordingControls } from './recording.js';
 import { setupPiConnectionUI } from './rpi.js';
@@ -28,6 +29,10 @@ setupGpuStatusListeners();
 
     // 라즈베리파이 연결 UI
     setupPiConnectionUI();
+
+    // 마스터 캔버스 초기화 (Sources 패널 + 컴포지터)
+    initMasterCanvas();
+    setupSourcesPanel();
 
     // 업데이트 모달
     setupUpdateModal();
