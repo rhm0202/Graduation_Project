@@ -1,317 +1,358 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spotlight Cam - 개발 현황</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
     <header class="header">
-        <div class="container">
-            <div class="logo-section">
-                <span class="logo-icon">🎥</span>
-                <h1 class="logo">Spotlight Cam</h1>
-            </div>
-            <nav class="nav">
-                <a href="#overview" class="nav-link">개요</a>
-                <a href="#features" class="nav-link">기능</a>
-                <a href="#progress" class="nav-link">진행 상황</a>
-                <a href="#releases" class="nav-link">릴리스</a>
-                <a href="#download" class="nav-link">다운로드</a>
-                <a href="#team" class="nav-link">팀</a>
-            </nav>
-            <button class="mobile-menu-btn" id="mobile-menu-btn">
-                <span></span>
-                <span></span>
-                <span></span>
-            </button>
+      <div class="container">
+        <div class="logo-section">
+          <span class="logo-icon">🎥</span>
+          <h1 class="logo">Spotlight Cam</h1>
         </div>
+        <nav class="nav">
+          <a href="#overview" class="nav-link">개요</a>
+          <a href="#features" class="nav-link">기능</a>
+          <a href="#progress" class="nav-link">진행 상황</a>
+          <a href="#releases" class="nav-link">릴리스</a>
+          <a href="#download" class="nav-link">다운로드</a>
+          <a href="#team" class="nav-link">팀</a>
+        </nav>
+        <button class="mobile-menu-btn" id="mobile-menu-btn">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
     </header>
 
     <main class="main">
-        <!-- Hero Section -->
-        <section class="hero">
-            <div class="container">
-                <div class="hero-content">
-                    <h1 class="hero-title">크로마키를 대체하는<br>AI 객체 추적 시스템</h1>
-                    <p class="hero-subtitle">대형 녹색 스크린 없이도 실시간 배경 제거와 객체 추적이 가능한 혁신적인 솔루션</p>
-                    <div class="hero-stats">
-                        <div class="stat-item">
-                            <span class="stat-value" id="current-version">v2.1.1</span>
-                            <span class="stat-label">현재 버전</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-value" id="release-date">로딩 중...</span>
-                            <span class="stat-label">최신 릴리스</span>
-                        </div>
-                    </div>
-                </div>
+      <!-- Hero Section -->
+      <section class="hero">
+        <div class="container">
+          <div class="hero-content">
+            <h1 class="hero-title">
+              크로마키를 대체하는<br />AI 객체 추적 시스템
+            </h1>
+            <p class="hero-subtitle">
+              대형 녹색 스크린 없이도 실시간 배경 제거와 객체 추적이 가능한
+              혁신적인 솔루션
+            </p>
+            <div class="hero-stats">
+              <div class="stat-item">
+                <span class="stat-value" id="current-version">v2.1.1</span>
+                <span class="stat-label">현재 버전</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-value" id="release-date">로딩 중...</span>
+                <span class="stat-label">최신 릴리스</span>
+              </div>
             </div>
-        </section>
+          </div>
+        </div>
+      </section>
 
-        <!-- Overview -->
-        <section id="overview" class="section">
-            <div class="container">
-                <h2 class="section-title">프로젝트 개요</h2>
-                <div class="overview-content">
-                    <div class="overview-text">
-                        <p class="lead">Spotlight Cam은 크로마키의 물리적 제약을 해결하기 위해 개발된 AI 기반 비디오 처리 시스템입니다.</p>
-                        <p>대형 녹색 스크린 없이도 실시간으로 배경을 제거하고 객체를 추적하여, 더 넓은 활동 반경과 낮은 비용으로 고품질 비디오 제작을 가능하게 합니다.</p>
-                    </div>
-                    <div class="comparison-table">
-                        <div class="comparison-header">
-                            <h3>크로마키 vs Spotlight Cam</h3>
-                        </div>
-                        <div class="comparison-row">
-                            <div class="comparison-cell">
-                                <strong>물리적 공간</strong>
-                                <p>대형 스크린, 조명 공간 (필수)</p>
-                            </div>
-                            <div class="comparison-cell highlight">
-                                <strong>카메라만 설치</strong>
-                                <p>물리적 공간 불필요</p>
-                            </div>
-                        </div>
-                        <div class="comparison-row">
-                            <div class="comparison-cell">
-                                <strong>비용</strong>
-                                <p>높음 (설치비, 조명비, 유지보수비)</p>
-                            </div>
-                            <div class="comparison-cell highlight">
-                                <strong>낮음</strong>
-                                <p>RPI 4 + PC S/W</p>
-                            </div>
-                        </div>
-                        <div class="comparison-row">
-                            <div class="comparison-cell">
-                                <strong>활동 반경</strong>
-                                <p>제한됨 (녹색천 내부)</p>
-                            </div>
-                            <div class="comparison-cell highlight">
-                                <strong>자유로움</strong>
-                                <p>AI가 객체 추적</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+      <!-- Overview -->
+      <section id="overview" class="section">
+        <div class="container">
+          <h2 class="section-title">프로젝트 개요</h2>
+          <div class="overview-content">
+            <div class="overview-text">
+              <p class="lead">
+                Spotlight Cam은 크로마키의 물리적 제약을 해결하기 위해 개발된 AI
+                기반 비디오 처리 시스템입니다.
+              </p>
+              <p>
+                대형 녹색 스크린 없이도 실시간으로 배경을 제거하고 객체를
+                추적하여, 더 넓은 활동 반경과 낮은 비용으로 고품질 비디오 제작을
+                가능하게 합니다.
+              </p>
             </div>
-        </section>
+            <div class="comparison-table">
+              <div class="comparison-header">
+                <h3>크로마키 vs Spotlight Cam</h3>
+              </div>
+              <div class="comparison-row">
+                <div class="comparison-cell">
+                  <strong>물리적 공간</strong>
+                  <p>대형 스크린, 조명 공간 (필수)</p>
+                </div>
+                <div class="comparison-cell highlight">
+                  <strong>카메라만 설치</strong>
+                  <p>물리적 공간 불필요</p>
+                </div>
+              </div>
+              <div class="comparison-row">
+                <div class="comparison-cell">
+                  <strong>비용</strong>
+                  <p>높음 (설치비, 조명비, 유지보수비)</p>
+                </div>
+                <div class="comparison-cell highlight">
+                  <strong>낮음</strong>
+                  <p>RPI 4 + PC S/W</p>
+                </div>
+              </div>
+              <div class="comparison-row">
+                <div class="comparison-cell">
+                  <strong>활동 반경</strong>
+                  <p>제한됨 (녹색천 내부)</p>
+                </div>
+                <div class="comparison-cell highlight">
+                  <strong>자유로움</strong>
+                  <p>AI가 객체 추적</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <!-- Features -->
-        <section id="features" class="section bg-alt">
-            <div class="container">
-                <h2 class="section-title">주요 기능</h2>
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <div class="feature-icon">🤖</div>
-                        <h3>AI 객체 추적</h3>
-                        <p>YOLO 객체 인식 알고리즘으로 사람 탐지 및 DeepSORT로 움직임 추적. 라즈베리파이 팬/틸트 모터를 통한 자동 카메라 제어</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">🎬</div>
-                        <h3>실시간 배경 제거</h3>
-                        <p>AI를 통한 추적 객체의 배경 제거. 크로마키 없이도 깔끔한 배경 분리 및 다른 배경으로 교체 가능</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">🎥</div>
-                        <h3>비디오 녹화</h3>
-                        <p>WebM 형식으로 고품질 녹화. HD/30FPS 초기 목표 성능. 녹화 시간 표시 및 사용자 지정 저장 위치 선택</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">🎛️</div>
-                        <h3>OBS 스타일 UI</h3>
-                        <p>다크 테마 인터페이스. 장면(Scenes) 및 소스(Sources) 관리. 실시간 오디오 믹서 및 볼륨 조절</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">⚙️</div>
-                        <h3>설정 기능</h3>
-                        <p>카메라/마이크 선택, 해상도 설정, 파일 형식 선택, 저장 위치 설정, 라즈베리파이 연결 설정</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">🔄</div>
-                        <h3>자동 업데이트</h3>
-                        <p>GitHub Releases를 통한 자동 업데이트 확인. 사용자 친화적인 업데이트 알림 및 다운로드</p>
-                    </div>
-                </div>
+      <!-- Features -->
+      <section id="features" class="section bg-alt">
+        <div class="container">
+          <h2 class="section-title">주요 기능</h2>
+          <div class="features-grid">
+            <div class="feature-card">
+              <div class="feature-icon">🤖</div>
+              <h3>AI 객체 추적</h3>
+              <p>
+                YOLO 객체 인식 알고리즘으로 사람 탐지 및 DeepSORT로 움직임 추적.
+                라즈베리파이 팬/틸트 모터를 통한 자동 카메라 제어
+              </p>
             </div>
-        </section>
+            <div class="feature-card">
+              <div class="feature-icon">🎬</div>
+              <h3>실시간 배경 제거</h3>
+              <p>
+                AI를 통한 추적 객체의 배경 제거. 크로마키 없이도 깔끔한 배경
+                분리 및 다른 배경으로 교체 가능
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">🎥</div>
+              <h3>비디오 녹화</h3>
+              <p>
+                WebM 형식으로 고품질 녹화. HD/30FPS 초기 목표 성능. 녹화 시간
+                표시 및 사용자 지정 저장 위치 선택
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">🎛️</div>
+              <h3>OBS 스타일 UI</h3>
+              <p>
+                다크 테마 인터페이스. 장면(Scenes) 및 소스(Sources) 관리. 실시간
+                오디오 믹서 및 볼륨 조절
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">⚙️</div>
+              <h3>설정 기능</h3>
+              <p>
+                카메라/마이크 선택, 해상도 설정, 파일 형식 선택, 저장 위치 설정,
+                라즈베리파이 연결 설정
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">🔄</div>
+              <h3>자동 업데이트</h3>
+              <p>
+                GitHub Releases를 통한 자동 업데이트 확인. 사용자 친화적인
+                업데이트 알림 및 다운로드
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <!-- Progress -->
-        <section id="progress" class="section">
-            <div class="container">
-                <h2 class="section-title">개발 진행 상황</h2>
-                <div class="progress-container">
-                    <div class="progress-item completed">
-                        <div class="progress-header">
-                            <span class="progress-icon">✅</span>
-                            <div class="progress-info">
-                                <h3>기본 비디오 녹화 기능</h3>
-                                <p>WebM 형식 녹화, 녹화 시간 표시, 저장 위치 설정</p>
-                            </div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: 100%"></div>
-                        </div>
-                        <span class="progress-percent">100%</span>
-                    </div>
-                    <div class="progress-item completed">
-                        <div class="progress-header">
-                            <span class="progress-icon">✅</span>
-                            <div class="progress-info">
-                                <h3>OBS 스타일 UI</h3>
-                                <p>다크 테마, 장면 관리, 소스 관리, 오디오 믹서</p>
-                            </div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: 100%"></div>
-                        </div>
-                        <span class="progress-percent">100%</span>
-                    </div>
-                    <div class="progress-item in-progress">
-                        <div class="progress-header">
-                            <span class="progress-icon">🔄</span>
-                            <div class="progress-info">
-                                <h3>라즈베리파이 WebSocket 연동</h3>
-                                <p>WebSocket 연결, 비디오 스트림 수신, 연결 상태 관리</p>
-                            </div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: 60%"></div>
-                        </div>
-                        <span class="progress-percent">60%</span>
-                    </div>
-                    <div class="progress-item pending">
-                        <div class="progress-header">
-                            <span class="progress-icon">⏳</span>
-                            <div class="progress-info">
-                                <h3>YOLO 객체 추적 통합</h3>
-                                <p>YOLO 모델 통합, 객체 인식, 추적 알고리즘 구현</p>
-                            </div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: 30%"></div>
-                        </div>
-                        <span class="progress-percent">30%</span>
-                    </div>
-                    <div class="progress-item pending">
-                        <div class="progress-header">
-                            <span class="progress-icon">⏳</span>
-                            <div class="progress-info">
-                                <h3>실시간 배경 제거 AI</h3>
-                                <p>AI 배경 제거 알고리즘, 실시간 처리, 배경 교체 기능</p>
-                            </div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: 20%"></div>
-                        </div>
-                        <span class="progress-percent">20%</span>
-                    </div>
-                    <div class="progress-item pending">
-                        <div class="progress-header">
-                            <span class="progress-icon">⏳</span>
-                            <div class="progress-info">
-                                <h3>팬/틸트 모터 제어</h3>
-                                <p>모터 제어 명령 전송, 자동 추적 모드, 수동 제어 모드</p>
-                            </div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: 10%"></div>
-                        </div>
-                        <span class="progress-percent">10%</span>
-                    </div>
+      <!-- Progress -->
+      <section id="progress" class="section">
+        <div class="container">
+          <h2 class="section-title">개발 진행 상황</h2>
+          <div class="progress-container">
+            <div class="progress-item completed">
+              <div class="progress-header">
+                <span class="progress-icon">✅</span>
+                <div class="progress-info">
+                  <h3>기본 비디오 녹화 기능</h3>
+                  <p>WebM 형식 녹화, 녹화 시간 표시, 저장 위치 설정</p>
                 </div>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 100%"></div>
+              </div>
+              <span class="progress-percent">100%</span>
             </div>
-        </section>
+            <div class="progress-item completed">
+              <div class="progress-header">
+                <span class="progress-icon">✅</span>
+                <div class="progress-info">
+                  <h3>OBS 스타일 UI</h3>
+                  <p>다크 테마, 장면 관리, 소스 관리, 오디오 믹서</p>
+                </div>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 100%"></div>
+              </div>
+              <span class="progress-percent">100%</span>
+            </div>
+            <div class="progress-item completed">
+              <div class="progress-header">
+                <span class="progress-icon">✅</span>
+                <div class="progress-info">
+                  <h3>라즈베리파이 WebSocket 연동</h3>
+                  <p>WebSocket 연결, 비디오 스트림 수신, 연결 상태 관리</p>
+                </div>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 100%"></div>
+              </div>
+              <span class="progress-percent">100%</span>
+            </div>
+            <div class="progress-item pending">
+              <div class="progress-header">
+                <span class="progress-icon">⏳</span>
+                <div class="progress-info">
+                  <h3>실시간 배경 제거 AI</h3>
+                  <p>AI 배경 제거 알고리즘, 실시간 처리, 배경 교체 기능</p>
+                </div>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 80%"></div>
+              </div>
+              <span class="progress-percent">80%</span>
+            </div>
+            <div class="progress-item pending">
+              <div class="progress-header">
+                <span class="progress-icon">⏳</span>
+                <div class="progress-info">
+                  <h3>YOLO 객체 추적 통합</h3>
+                  <p>YOLO 모델 통합, 객체 인식, 추적 알고리즘 구현</p>
+                </div>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 20%"></div>
+              </div>
+              <span class="progress-percent">20%</span>
+            </div>
+            <div class="progress-item pending">
+              <div class="progress-header">
+                <span class="progress-icon">⏳</span>
+                <div class="progress-info">
+                  <h3>팬/틸트 모터 제어</h3>
+                  <p>모터 제어 명령 전송, 자동 추적 모드, 수동 제어 모드</p>
+                </div>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 10%"></div>
+              </div>
+              <span class="progress-percent">10%</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <!-- Releases -->
-        <section id="releases" class="section bg-alt">
-            <div class="container">
-                <h2 class="section-title">최신 릴리스</h2>
-                <div class="release-card" id="release-card">
-                    <div class="release-header">
-                        <div>
-                            <h3 id="release-version">v2.1.1</h3>
-                            <span class="release-date" id="release-date-full">로딩 중...</span>
-                        </div>
-                        <a href="#" id="download-link" class="download-btn" target="_blank">
-                            다운로드
-                        </a>
-                    </div>
-                    <div class="release-notes" id="release-notes">
-                        로딩 중...
-                    </div>
-                </div>
+      <!-- Releases -->
+      <section id="releases" class="section bg-alt">
+        <div class="container">
+          <h2 class="section-title">최신 릴리스</h2>
+          <div class="release-card" id="release-card">
+            <div class="release-header">
+              <div>
+                <h3 id="release-version">v2.1.1</h3>
+                <span class="release-date" id="release-date-full"
+                  >로딩 중...</span
+                >
+              </div>
+              <a
+                href="#"
+                id="download-link"
+                class="download-btn"
+                target="_blank"
+              >
+                다운로드
+              </a>
             </div>
-        </section>
+            <div class="release-notes" id="release-notes">로딩 중...</div>
+          </div>
+        </div>
+      </section>
 
-        <!-- Download -->
-        <section id="download" class="section">
-            <div class="container">
-                <h2 class="section-title">다운로드</h2>
-                <div class="download-container">
-                    <div class="download-card">
-                        <div class="download-icon">💻</div>
-                        <h3>Windows</h3>
-                        <p>Windows 10 이상 지원</p>
-                        <a href="#" id="download-windows" class="btn-primary" target="_blank">
-                            Windows 설치 파일 다운로드
-                        </a>
-                    </div>
-                    <div class="download-card">
-                        <div class="download-icon">📦</div>
-                        <h3>GitHub</h3>
-                        <p>소스 코드 및 릴리스</p>
-                        <a href="https://github.com/wer134/application" class="btn-secondary" target="_blank">
-                            GitHub 저장소 열기
-                        </a>
-                    </div>
-                </div>
+      <!-- Download -->
+      <section id="download" class="section">
+        <div class="container">
+          <h2 class="section-title">다운로드</h2>
+          <div class="download-container">
+            <div class="download-card">
+              <div class="download-icon">💻</div>
+              <h3>Windows</h3>
+              <p>Windows 10 이상 지원</p>
+              <a
+                href="#"
+                id="download-windows"
+                class="btn-primary"
+                target="_blank"
+              >
+                Windows 설치 파일 다운로드
+              </a>
             </div>
-        </section>
+            <div class="download-card">
+              <div class="download-icon">📦</div>
+              <h3>GitHub</h3>
+              <p>소스 코드 및 릴리스</p>
+              <a
+                href="https://github.com/wer134/application"
+                class="btn-secondary"
+                target="_blank"
+              >
+                GitHub 저장소 열기
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <!-- Team -->
-        <section id="team" class="section bg-alt">
-            <div class="container">
-                <h2 class="section-title">개발팀</h2>
-                <p class="team-org">Anywhere Studio</p>
-                <div class="team-grid">
-                    <div class="team-member">
-                        <div class="member-avatar">👤</div>
-                        <h3>오현동</h3>
-                        <p>2021161084</p>
-                    </div>
-                    <div class="team-member">
-                        <div class="member-avatar">👤</div>
-                        <h3>김동수</h3>
-                        <p>2021161014</p>
-                    </div>
-                    <div class="team-member">
-                        <div class="member-avatar">👤</div>
-                        <h3>류황민</h3>
-                        <p>2021161045</p>
-                    </div>
-                    <div class="team-member">
-                        <div class="member-avatar">👤</div>
-                        <h3>이수현</h3>
-                        <p>2020180079</p>
-                    </div>
-                </div>
+      <!-- Team -->
+      <section id="team" class="section bg-alt">
+        <div class="container">
+          <h2 class="section-title">개발팀</h2>
+          <p class="team-org">Anywhere Studio</p>
+          <div class="team-grid">
+            <div class="team-member">
+              <div class="member-avatar">👤</div>
+              <h3>오현동</h3>
+              <p>2021161084</p>
             </div>
-        </section>
+            <div class="team-member">
+              <div class="member-avatar">👤</div>
+              <h3>김동수</h3>
+              <p>2021161014</p>
+            </div>
+            <div class="team-member">
+              <div class="member-avatar">👤</div>
+              <h3>류황민</h3>
+              <p>2021161045</p>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="footer">
-        <div class="container">
-            <p>&copy; 2024 Anywhere Studio. All rights reserved.</p>
-            <p>License: ISC</p>
-        </div>
+      <div class="container">
+        <p>&copy; 2024 Anywhere Studio. All rights reserved.</p>
+        <p>License: ISC</p>
+      </div>
     </footer>
 
     <script src="script.js"></script>
-</body>
+  </body>
 </html>
-
