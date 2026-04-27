@@ -1,5 +1,5 @@
 {
-  "name": "video-tracker",
+  "name": "Spotlight_Cam_V3.1.0",
   "productName": "Video Tracker",
   "version": "3.1.0",
   "main": "main.js",
@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron-forge start",
     "package": "electron-forge package",
-    "make": "electron-forge make"
+    "make": "electron-forge make",
+    "postmake": "node scripts/update-release.js"
   },
   "keywords": [
     "video",
@@ -25,32 +26,6 @@
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
     "onnxruntime-web": "^1.24.3"
-  },
-  "config": {
-    "forge": {
-      "packageConfig": {
-        "outDir": "C:\\out"
-      },
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel"
-        },
-        {
-          "name": "@electron-forge/maker-deb"
-        },
-        {
-          "name": "@electron-forge/maker-rpm"
-        },
-        {
-          "name": "@electron-forge/maker-zip"
-        }
-      ],
-      "plugin": [
-        {
-          "name": "@electron-forge/plugin-auto-unpack-natives"
-        }
-      ]
-    }
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",

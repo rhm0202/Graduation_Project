@@ -6,3 +6,4 @@ build/
 .env
 .vscode/
 logs/
+website/downloads/
