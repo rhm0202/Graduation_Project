@@ -1,12 +1,13 @@
-const { FusesPlugin } = require('@electron-forge/plugin-fuses');
-const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+const { FusesPlugin } = require("@electron-forge/plugin-fuses");
+const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 
 module.exports = {
+  outDir: "C:\\out",
   packagerConfig: {
     asar: true,
     prune: true,
-    name: 'Video Tracker',
-    executableName: 'VideoTracker',
+    name: "Spotlight_Cam_V3.1.0",
+    executableName: "Spotlight_Cam_V3.1.0",
     ignore: [
       /^\/docs/,
       /^\/website/,
@@ -15,37 +16,37 @@ module.exports = {
       /^\/\.git/,
       /^\/\.vscode/,
       /^\/.*\.md$/,
-      /^\/forge\.config\.js$/
+      /^\/forge\.config\.js$/,
     ],
     // icon: './assets/icon', // 아이콘 파일이 있으면 경로 지정
   },
   rebuildConfig: {},
   makers: [
     {
-      name: '@electron-forge/maker-squirrel',
+      name: "@electron-forge/maker-squirrel",
       config: {
-        name: 'VideoTracker',
-        setupExe: 'VideoTracker-Setup.exe',
+        name: "Spotlight_Cam_V3.1.0",
+        setupExe: "Spotlight_Cam-Setup.exe",
         // setupIcon: './assets/icon.ico', // 아이콘 파일이 있으면 경로 지정
         // loadingGif: './assets/loading.gif', // 선택사항
       },
     },
     {
-      name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
+      name: "@electron-forge/maker-zip",
+      platforms: ["darwin"],
     },
     {
-      name: '@electron-forge/maker-deb',
+      name: "@electron-forge/maker-deb",
       config: {},
     },
     {
-      name: '@electron-forge/maker-rpm',
+      name: "@electron-forge/maker-rpm",
       config: {},
     },
   ],
   plugins: [
     {
-      name: '@electron-forge/plugin-auto-unpack-natives',
+      name: "@electron-forge/plugin-auto-unpack-natives",
       config: {},
     },
     // Fuses are used to enable/disable various Electron functionality

@@ -1,6 +1,6 @@
 {
-  "version": "2.1.1",
-  "releaseDate": "2026-01-06",
-  "downloadUrl": "https://github.com/wer134/application/releases/download/v2.1.1/Video.Tracker-2.1.1.Setup.exe",
-  "releaseNotes": "Spotlight Cam v2.1.1\n\n주요 개선사항:\n- 이벤트 리스너 최적화: 이벤트 위임 패턴 적용으로 성능 개선\n- Audio Mixer 게이지 수정: 볼륨 미터 정상 작동하도록 수정\n- UI 레이아웃 개선:\n  * Controls 패널 크기 축소 (35% → 20%)\n  * 하단 패널 상단 리사이즈 바 추가\n  * 프리뷰 영역과 하단 패널 크기 조절 기능\n\n- 코드 최적화:\n  * 불필요한 console.log 제거\n  * 코드 90줄 감소\n  * 메모리 사용량 개선"
+  "version": "3.1.0",
+  "releaseDate": "2026-04-27",
+  "downloadUrl": "downloads/Spotlight_Cam-Setup.exe",
+  "releaseNotes": "Spotlight Cam v3.1.0\n\n주요 개선사항:\n- 이벤트 리스너 최적화: 이벤트 위임 패턴 적용으로 성능 개선\n- Audio Mixer 게이지 수정: 볼륨 미터 정상 작동하도록 수정\n- UI 레이아웃 개선:\n  * Controls 패널 크기 축소 (35% → 20%)\n  * 하단 패널 상단 리사이즈 바 추가\n  * 프리뷰 영역과 하단 패널 크기 조절 기능\n\n- 코드 최적화:\n  * 불필요한 console.log 제거\n  * 코드 90줄 감소\n  * 메모리 사용량 개선"
 }
