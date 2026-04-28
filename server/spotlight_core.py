@@ -8,14 +8,7 @@ from modules.logger import get_logger
 from modules.correction_module import CorrectionCalculator
 from modules.yolo_detector import YoloDetector
 from modules import yolo_bridge
-
-# ==========================================
-# 설정
-# ==========================================
-RPI_WS_URL   = "ws://192.168.137.59:8000"  # RPi WebSocket 주소 (Wi-Fi)
-WS_PORT      = 8765                         # Electron 앱과 통신할 포트
-FRAME_WIDTH  = 1920                         # 카메라 해상도 (correction_module과 일치)
-FRAME_HEIGHT = 1080
+from modules.config import RPI_WS_URL, WS_PORT, FRAME_WIDTH, FRAME_HEIGHT
 
 # ==========================================
 # 로거
