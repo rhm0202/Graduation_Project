@@ -2,9 +2,7 @@ import json
 import asyncio
 import websockets
 import base64
-import logging
-import os
-from logging.handlers import RotatingFileHandler
+from moduls.logger import get_logger
 from moduls.correction_module import CorrectionCalculator
 from moduls import yolo_bridge
 
@@ -19,21 +17,7 @@ FRAME_HEIGHT = 1080
 # ==========================================
 # 로거
 # ==========================================
-os.makedirs("logs", exist_ok=True)
-
-logger = logging.getLogger("spotlight_core")
-logger.setLevel(logging.DEBUG)
-
-_formatter = logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-
-_file_handler = RotatingFileHandler("logs/spotlight_core.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8")
-_file_handler.setFormatter(_formatter)
-
-_console_handler = logging.StreamHandler()
-_console_handler.setFormatter(_formatter)
-
-logger.addHandler(_file_handler)
-logger.addHandler(_console_handler)
+logger = get_logger("spotlight_core")
 
 # ==========================================
 # 전역 변수 (main()에서 초기화)
