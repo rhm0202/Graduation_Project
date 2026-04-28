@@ -4,7 +4,7 @@ logger.py
 공통 로거 생성 모듈.
 
 사용 예:
-    from moduls.logger import get_logger
+    from modules.logger import get_logger
     logger = get_logger("spotlight_core")
 """
 

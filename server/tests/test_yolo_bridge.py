@@ -8,10 +8,10 @@ correction_module → process_object_detected 흐름을 검증한다.
 
 실행 방법:
     # spotlight_core.py 없이 단독 실행 (보정값 계산만 확인)
-    python test_yolo_bridge.py
+    python tests/test_yolo_bridge.py
 
     # 대화형 모드 (직접 좌표 입력)
-    python test_yolo_bridge.py --interactive
+    python tests/test_yolo_bridge.py --interactive
 """
 
 import asyncio
@@ -19,10 +19,12 @@ import sys
 import os
 import argparse
 
-sys.path.insert(0, os.path.dirname(__file__))
+# server/ 디렉터리를 경로에 추가 (tests/ 한 단계 위)
+_SERVER_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, _SERVER_DIR)
 
-from moduls import yolo_bridge
-from moduls.correction_module import CorrectionCalculator
+from modules import yolo_bridge
+from modules.correction_module import CorrectionCalculator
 
 # ──────────────────────────────────────────
 # 설정 (spotlight_core.py와 일치시킬 것)

@@ -4,10 +4,10 @@ import websockets
 import base64
 import numpy as np
 import cv2
-from moduls.logger import get_logger
-from moduls.correction_module import CorrectionCalculator
-from moduls.yolo_detector import YoloDetector
-from moduls import yolo_bridge
+from modules.logger import get_logger
+from modules.correction_module import CorrectionCalculator
+from modules.yolo_detector import YoloDetector
+from modules import yolo_bridge
 
 # ==========================================
 # 설정

@@ -15,7 +15,7 @@ spotlight_core.py의 receive_from_pi()에서 프레임 수신 시 호출된다.
 
 import cv2
 import numpy as np
-from moduls.logger import get_logger
+from modules.logger import get_logger
 
 logger = get_logger("yolo_detector")
 

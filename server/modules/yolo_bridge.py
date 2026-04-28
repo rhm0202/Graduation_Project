@@ -13,7 +13,7 @@ YOLO 탐지 결과를 spotlight_core의 보정 로직으로 연결하는 중개 
     중개 모듈을 통해 의존성을 분리한다.
 
 사용 예 (YOLO 쪽):
-    from moduls.yolo_bridge import submit
+    from modules.yolo_bridge import submit
     submit(obj_x=960.0, obj_y=540.0)
 """
 
