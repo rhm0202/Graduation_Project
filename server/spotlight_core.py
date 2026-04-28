@@ -27,7 +27,6 @@ logger = get_logger("spotlight_core")
 # ==========================================
 output_frame = None              # RPi에서 수신한 최신 프레임
 lock: asyncio.Lock = None        # output_frame 동시 접근 방지
-frame_event: asyncio.Event = None            # 새 프레임 도착 알림
 pi_outbound_queue: asyncio.Queue = None      # PC → RPi 전송 대기열
 pi_to_desktop_queue: asyncio.Queue = None    # RPi → Electron 메시지 전달 대기열
 motor_corrected_event: asyncio.Event = None  # RPi 보정 완료 신호
@@ -143,7 +142,6 @@ async def receive_from_pi():
                             # 프레임 저장
                             async with lock:
                                 output_frame = message
-                            frame_event.set()
                             frame_count += 1
                             if frame_count % 100 == 0:
                                 logger.debug(f"RPi 프레임 수신: {frame_count}장")
@@ -218,9 +216,6 @@ async def ws_handler(websocket):
                     status = "searching" if tracking_state == "on" else "lost"
                     await send_to_pi({"tracking": tracking_state, "status": status})
                     logger.debug(f"추적 상태 변경: {tracking_state}")
-                else:
-                    await send_to_pi(data)
-                    logger.debug(f"Desktop App → RPi 중계: {data}")
 
             except json.JSONDecodeError:
                 pass
@@ -240,11 +235,10 @@ async def start_desktop_server():
 # 진입점
 # ==========================================
 async def main():
-    global lock, frame_event, pi_outbound_queue, pi_to_desktop_queue
+    global lock, pi_outbound_queue, pi_to_desktop_queue
     global motor_corrected_event, correction_calc, detector
 
     lock = asyncio.Lock()
-    frame_event = asyncio.Event()
     pi_outbound_queue = asyncio.Queue()
     pi_to_desktop_queue = asyncio.Queue()
     motor_corrected_event = asyncio.Event()
