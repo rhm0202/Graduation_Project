@@ -268,10 +268,6 @@ export function toggleBgRemovalForSelectedSource() {
     alert("소스를 먼저 선택하세요.");
     return;
   }
-  if (src.type !== "webcam" && src.type !== "rpi") {
-    alert("배경 제거는 웹캠 또는 RPi 소스에만 적용됩니다.");
-    return;
-  }
   src.bgRemoval = !src.bgRemoval;
   if (src.bgRemoval) _startBgRemoval(src);
   else _stopBgRemoval(src);
