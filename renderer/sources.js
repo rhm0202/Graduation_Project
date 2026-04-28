@@ -56,20 +56,15 @@ function _compositeFrame() {
   const ctx = state.masterCtx;
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // sources[last] = 하단 레이어 → 먼저 그리기
-  // sources[0]    = 상단 레이어 → 마지막에 그리기
-  for (let i = state.sources.length - 1; i >= 0; i--) {
-    const src = state.sources[i];
-    if (!src.visible) continue;
-    const { x, y, w, h } = src.transform;
+  const src = state.sources.find((s) => s.id === state.selectedSourceId);
+  if (!src || !src.visible) return;
 
-    if (src.bgRemoval && src.bgCanvas && src.bgCanvas.width > 0) {
-      ctx.drawImage(src.bgCanvas, x, y, w, h);
-    } else {
-      const vid = src.videoEl;
-      if (!vid || vid.readyState < 2) continue;
-      ctx.drawImage(vid, x, y, w, h);
-    }
+  if (src.bgRemoval && src.bgCanvas && src.bgCanvas.width > 0) {
+    ctx.drawImage(src.bgCanvas, 0, 0, CANVAS_W, CANVAS_H);
+  } else {
+    const vid = src.videoEl;
+    if (!vid || vid.readyState < 2) return;
+    ctx.drawImage(vid, 0, 0, CANVAS_W, CANVAS_H);
   }
 }
 
@@ -240,6 +235,16 @@ export function toggleSourceVisibility(id) {
 }
 
 export function selectSource(id) {
+  // 소스 변경 시 배경 제거 강제 종료
+  if (state.backgroundRemovalEnabled) {
+    const prev = state.sources.find((s) => s.id === state.selectedSourceId);
+    if (prev && prev.bgRemoval) {
+      prev.bgRemoval = false;
+      _stopBgRemoval(prev);
+    }
+    state.backgroundRemovalEnabled = false;
+  }
+
   state.selectedSourceId = id;
   renderSourcesList();
   _updateBgRemovalBtn();
@@ -247,15 +252,18 @@ export function selectSource(id) {
 }
 
 function _previewSelectedSource() {
+  const src = state.sources.find((s) => s.id === state.selectedSourceId);
+
+  if (state.comparisonMode) {
+    const originalVideo = document.getElementById("original-video");
+    if (originalVideo)
+      originalVideo.srcObject = src?.stream ?? state.masterStream;
+    return;
+  }
+
   const videoFeed = document.getElementById("main-video-feed");
   if (!videoFeed) return;
-  const src = state.sources.find((s) => s.id === state.selectedSourceId);
-  if (src?.stream) {
-    videoFeed.srcObject = src.stream;
-  } else {
-    // 선택된 소스가 없거나 스트림이 없으면 마스터 스트림으로 복원
-    videoFeed.srcObject = state.masterStream;
-  }
+  videoFeed.srcObject = state.masterStream;
 }
 
 /**
@@ -268,22 +276,24 @@ export function toggleBgRemovalForSelectedSource() {
     alert("소스를 먼저 선택하세요.");
     return;
   }
-  if (src.type !== "webcam" && src.type !== "rpi") {
-    alert("배경 제거는 웹캠 또는 RPi 소스에만 적용됩니다.");
-    return;
+
+  state.backgroundRemovalEnabled = !state.backgroundRemovalEnabled;
+
+  if (state.backgroundRemovalEnabled) {
+    src.bgRemoval = true;
+    _startBgRemoval(src);
+  } else {
+    src.bgRemoval = false;
+    _stopBgRemoval(src);
   }
-  src.bgRemoval = !src.bgRemoval;
-  if (src.bgRemoval) _startBgRemoval(src);
-  else _stopBgRemoval(src);
   renderSourcesList();
   _updateBgRemovalBtn();
 }
 
 function _updateBgRemovalBtn() {
-  const src = state.sources.find((s) => s.id === state.selectedSourceId);
   const btn = document.getElementById("toggle-background-removal");
   if (!btn) return;
-  const on = src?.bgRemoval ?? false;
+  const on = state.backgroundRemovalEnabled;
   btn.textContent = `배경 제거: ${on ? "ON" : "OFF"}`;
   btn.classList.toggle("recording", on);
 }
@@ -328,7 +338,9 @@ async function _bgLoop(src) {
   // 임시 캔버스에 그려서 처리 성공 시에만 출력 캔버스에 반영합니다.
   if (!src.hiddenCanvas) {
     src.hiddenCanvas = document.createElement("canvas");
-    src.hiddenCtx = src.hiddenCanvas.getContext("2d", { willReadFrequently: true });
+    src.hiddenCtx = src.hiddenCanvas.getContext("2d", {
+      willReadFrequently: true,
+    });
   }
   if (src.hiddenCanvas.width !== w || src.hiddenCanvas.height !== h) {
     src.hiddenCanvas.width = w;
@@ -336,8 +348,9 @@ async function _bgLoop(src) {
   }
   src.hiddenCtx.drawImage(vid, 0, 0, w, h);
 
-  if (state.session) {
+  if (state.session && !state.sessionBusy) {
     try {
+      state.sessionBusy = true;
       const M = 512;
       const tmp = document.createElement("canvas");
       tmp.width = M;
@@ -357,6 +370,12 @@ async function _bgLoop(src) {
       });
       const mask = result[state.session.outputNames[0]].data;
 
+      // 추론 대기 중 소스가 변경되어 bgRemoval이 중단된 경우 조기 종료
+      if (!src.bgRemoval || !src.bgCtx) {
+        state.sessionBusy = false;
+        return;
+      }
+
       const frame = src.hiddenCtx.getImageData(0, 0, w, h);
       for (let py = 0; py < h; py++) {
         for (let px = 0; px < w; px++) {
@@ -375,6 +394,10 @@ async function _bgLoop(src) {
       } else if (state.bgColor) {
         src.bgCtx.fillStyle = state.bgColor;
         src.bgCtx.fillRect(0, 0, w, h);
+      } else {
+        // 배경 교체 없음 → 검정으로 채워 하위 레이어 소스가 비쳐 보이는 것을 방지
+        src.bgCtx.fillStyle = "#000000";
+        src.bgCtx.fillRect(0, 0, w, h);
       }
       const fgCv = document.createElement("canvas");
       fgCv.width = w;
@@ -383,7 +406,8 @@ async function _bgLoop(src) {
       src.bgCtx.drawImage(fgCv, 0, 0);
     } catch (e) {
       console.error("[BG] 추론 오류:", e);
-      // 에러 시 출력 캔버스를 갱신하지 않아 원본 프레임 노출을 방지합니다.
+    } finally {
+      state.sessionBusy = false;
     }
   }
 
