@@ -2,54 +2,75 @@ import json
 import asyncio
 import websockets
 import base64
-import logging
-import os
-from logging.handlers import RotatingFileHandler
-
-# ==========================================
-# 설정
-# ==========================================
-RPI_WS_URL = "ws://192.168.137.59:8000"  # RPi WebSocket 주소 (Wi-Fi)
-WS_PORT = 8765                           # Electron 앱과 통신할 포트
+from modules.logger import get_logger
+from modules.correction_module import CorrectionCalculator
+from modules import yolo_bridge
+from modules.config import RPI_WS_URL, WS_PORT, FRAME_WIDTH, FRAME_HEIGHT
 
 # ==========================================
 # 로거
 # ==========================================
-os.makedirs("logs", exist_ok=True)
-
-logger = logging.getLogger("spotlight_core")
-logger.setLevel(logging.DEBUG)
-
-_formatter = logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-
-# 파일: logs/spotlight_core.log (1MB 초과 시 교체, 최대 3개 보관)
-_file_handler = RotatingFileHandler("logs/spotlight_core.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8")
-_file_handler.setFormatter(_formatter)
-
-# 콘솔 동시 출력
-_console_handler = logging.StreamHandler()
-_console_handler.setFormatter(_formatter)
-
-logger.addHandler(_file_handler)
-logger.addHandler(_console_handler)
+logger = get_logger("spotlight_core")
 
 # ==========================================
 # 전역 변수 (main()에서 초기화)
 # ==========================================
-output_frame = None          # RPi에서 수신한 최신 프레임
-lock: asyncio.Lock = None    # output_frame 동시 접근 방지
-frame_event: asyncio.Event = None        # 새 프레임 도착 알림
-pi_outbound_queue: asyncio.Queue = None  # PC → RPi 전송 대기열
-tracking_state = "off"       # 추적 기능 활성화 상태 (Electron 앱에서 설정)
+output_frame = None              # RPi에서 수신한 최신 프레임
+lock: asyncio.Lock = None        # output_frame 동시 접근 방지
+pi_outbound_queue: asyncio.Queue = None      # PC → RPi 전송 대기열
+pi_to_desktop_queue: asyncio.Queue = None    # RPi → Electron 메시지 전달 대기열
+motor_corrected_event: asyncio.Event = None  # RPi 보정 완료 신호
+tracking_state = "off"           # 추적 기능 활성화 상태 (Electron 앱에서 설정)
+
+correction_calc: CorrectionCalculator = None  # 보정값 계산기
 
 # ==========================================
 # 공용 API
 # ==========================================
 async def send_to_pi(data_dict):
-    """PC → RPi로 데이터를 보낼 때 호출. 전송 대기열에 추가됨.
-    예: await send_to_pi({"control": {"pan": 45, "tilt": -10}})
-    """
+    """PC → RPi로 데이터를 보낼 때 호출. 전송 대기열에 추가됨."""
     await pi_outbound_queue.put(data_dict)
+
+# ==========================================
+# 객체 추적 보정 로직
+# ==========================================
+async def process_object_detected(obj_x: float, obj_y: float):
+    """YOLO 측에서 객체를 감지했을 때 yolo_bridge를 통해 호출된다.
+
+    1. CorrectionCalculator로 pan/tilt 보정값 계산
+    2. 보정이 필요하면 RPi로 전송
+    3. RPi의 motor_corrected 응답을 대기 (최대 1초)
+    4. 응답 수신 후 루프는 다음 프레임 탐지 시 자동 반복
+
+    Args:
+        obj_x: 감지된 객체 중심의 x 좌표 (픽셀)
+        obj_y: 감지된 객체 중심의 y 좌표 (픽셀)
+    """
+    if tracking_state != "on":
+        return
+
+    correction = correction_calc.calc(obj_x, obj_y)
+    if correction is None:
+        logger.debug(f"보정 불필요 — 객체가 중앙 근처 (obj_x={obj_x:.1f}, obj_y={obj_y:.1f})")
+        return
+
+    pan, tilt = correction
+    logger.debug(f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f}")
+
+    # 이전 보정 완료 이벤트 초기화 후 RPi로 전송
+    motor_corrected_event.clear()
+    await send_to_pi({
+        "tracking": "on",
+        "control": {"pan": pan, "tilt": tilt},
+        "status": "tracking",
+    })
+
+    # RPi의 보정 완료 응답 대기 (타임아웃: 1초)
+    try:
+        await asyncio.wait_for(motor_corrected_event.wait(), timeout=3.0)
+        logger.debug("모터 보정 완료 확인")
+    except asyncio.TimeoutError:
+        logger.warning("모터 보정 완료 응답 타임아웃 — 다음 프레임에서 재시도")
 
 # ==========================================
 # 1. RPi 통신
@@ -78,31 +99,30 @@ async def receive_from_pi():
                 logger.info("RPi 연결 성공")
                 frame_count = 0
 
-                # 제어 명령 송신 태스크를 백그라운드에서 병렬 실행
                 sender = asyncio.create_task(pi_sender_task(websocket))
 
                 try:
                     async for message in websocket:
                         if isinstance(message, bytes):
-                            # RPi JPEG을 재인코딩 없이 바로 저장
-                            # TODO: YOLO 처리 시 아래 주석 해제 후 cv2.imdecode → 처리 → cv2.imencode 추가
-                            # await send_to_pi({
-                            #     "tracking": tracking_state,
-                            #     "control": {"pan": <보정값>, "tilt": <보정값>},
-                            #     "status": "tracking" | "lost" | "searching"
-                            # })
+                            # 프레임 저장
                             async with lock:
                                 output_frame = message
-                            frame_event.set()  # 새 프레임 도착 알림
                             frame_count += 1
                             if frame_count % 100 == 0:
                                 logger.debug(f"RPi 프레임 수신: {frame_count}장")
                         else:
-                            pass  # 텍스트 메시지 처리 (필요 시 구현)
+                            # RPi → Electron 메시지 처리 (예: motor_corrected)
+                            try:
+                                data = json.loads(message)
+                                if data.get("type") == "motor_corrected":
+                                    motor_corrected_event.set()
+                                await pi_to_desktop_queue.put(data)
+                                logger.debug(f"RPi → Desktop 중계: {data}")
+                            except json.JSONDecodeError:
+                                pass
                 finally:
                     logger.warning(f"RPi 연결 끊김 (수신 프레임: {frame_count}장)")
                     sender.cancel()
-                    # 재연결 시 오래된 명령이 전송되지 않도록 큐 비우기
                     while not pi_outbound_queue.empty():
                         pi_outbound_queue.get_nowait()
 
@@ -114,10 +134,18 @@ async def receive_from_pi():
 # 2. Electron 앱 통신
 # ==========================================
 async def desktop_sender_task(websocket):
-    """새 프레임이 있을 때만 Electron 앱으로 전송 (30fps 폴링)."""
+    """새 프레임이 있을 때만 Electron 앱으로 전송 (60fps 폴링).
+    RPi에서 오는 제어 응답(motor_corrected 등)도 함께 전달한다.
+    """
     last_frame = None
     try:
         while True:
+            # RPi → Electron 메시지 전달 (큐에 쌓인 것 모두 소진)
+            while not pi_to_desktop_queue.empty():
+                data = pi_to_desktop_queue.get_nowait()
+                await websocket.send(json.dumps(data))
+
+            # 비디오 프레임 전송
             async with lock:
                 current_frame = output_frame
 
@@ -129,7 +157,7 @@ async def desktop_sender_task(websocket):
                 await websocket.send(json.dumps(message))
                 last_frame = current_frame
 
-            await asyncio.sleep(0.033)  # 30fps
+            await asyncio.sleep(0.016)  # 60fps
     except websockets.exceptions.ConnectionClosed:
         pass
 
@@ -149,9 +177,6 @@ async def ws_handler(websocket):
                     status = "searching" if tracking_state == "on" else "lost"
                     await send_to_pi({"tracking": tracking_state, "status": status})
                     logger.debug(f"추적 상태 변경: {tracking_state}")
-                else:
-                    await send_to_pi(data)
-                    logger.debug(f"Desktop App → RPi 중계: {data}")
 
             except json.JSONDecodeError:
                 pass
@@ -170,15 +195,51 @@ async def start_desktop_server():
 # ==========================================
 # 진입점
 # ==========================================
+async def _stdin_test_task():
+    """터미널에서 좌표를 입력해 yolo_bridge → process_object_detected 흐름을 테스트한다.
+    tracking_state가 'on'일 때만 보정값이 계산되어 RPi로 전송된다.
+    입력 형식: <x> <y>  예) 1200 400
+    """
+    loop = asyncio.get_event_loop()
+    print("[테스트] 좌표 입력 모드 활성화 — 형식: <x> <y> | 종료: q")
+    while True:
+        try:
+            raw = await loop.run_in_executor(None, input, "yolo_test > ")
+        except (EOFError, KeyboardInterrupt):
+            break
+        raw = raw.strip()
+        if raw.lower() in ("q", "quit"):
+            break
+        parts = raw.split()
+        if len(parts) != 2:
+            print("  형식: <x> <y>  예) 1200 400")
+            continue
+        try:
+            obj_x, obj_y = float(parts[0]), float(parts[1])
+        except ValueError:
+            print("  숫자를 입력하세요.")
+            continue
+        yolo_bridge.submit(obj_x, obj_y)
+        print(f"  submit({obj_x}, {obj_y}) 호출됨")
+
+# ==========================================
+# 진입점
+# ==========================================
 async def main():
-    global lock, frame_event, pi_outbound_queue
+    global lock, pi_outbound_queue, pi_to_desktop_queue
+    global motor_corrected_event, correction_calc
+
     lock = asyncio.Lock()
-    frame_event = asyncio.Event()
     pi_outbound_queue = asyncio.Queue()
+    pi_to_desktop_queue = asyncio.Queue()
+    motor_corrected_event = asyncio.Event()
+    correction_calc = CorrectionCalculator(FRAME_WIDTH, FRAME_HEIGHT)
+    yolo_bridge.register(process_object_detected, asyncio.get_event_loop())
 
     receiver_task = asyncio.create_task(receive_from_pi())
-    server_task = asyncio.create_task(start_desktop_server())
-    await asyncio.gather(receiver_task, server_task)
+    server_task   = asyncio.create_task(start_desktop_server())
+    test_task     = asyncio.create_task(_stdin_test_task())
+    await asyncio.gather(receiver_task, server_task, test_task)
 
 if __name__ == '__main__':
     try:

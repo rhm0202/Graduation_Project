@@ -117,8 +117,23 @@ export function setupPiConnectionUI() {
 function handlePiMessage(data) {
   switch (data.type) {
     case 'video_frame': handlePiVideoFrame(data.frame); break;
+    case 'motor_corrected': handleMotorCorrected(data.control); break;
     case 'motor_status': break;
     case 'system_info': break;
+  }
+}
+
+/**
+ * 모터 보정 완료 응답 처리.
+ * RPi가 보정을 적용한 뒤 pan/tilt를 0으로 초기화해 전송하면 호출된다.
+ * tracking.js의 pendingCorrection을 리셋해 보정값 누적을 방지한다.
+ * @param {{ pan: number, tilt: number }} control
+ */
+function handleMotorCorrected(control) {
+  if (!control) return;
+  if (state.pendingCorrection) {
+    state.pendingCorrection.pan  = control.pan;
+    state.pendingCorrection.tilt = control.tilt;
   }
 }
 

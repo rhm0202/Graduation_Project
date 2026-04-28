@@ -5,6 +5,12 @@
 import { state } from './state.js';
 import { sendMotorControl, sendTrackingState } from './rpi.js';
 
+function sendTrackingState(enabled) {
+  if (state.piWebSocket?.readyState === WebSocket.OPEN) {
+    state.piWebSocket.send(JSON.stringify({ tracking: enabled ? 'on' : 'off' }));
+  }
+}
+
 /**
  * 자동 추적 모드를 토글합니다.
  * spotlight_core.py에 tracking on/off 상태를 전송합니다.
