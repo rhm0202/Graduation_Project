@@ -6,3 +6,5 @@ build/
 .env
 .vscode/
 logs/
+__pycache__/
+*.pyc
