@@ -6,6 +6,7 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 from moduls.correction_module import CorrectionCalculator
+from moduls import yolo_bridge
 
 # ==========================================
 # 설정
@@ -128,11 +129,8 @@ async def receive_from_pi():
                     async for message in websocket:
                         if isinstance(message, bytes):
                             # RPi JPEG 프레임 저장
-                            # TODO: YOLO 연동 시 아래 주석 해제
-                            # decoded = cv2.imdecode(np.frombuffer(message, np.uint8), cv2.IMREAD_COLOR)
-                            # obj_x, obj_y = yolo_detect(decoded)  # YOLO 탐지
-                            # if obj_x is not None:
-                            #     asyncio.create_task(process_object_detected(obj_x, obj_y))
+                            # YOLO 연동 시: yolo_bridge.submit(obj_x, obj_y) 호출
+                            # → yolo_bridge가 process_object_detected를 이벤트 루프에 스케줄링
                             async with lock:
                                 output_frame = message
                             frame_event.set()
@@ -237,6 +235,7 @@ async def main():
     pi_to_desktop_queue = asyncio.Queue()
     motor_corrected_event = asyncio.Event()
     correction_calc = CorrectionCalculator(FRAME_WIDTH, FRAME_HEIGHT)
+    yolo_bridge.register(process_object_detected, asyncio.get_event_loop())
 
     receiver_task = asyncio.create_task(receive_from_pi())
     server_task   = asyncio.create_task(start_desktop_server())
