@@ -268,6 +268,10 @@ export function toggleBgRemovalForSelectedSource() {
     alert("소스를 먼저 선택하세요.");
     return;
   }
+  if (src.type !== "webcam" && src.type !== "rpi") {
+    alert("배경 제거는 웹캠 또는 RPi 소스에만 적용됩니다.");
+    return;
+  }
   src.bgRemoval = !src.bgRemoval;
   if (src.bgRemoval) _startBgRemoval(src);
   else _stopBgRemoval(src);
@@ -301,6 +305,8 @@ function _stopBgRemoval(src) {
   }
   src.bgCanvas = null;
   src.bgCtx = null;
+  src.hiddenCanvas = null;
+  src.hiddenCtx = null;
 }
 
 async function _bgLoop(src) {
@@ -318,8 +324,17 @@ async function _bgLoop(src) {
     src.bgCanvas.height = h;
   }
 
-  // 원본 프레임 캔버스에 그리기
-  src.bgCtx.drawImage(vid, 0, 0, w, h);
+  // 출력 캔버스에 직접 그리면 AI 처리 시간 동안 원본 프레임이 1프레임 노출됩니다.
+  // 임시 캔버스에 그려서 처리 성공 시에만 출력 캔버스에 반영합니다.
+  if (!src.hiddenCanvas) {
+    src.hiddenCanvas = document.createElement("canvas");
+    src.hiddenCtx = src.hiddenCanvas.getContext("2d", { willReadFrequently: true });
+  }
+  if (src.hiddenCanvas.width !== w || src.hiddenCanvas.height !== h) {
+    src.hiddenCanvas.width = w;
+    src.hiddenCanvas.height = h;
+  }
+  src.hiddenCtx.drawImage(vid, 0, 0, w, h);
 
   if (state.session) {
     try {
@@ -342,7 +357,7 @@ async function _bgLoop(src) {
       });
       const mask = result[state.session.outputNames[0]].data;
 
-      const frame = src.bgCtx.getImageData(0, 0, w, h);
+      const frame = src.hiddenCtx.getImageData(0, 0, w, h);
       for (let py = 0; py < h; py++) {
         for (let px = 0; px < w; px++) {
           const mx = Math.floor((px / w) * M);
@@ -368,7 +383,13 @@ async function _bgLoop(src) {
       src.bgCtx.drawImage(fgCv, 0, 0);
     } catch (e) {
       console.error("[BG] 추론 오류:", e);
+      // 에러 시 출력 캔버스를 갱신하지 않아 원본 프레임 노출을 방지합니다.
     }
+  }
+
+  // 세션 로드 전에는 원본 그대로 출력
+  if (!state.session) {
+    src.bgCtx.drawImage(vid, 0, 0, w, h);
   }
 
   src.bgAnimFrame = requestAnimationFrame(() => _bgLoop(src));
