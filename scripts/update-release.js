@@ -2,15 +2,17 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
-const OUT_DIR = "C:\\out\\make\\squirrel.windows\\x64";
+const OUT_DIR = "C:\\electron_app2\\out\\make\\squirrel.windows\\x64";
 const DOWNLOADS_DIR = path.join(ROOT, "website", "downloads");
 const LATEST_JSON = path.join(ROOT, "updates", "latest.json");
+const LFS_BASE =
+  "https://media.githubusercontent.com/media/rhm0202/Graduation_Project/main";
 
 function getForgeConfig() {
   const config = require(path.join(ROOT, "forge.config.js"));
   const packager = config.packagerConfig || {};
   const squirrel = (config.makers || []).find((m) =>
-    m.name.includes("squirrel")
+    m.name.includes("squirrel"),
   );
   return {
     appName: packager.name || "app",
@@ -19,7 +21,9 @@ function getForgeConfig() {
 }
 
 function getVersion() {
-  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(ROOT, "package.json"), "utf8"),
+  );
   return pkg.version;
 }
 
@@ -61,7 +65,7 @@ function run() {
     ...existing,
     version,
     releaseDate: today,
-    downloadUrl: `downloads/${setupExe}`,
+    downloadUrl: `${LFS_BASE}/website/downloads/${setupExe}`,
   };
 
   fs.writeFileSync(LATEST_JSON, JSON.stringify(updated, null, 2), "utf8");

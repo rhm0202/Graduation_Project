@@ -18,6 +18,7 @@ export const state = {
 
   // AI 배경 제거
   backgroundRemovalEnabled: false,
+  sessionBusy: false,
   comparisonMode: false,
   backgroundImage: null,
   backgroundVideo: null,
