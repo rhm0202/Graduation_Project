@@ -15,6 +15,8 @@ YOLO(또는 다른 탐지기)가 감지한 객체의 프레임 내 중심 좌표
         pan, tilt = result  # RPi로 전송할 보정값
 """
 
+from __future__ import annotations
+
 
 class CorrectionCalculator:
     """프레임 내 객체 위치 → pan/tilt 보정값 변환기.
