@@ -2,11 +2,8 @@ import json
 import asyncio
 import websockets
 import base64
-import numpy as np
-import cv2
 from modules.logger import get_logger
 from modules.correction_module import CorrectionCalculator
-from modules.yolo_detector import YoloDetector
 from modules import yolo_bridge
 from modules.config import RPI_WS_URL, WS_PORT, FRAME_WIDTH, FRAME_HEIGHT
 
@@ -26,8 +23,6 @@ motor_corrected_event: asyncio.Event = None  # RPi 보정 완료 신호
 tracking_state = "off"           # 추적 기능 활성화 상태 (Electron 앱에서 설정)
 
 correction_calc: CorrectionCalculator = None  # 보정값 계산기
-detector: YoloDetector = None                 # YOLO 탐지기
-_detecting = False                            # 탐지 중복 실행 방지 플래그
 
 # ==========================================
 # 공용 API
@@ -40,7 +35,7 @@ async def send_to_pi(data_dict):
 # 객체 추적 보정 로직
 # ==========================================
 async def process_object_detected(obj_x: float, obj_y: float):
-    """YOLO(또는 외부 탐지기)가 객체를 감지했을 때 호출한다.
+    """YOLO 측에서 객체를 감지했을 때 yolo_bridge를 통해 호출된다.
 
     1. CorrectionCalculator로 pan/tilt 보정값 계산
     2. 보정이 필요하면 RPi로 전송
@@ -48,8 +43,8 @@ async def process_object_detected(obj_x: float, obj_y: float):
     4. 응답 수신 후 루프는 다음 프레임 탐지 시 자동 반복
 
     Args:
-        obj_x: YOLO가 감지한 객체 중심의 x 좌표 (픽셀)
-        obj_y: YOLO가 감지한 객체 중심의 y 좌표 (픽셀)
+        obj_x: 감지된 객체 중심의 x 좌표 (픽셀)
+        obj_y: 감지된 객체 중심의 y 좌표 (픽셀)
     """
     if tracking_state != "on":
         return
@@ -80,29 +75,6 @@ async def process_object_detected(obj_x: float, obj_y: float):
 # ==========================================
 # 1. RPi 통신
 # ==========================================
-async def _run_detection(jpeg_bytes: bytes):
-    """JPEG 바이트를 디코딩해 YOLO 탐지를 스레드 풀에서 실행한다.
-    탐지 완료 후 yolo_bridge.submit()으로 결과를 전달한다.
-    이전 탐지가 진행 중이면 호출 자체를 건너뛴다 (_detecting 플래그).
-    """
-    global _detecting
-    _detecting = True
-    try:
-        frame = cv2.imdecode(np.frombuffer(jpeg_bytes, np.uint8), cv2.IMREAD_COLOR)
-        if frame is None:
-            return
-
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, detector.detect, frame)
-
-        if result:
-            obj_x, obj_y = result
-            yolo_bridge.submit(obj_x, obj_y)
-    except Exception as e:
-        logger.error(f"YOLO 탐지 오류: {e}")
-    finally:
-        _detecting = False
-
 async def pi_sender_task(websocket):
     """전송 대기열(pi_outbound_queue)에서 꺼내 RPi로 전송하는 루프."""
     while True:
@@ -138,10 +110,6 @@ async def receive_from_pi():
                             frame_count += 1
                             if frame_count % 100 == 0:
                                 logger.debug(f"RPi 프레임 수신: {frame_count}장")
-
-                            # YOLO 탐지 — 이전 탐지가 끝난 경우에만 실행
-                            if tracking_state == "on" and not _detecting:
-                                asyncio.create_task(_run_detection(message))
                         else:
                             # RPi → Electron 메시지 처리 (예: motor_corrected)
                             try:
@@ -229,14 +197,13 @@ async def start_desktop_server():
 # ==========================================
 async def main():
     global lock, pi_outbound_queue, pi_to_desktop_queue
-    global motor_corrected_event, correction_calc, detector
+    global motor_corrected_event, correction_calc
 
     lock = asyncio.Lock()
     pi_outbound_queue = asyncio.Queue()
     pi_to_desktop_queue = asyncio.Queue()
     motor_corrected_event = asyncio.Event()
     correction_calc = CorrectionCalculator(FRAME_WIDTH, FRAME_HEIGHT)
-    detector = YoloDetector()
     yolo_bridge.register(process_object_detected, asyncio.get_event_loop())
 
     receiver_task = asyncio.create_task(receive_from_pi())
