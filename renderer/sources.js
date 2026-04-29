@@ -51,20 +51,33 @@ function _startCompositing() {
   requestAnimationFrame(loop);
 }
 
+function _drawLetterboxed(ctx, img, canvasW, canvasH) {
+  const srcW = img.videoWidth ?? img.width ?? canvasW;
+  const srcH = img.videoHeight ?? img.height ?? canvasH;
+  if (srcW === 0 || srcH === 0) return;
+  const scale = Math.min(canvasW / srcW, canvasH / srcH);
+  const dw = srcW * scale;
+  const dh = srcH * scale;
+  const dx = (canvasW - dw) / 2;
+  const dy = (canvasH - dh) / 2;
+  ctx.drawImage(img, dx, dy, dw, dh);
+}
+
 function _compositeFrame() {
   if (!state.masterCtx) return;
   const ctx = state.masterCtx;
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
   const src = state.sources.find((s) => s.id === state.selectedSourceId);
   if (!src || !src.visible) return;
 
   if (src.bgRemoval && src.bgCanvas && src.bgCanvas.width > 0) {
-    ctx.drawImage(src.bgCanvas, 0, 0, CANVAS_W, CANVAS_H);
+    _drawLetterboxed(ctx, src.bgCanvas, CANVAS_W, CANVAS_H);
   } else {
     const vid = src.videoEl;
     if (!vid || vid.readyState < 2) return;
-    ctx.drawImage(vid, 0, 0, CANVAS_W, CANVAS_H);
+    _drawLetterboxed(ctx, vid, CANVAS_W, CANVAS_H);
   }
 }
 
@@ -352,20 +365,29 @@ async function _bgLoop(src) {
     try {
       state.sessionBusy = true;
       const MODEL_SIZE = 640;
+      const MODEL_SIZE = 640;
       const tmp = document.createElement("canvas");
       tmp.width = MODEL_SIZE;
       tmp.height = MODEL_SIZE;
       tmp.getContext("2d").drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
-      const tmpData = tmp.getContext("2d").getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
+      const tmpData = tmp
+        .getContext("2d")
+        .getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
 
       const tensorData = new Float32Array(3 * MODEL_SIZE * MODEL_SIZE);
       for (let i = 0; i < MODEL_SIZE * MODEL_SIZE; i++) {
         tensorData[i] = tmpData.data[i * 4] / 255;
         tensorData[MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 1] / 255;
-        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 2] / 255;
+        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] =
+          tmpData.data[i * 4 + 2] / 255;
       }
-      
-      const inputTensor = new ort.Tensor('float32', tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE]);
+
+      const inputTensor = new ort.Tensor("float32", tensorData, [
+        1,
+        3,
+        MODEL_SIZE,
+        MODEL_SIZE,
+      ]);
       const feeds = { [state.session.inputNames[0]]: inputTensor };
       const results = await state.session.run(feeds);
 
@@ -404,8 +426,8 @@ async function _bgLoop(src) {
               x1: output0[a * NUM_CHANNELS + 0],
               y1: output0[a * NUM_CHANNELS + 1],
               x2: output0[a * NUM_CHANNELS + 2],
-              y2: output0[a * NUM_CHANNELS + 3]
-            }
+              y2: output0[a * NUM_CHANNELS + 3],
+            },
           });
         }
       }
@@ -414,7 +436,7 @@ async function _bgLoop(src) {
       people.sort((a, b) => a.box.x1 - b.box.x1);
 
       // ★ 여기서 원하는 사람 번호를 코드에 입력합니다! (0: 첫번째, 1: 두번째...)
-      const TARGET_INDEX = 2;
+      const TARGET_INDEX = 0;
 
       let bestScore = -Infinity;
       let bestAnc = -1;
@@ -435,19 +457,21 @@ async function _bgLoop(src) {
       // 화면 상단 바에 진단 정보 표시 (30프레임마다)
       if (!window._diagFrame) window._diagFrame = 0;
       if (window._diagFrame++ % 30 === 0) {
-        const bar = document.getElementById('ai-debug-bar');
+        const bar = document.getElementById("ai-debug-bar");
         if (bar) {
           bar.innerHTML =
             `[NMS 모델] bestAnc=${bestAnc} | prob=${bestProb.toFixed(3)} | ` +
-            (bestAnc >= 0 ? `box:[${Math.round(bestBox.x1)}, ${Math.round(bestBox.y1)} ~ ${Math.round(bestBox.x2)}, ${Math.round(bestBox.y2)}]` : '') +
-            ` → ${bestProb > 0.25 ? '✅감지' : '❌미감지'}`;
+            (bestAnc >= 0
+              ? `box:[${Math.round(bestBox.x1)}, ${Math.round(bestBox.y1)} ~ ${Math.round(bestBox.x2)}, ${Math.round(bestBox.y2)}]`
+              : "") +
+            ` → ${bestProb > 0.5 ? "✅감지" : "❌미감지"}`;
         }
       }
 
       if (window._deepDiagDone) window._deepDiagDone = false;
 
-      // 확률이 25% 이상이고 유효한 사람이 감지되었을 때만 마스크 적용
-      if (bestProb > 0.25 && bestAnc >= 0) {
+      // 확률이 50% 이상이고 유효한 사람이 감지되었을 때만 마스크 적용
+      if (bestProb > 0.5 && bestAnc >= 0) {
         const bestCoeffs = new Float32Array(32);
         for (let c = 0; c < 32; c++) {
           bestCoeffs[c] = output0[bestAnc * NUM_CHANNELS + COEFF_START + c];
@@ -476,7 +500,13 @@ async function _bgLoop(src) {
             const mx = Math.floor((x / imgW) * 160);
             const my = Math.floor((y / imgH) * 160);
 
-            if (mx < bx1 || mx > bx2 || my < by1 || my > by2 || mask160[my * 160 + mx] < 0.75) {
+            if (
+              mx < bx1 ||
+              mx > bx2 ||
+              my < by1 ||
+              my > by2 ||
+              mask160[my * 160 + mx] < 0.75
+            ) {
               imageData.data[(y * imgW + x) * 4 + 3] = 0;
             }
           }
