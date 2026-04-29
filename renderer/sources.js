@@ -365,7 +365,6 @@ async function _bgLoop(src) {
     try {
       state.sessionBusy = true;
       const MODEL_SIZE = 640;
-      const MODEL_SIZE = 640;
       const tmp = document.createElement("canvas");
       tmp.width = MODEL_SIZE;
       tmp.height = MODEL_SIZE;
