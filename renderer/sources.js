@@ -351,9 +351,7 @@ async function _bgLoop(src) {
   // 임시 캔버스에 그려서 처리 성공 시에만 출력 캔버스에 반영합니다.
   if (!src.hiddenCanvas) {
     src.hiddenCanvas = document.createElement("canvas");
-    src.hiddenCtx = src.hiddenCanvas.getContext("2d", {
-      willReadFrequently: true,
-    });
+    src.hiddenCtx = src.hiddenCanvas.getContext("2d", { willReadFrequently: true, });
   }
   if (src.hiddenCanvas.width !== w || src.hiddenCanvas.height !== h) {
     src.hiddenCanvas.width = w;
@@ -369,24 +367,16 @@ async function _bgLoop(src) {
       tmp.width = MODEL_SIZE;
       tmp.height = MODEL_SIZE;
       tmp.getContext("2d").drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
-      const tmpData = tmp
-        .getContext("2d")
-        .getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
+      const tmpData = tmp.getContext("2d").getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
 
       const tensorData = new Float32Array(3 * MODEL_SIZE * MODEL_SIZE);
       for (let i = 0; i < MODEL_SIZE * MODEL_SIZE; i++) {
         tensorData[i] = tmpData.data[i * 4] / 255;
         tensorData[MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 1] / 255;
-        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] =
-          tmpData.data[i * 4 + 2] / 255;
+        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 2] / 255;
       }
 
-      const inputTensor = new ort.Tensor("float32", tensorData, [
-        1,
-        3,
-        MODEL_SIZE,
-        MODEL_SIZE,
-      ]);
+      const inputTensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE,]);
       const feeds = { [state.session.inputNames[0]]: inputTensor };
       const results = await state.session.run(feeds);
 
@@ -499,13 +489,7 @@ async function _bgLoop(src) {
             const mx = Math.floor((x / imgW) * 160);
             const my = Math.floor((y / imgH) * 160);
 
-            if (
-              mx < bx1 ||
-              mx > bx2 ||
-              my < by1 ||
-              my > by2 ||
-              mask160[my * 160 + mx] < 0.75
-            ) {
+            if (mx < bx1 || mx > bx2 || my < by1 || my > by2 || mask160[my * 160 + mx] < 0.75) {
               imageData.data[(y * imgW + x) * 4 + 3] = 0;
             }
           }
@@ -574,7 +558,7 @@ function _createVideoEl(stream) {
   v.autoplay = true;
   v.muted = true;
   v.playsInline = true;
-  v.play().catch(() => {});
+  v.play().catch(() => { });
   return v;
 }
 
