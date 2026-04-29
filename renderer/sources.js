@@ -51,20 +51,33 @@ function _startCompositing() {
   requestAnimationFrame(loop);
 }
 
+function _drawLetterboxed(ctx, img, canvasW, canvasH) {
+  const srcW = img.videoWidth ?? img.width ?? canvasW;
+  const srcH = img.videoHeight ?? img.height ?? canvasH;
+  if (srcW === 0 || srcH === 0) return;
+  const scale = Math.min(canvasW / srcW, canvasH / srcH);
+  const dw = srcW * scale;
+  const dh = srcH * scale;
+  const dx = (canvasW - dw) / 2;
+  const dy = (canvasH - dh) / 2;
+  ctx.drawImage(img, dx, dy, dw, dh);
+}
+
 function _compositeFrame() {
   if (!state.masterCtx) return;
   const ctx = state.masterCtx;
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
   const src = state.sources.find((s) => s.id === state.selectedSourceId);
   if (!src || !src.visible) return;
 
   if (src.bgRemoval && src.bgCanvas && src.bgCanvas.width > 0) {
-    ctx.drawImage(src.bgCanvas, 0, 0, CANVAS_W, CANVAS_H);
+    _drawLetterboxed(ctx, src.bgCanvas, CANVAS_W, CANVAS_H);
   } else {
     const vid = src.videoEl;
     if (!vid || vid.readyState < 2) return;
-    ctx.drawImage(vid, 0, 0, CANVAS_W, CANVAS_H);
+    _drawLetterboxed(ctx, vid, CANVAS_W, CANVAS_H);
   }
 }
 
@@ -355,8 +368,18 @@ async function _bgLoop(src) {
       const tmp = document.createElement("canvas");
       tmp.width = M;
       tmp.height = M;
-      tmp.getContext("2d").drawImage(vid, 0, 0, M, M);
-      const imgData = tmp.getContext("2d").getImageData(0, 0, M, M);
+      const tmpCtx = tmp.getContext("2d");
+      tmpCtx.fillStyle = "#000000";
+      tmpCtx.fillRect(0, 0, M, M);
+      const vw = vid.videoWidth || M;
+      const vh = vid.videoHeight || M;
+      const aiScale = Math.min(M / vw, M / vh);
+      const aiW = vw * aiScale;
+      const aiH = vh * aiScale;
+      const aiOffX = (M - aiW) / 2;
+      const aiOffY = (M - aiH) / 2;
+      tmpCtx.drawImage(vid, aiOffX, aiOffY, aiW, aiH);
+      const imgData = tmpCtx.getImageData(0, 0, M, M);
 
       const td = new Float32Array(3 * M * M);
       for (let i = 0; i < M * M; i++) {
@@ -379,8 +402,8 @@ async function _bgLoop(src) {
       const frame = src.hiddenCtx.getImageData(0, 0, w, h);
       for (let py = 0; py < h; py++) {
         for (let px = 0; px < w; px++) {
-          const mx = Math.floor((px / w) * M);
-          const my = Math.floor((py / h) * M);
+          const mx = Math.round(aiOffX + (px / w) * aiW);
+          const my = Math.round(aiOffY + (py / h) * aiH);
           if (mask[my * M + mx] < 0.5) frame.data[(py * w + px) * 4 + 3] = 0;
         }
       }
