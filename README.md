@@ -137,7 +137,7 @@ npm install
 npm start
 
 # 실행 파일 빌드
-npm run make
+npm run package
 ```
 
 ### 라즈베리파이 설정
