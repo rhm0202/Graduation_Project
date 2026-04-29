@@ -13,7 +13,7 @@ import { toggleBgRemovalForSelectedSource } from './sources.js';
 export async function loadModel() {
   try {
     console.log('AI 모델 로딩 중');
-    state.session = await ort.InferenceSession.create('segformer_person_mask.onnx', {
+    state.session = await ort.InferenceSession.create('AI_models/yolo26n-seg.onnx', {
       executionProviders: ['webgpu', 'webgl', 'wasm'],
     });
     const inputs = state.session.inputNames.join(', ');
