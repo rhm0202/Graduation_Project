@@ -22,10 +22,10 @@
   --color-danger: #ef4444; /* 위험/중지 상태 */
   --color-warning: #f59e0b; /* 경고 */
   --color-info: #3b82f6; /* 정보 */
-  --color-blue: #3b82f6; /* 파란색 (버튼 등) */
+  --color-blue: #5b5a5bc0; /* 파란색 (버튼 등) */
   --color-green: #10b981; /* 녹색 (볼륨 미터 등) */
   --color-red: #ef4444; /* 빨간색 (녹화 상태 등) */
-  --color-highlight: #6366f1; /* 강조 색상 (프로그램 비디오 등) */
+  --color-highlight: #5b5a5bc0; /* 강조 색상 (프로그램 비디오 등) */
 
   /* 특수 색상 */
   --color-recording: #ef4444; /* 녹화 중 표시 */
