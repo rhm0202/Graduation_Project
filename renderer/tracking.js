@@ -80,11 +80,11 @@ export function processObjectTracking() {
       const main = persons.reduce((prev, curr) =>
         curr.width * curr.height > prev.width * prev.height ? curr : prev,
       );
-      const cx = main.x + main.width / 2;
-      const cy = main.y + main.height / 2;
+      const centerX = main.x + main.width / 2;
+      const centerY = main.y + main.height / 2;
       const halfW = state.trackingCanvas.width / 2;
       const halfH = state.trackingCanvas.height / 2;
-      sendMotorControl(((cx - halfW) / halfW) * 45, -((cy - halfH) / halfH) * 45);
+      sendMotorControl(((centerX - halfW) / halfW) * 45, -((centerY - halfH) / halfH) * 45);
     }
 
     state.trackingAnimationFrame = requestAnimationFrame(processObjectTracking);

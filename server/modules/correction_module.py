@@ -44,8 +44,8 @@ class CorrectionCalculator:
             gain:         픽셀 오프셋 → 각도 변환 비율 (degree/pixel).
                           예: 오프셋 100px → gain 0.05 → 5° 이동
         """
-        self.cx = frame_width / 2.0
-        self.cy = frame_height / 2.0
+        self.center_x = frame_width / 2.0
+        self.center_y = frame_height / 2.0
         self.threshold = threshold
         self.gain = gain
 
@@ -60,8 +60,8 @@ class CorrectionCalculator:
             (pan_correction, tilt_correction) — 보정이 필요한 경우
             None                              — 오프셋이 threshold 미만 (보정 불필요)
         """
-        dx = obj_x - self.cx  # 양수 = 오른쪽, 음수 = 왼쪽
-        dy = obj_y - self.cy  # 양수 = 아래,   음수 = 위
+        dx = obj_x - self.center_x  # 양수 = 오른쪽, 음수 = 왼쪽
+        dy = obj_y - self.center_y  # 양수 = 아래,   음수 = 위
 
         if abs(dx) < self.threshold and abs(dy) < self.threshold:
             return None
