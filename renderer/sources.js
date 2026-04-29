@@ -435,7 +435,7 @@ async function _bgLoop(src) {
       people.sort((a, b) => a.box.x1 - b.box.x1);
 
       // ★ 여기서 원하는 사람 번호를 코드에 입력합니다! (0: 첫번째, 1: 두번째...)
-      const TARGET_INDEX = 2;
+      const TARGET_INDEX = 0;
 
       let bestScore = -Infinity;
       let bestAnc = -1;
@@ -463,14 +463,14 @@ async function _bgLoop(src) {
             (bestAnc >= 0
               ? `box:[${Math.round(bestBox.x1)}, ${Math.round(bestBox.y1)} ~ ${Math.round(bestBox.x2)}, ${Math.round(bestBox.y2)}]`
               : "") +
-            ` → ${bestProb > 0.25 ? "✅감지" : "❌미감지"}`;
+            ` → ${bestProb > 0.5 ? "✅감지" : "❌미감지"}`;
         }
       }
 
       if (window._deepDiagDone) window._deepDiagDone = false;
 
-      // 확률이 25% 이상이고 유효한 사람이 감지되었을 때만 마스크 적용
-      if (bestProb > 0.25 && bestAnc >= 0) {
+      // 확률이 50% 이상이고 유효한 사람이 감지되었을 때만 마스크 적용
+      if (bestProb > 0.5 && bestAnc >= 0) {
         const bestCoeffs = new Float32Array(32);
         for (let c = 0; c < 32; c++) {
           bestCoeffs[c] = output0[bestAnc * NUM_CHANNELS + COEFF_START + c];
@@ -574,7 +574,7 @@ function _createVideoEl(stream) {
   v.autoplay = true;
   v.muted = true;
   v.playsInline = true;
-  v.play().catch(() => {});
+  v.play().catch(() => { });
   return v;
 }
 
