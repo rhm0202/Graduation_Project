@@ -235,6 +235,11 @@ export function sendMotorControl(pan, tilt) {
   state.piWebSocket.send(JSON.stringify({ type: 'motor_control', pan, tilt, timestamp: Date.now() }));
 }
 
+export function sendObjectCoords(obj_x, obj_y) {
+  if (!state.piConnected || state.piWebSocket?.readyState !== WebSocket.OPEN) return;
+  state.piWebSocket.send(JSON.stringify({ type: 'object_detected', obj_x, obj_y }));
+}
+
 // ═══════════════════════════════════════════════════════════
 // [구버전] RPi 직접 연결 방식 — 나중에 재사용 가능하도록 보존
 // ═══════════════════════════════════════════════════════════

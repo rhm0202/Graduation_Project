@@ -178,6 +178,11 @@ async def ws_handler(websocket):
                     await send_to_pi({"tracking": tracking_state, "status": status})
                     logger.debug(f"추적 상태 변경: {tracking_state}")
 
+                elif data.get("type") == "object_detected":
+                    obj_x = float(data["obj_x"])
+                    obj_y = float(data["obj_y"])
+                    asyncio.ensure_future(process_object_detected(obj_x, obj_y))
+
             except json.JSONDecodeError:
                 pass
     except websockets.exceptions.ConnectionClosed:
