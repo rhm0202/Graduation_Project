@@ -1,7 +1,6 @@
 import json
 import asyncio
 import websockets
-import base64
 from modules.logger import get_logger
 from modules.correction_module import CorrectionCalculator
 from modules import yolo_bridge
@@ -150,11 +149,7 @@ async def desktop_sender_task(websocket):
                 current_frame = output_frame
 
             if current_frame is not None and current_frame is not last_frame:
-                message = {
-                    "type": "video_frame",
-                    "frame": base64.b64encode(current_frame).decode('utf-8')
-                }
-                await websocket.send(json.dumps(message))
+                await websocket.send(current_frame)
                 last_frame = current_frame
 
             await asyncio.sleep(0.016)  # 60fps
