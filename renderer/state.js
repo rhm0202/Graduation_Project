@@ -60,6 +60,7 @@ export const state = {
 
   // 배경 제거 대상 인물 선택
   targetPersonIndex: 0,
+  targetPersonId: null, // 추적 대상의 고유 ID
   detectedPeopleCount: 0,
 };
 

@@ -15,6 +15,9 @@
  */
 import { state, isElectron } from "./state.js";
 import { sendObjectCoords } from "./rpi.js";
+import { HybridTracker } from "./hybridTracker.js";
+
+const globalTracker = new HybridTracker();
 
 // ─────────────────────────────────────────────────────────
 // 마스터 캔버스
@@ -403,13 +406,13 @@ async function _bgLoop(src) {
       const COEFF_START = 6;
 
       // 1. 감지된 "사람(classId=0)" 앵커들을 모두 수집
-      let people = [];
+      let detectedPeople = [];
       for (let a = 0; a < NUM_ANCHORS; a++) {
         const score = output0[a * NUM_CHANNELS + SCORE_CH];
         const classId = output0[a * NUM_CHANNELS + 5];
 
         if (classId === 0 && score > 0.55) {
-          people.push({
+          detectedPeople.push({
             anc: a,
             score: score,
             box: {
@@ -422,7 +425,10 @@ async function _bgLoop(src) {
         }
       }
 
-      // ★ 핵심: 점수가 아니라 "화면 왼쪽부터 오른쪽 순서"로 사람들에게 번호를 매깁니다.
+      // 2. 하이브리드 트래커 적용 (고유 ID 부여 및 객체 추적)
+      let people = globalTracker.update(detectedPeople, imageData);
+
+      // UI 표시 및 인덱스 매칭을 위해 현재 프레임 기준 X좌표 순(왼쪽부터)으로 정렬
       people.sort((a, b) => a.box.x1 - b.box.x1);
 
       // Object Panel 목록 갱신 (감지된 인원 수가 바뀔 때만)
@@ -433,18 +439,37 @@ async function _bgLoop(src) {
 
       const TARGET_INDEX = state.targetPersonIndex;
 
+      // 3. 타겟 추적 로직 (ID 기반)
+      if (people.length > 0) {
+        // UI에서 새 인덱스를 클릭해서 타겟 ID가 초기화되었거나 아직 설정되지 않은 경우
+        if (state.targetPersonId === undefined || state.targetPersonId === null) {
+          const idx = Math.min(TARGET_INDEX, people.length - 1);
+          state.targetPersonId = people[idx].id; // 해당 위치(인덱스)에 있는 사람의 고유 ID를 캡처하여 고정
+        }
+      } else {
+        // 화면에 아무도 없으면 타겟 ID 초기화
+        state.targetPersonId = null;
+      }
+
       let bestScore = -Infinity;
       let bestAnc = -1;
       let bestBox = null;
 
-      if (people.length > TARGET_INDEX) {
-        bestScore = people[TARGET_INDEX].score;
-        bestAnc = people[TARGET_INDEX].anc;
-        bestBox = people[TARGET_INDEX].box;
+      // 고정된 targetPersonId와 일치하는 사람 찾기 (순서가 뒤바뀌어도 ID를 따라감)
+      const targetPerson = people.find(p => p.id === state.targetPersonId);
+
+      if (targetPerson) {
+        bestScore = targetPerson.score;
+        bestAnc = targetPerson.anc;
+        bestBox = targetPerson.box;
       } else if (people.length > 0) {
-        bestScore = people[0].score;
-        bestAnc = people[0].anc;
-        bestBox = people[0].box;
+        // 만약 추적하던 ID를 완전히 놓쳤다면(화면 밖으로 나감 등), 기존 로직처럼 UI 인덱스에 해당하는 사람 임시 추적
+        const fallbackIdx = Math.min(TARGET_INDEX, people.length - 1);
+        bestScore = people[fallbackIdx].score;
+        bestAnc = people[fallbackIdx].anc;
+        bestBox = people[fallbackIdx].box;
+        // 새로운 타겟으로 ID 갱신 시도
+        state.targetPersonId = people[fallbackIdx].id;
       }
 
       const bestProb = bestScore;
@@ -593,6 +618,7 @@ function renderObjectList(count) {
     li.addEventListener("click", () => {
       if (state.targetPersonIndex === i) return;
       state.targetPersonIndex = i;
+      state.targetPersonId = null; // 인덱스가 변경되면 기존 ID 추적을 풀고, 다음 프레임에서 새로 ID를 캡처하게 함
       list
         .querySelectorAll(".object-item")
         .forEach((el, idx) => el.classList.toggle("selected", idx === i));
