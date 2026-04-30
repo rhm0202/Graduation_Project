@@ -15,6 +15,7 @@
  */
 import { state, isElectron } from "./state.js";
 import { sendObjectCoords } from "./rpi.js";
+import { BoTSORT } from "./botSort.js";
 
 // ─────────────────────────────────────────────────────────
 // 마스터 캔버스
@@ -318,6 +319,7 @@ function _updateBgRemovalBtn() {
 function _startBgRemoval(src) {
   src.bgCanvas = document.createElement("canvas");
   src.bgCtx = src.bgCanvas.getContext("2d", { willReadFrequently: true });
+  src.tracker = new BoTSORT(); // Initialize tracker for this source
   _bgLoop(src);
 }
 
@@ -421,8 +423,15 @@ async function _bgLoop(src) {
         }
       }
 
-      // ★ 핵심: 점수가 아니라 "화면 왼쪽부터 오른쪽 순서"로 사람들에게 번호를 매깁니다.
-      people.sort((a, b) => a.box.x1 - b.box.x1);
+      // ★ Tracker를 통해 ID 할당 및 유지
+      if (src.tracker && state.osnetSession) {
+        // tmp 캔버스는 640x640 크기이므로 bounding box 좌표와 일치
+        people = await src.tracker.update(people, tmp, state.osnetSession);
+      } else {
+        // Tracker나 모델이 아직 로드되지 않은 경우 임시 ID 부여
+        people.sort((a, b) => a.box.x1 - b.box.x1);
+        people.forEach((p, idx) => (p.trackId = `tmp_${idx}`));
+      }
 
       // Object Panel 목록 갱신 (감지된 인원 수가 바뀔 때만)
       if (people.length !== state.detectedPeopleCount) {
@@ -430,20 +439,36 @@ async function _bgLoop(src) {
         renderObjectList(people.length);
       }
 
-      const TARGET_INDEX = state.targetPersonIndex;
+      // ★ Target Track ID Lock 로직
+      // UI에서 선택한 인덱스가 변경되었거나, 처음으로 Target ID를 잡아야 할 때
+      if (
+        state.targetTrackId === null ||
+        state._lastTargetPersonIndex !== state.targetPersonIndex
+      ) {
+        if (people.length > state.targetPersonIndex) {
+          // 화면의 왼쪽부터 정렬해서 UI 리스트 인덱스와 매칭
+          const sortedPeople = [...people].sort((a, b) => a.box.x1 - b.box.x1);
+          state.targetTrackId = sortedPeople[state.targetPersonIndex].trackId;
+        }
+        state._lastTargetPersonIndex = state.targetPersonIndex;
+      }
 
       let bestScore = -Infinity;
       let bestAnc = -1;
       let bestBox = null;
 
-      if (people.length > TARGET_INDEX) {
-        bestScore = people[TARGET_INDEX].score;
-        bestAnc = people[TARGET_INDEX].anc;
-        bestBox = people[TARGET_INDEX].box;
-      } else if (people.length > 0) {
-        bestScore = people[0].score;
-        bestAnc = people[0].anc;
-        bestBox = people[0].box;
+      // 지정된 Target ID를 가진 사람 찾기
+      let targetObj = people.find((p) => p.trackId === state.targetTrackId);
+
+      // 만약 추적 대상을 일시적으로 놓쳤다면 임시로 화면상 첫 번째 사람으로 Fallback
+      if (!targetObj && people.length > 0) {
+        targetObj = [...people].sort((a, b) => a.box.x1 - b.box.x1)[0];
+      }
+
+      if (targetObj) {
+        bestScore = targetObj.score;
+        bestAnc = targetObj.anc;
+        bestBox = targetObj.box;
       }
 
       const bestProb = bestScore;

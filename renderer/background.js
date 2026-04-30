@@ -13,10 +13,18 @@ import { toggleBgRemovalForSelectedSource } from "./sources.js";
 export async function loadModel() {
   try {
     console.log("AI 모델 로딩 중");
-    state.session = await ort.InferenceSession.create("AI_models//yolo26n-seg.onnx", { executionProviders: ["webgpu", "webgl", "wasm"], },);
-    const inputs = state.session.inputNames.join(", ");
-    const outputs = state.session.outputNames.join(", ");
-    console.log(`AI 모델 로드 완료. 입력: [${inputs}] / 출력: [${outputs}]`);
+
+    // YOLOv8 Segmentation 모델 로드
+    state.session = await ort.InferenceSession.create("AI_models/yolo26n-seg.onnx", { executionProviders: ["webgpu", "webgl", "wasm"] });
+    const yoloInputs = state.session.inputNames.join(", ");
+    const yoloOutputs = state.session.outputNames.join(", ");
+    console.log(`YOLO 모델 로드 완료. 입력: [${yoloInputs}] / 출력: [${yoloOutputs}]`);
+
+    // OSNet ReID 모델 로드
+    state.osnetSession = await ort.InferenceSession.create("AI_models/osnet_x0_25_web.onnx", { executionProviders: ["webgpu", "webgl", "wasm"] });
+    const osnetInputs = state.osnetSession.inputNames.join(", ");
+    const osnetOutputs = state.osnetSession.outputNames.join(", ");
+    console.log(`OSNet 모델 로드 완료. 입력: [${osnetInputs}] / 출력: [${osnetOutputs}]`);
 
     let bar = document.getElementById("ai-debug-bar");
     if (!bar) {
@@ -36,7 +44,7 @@ export async function loadModel() {
       });
       document.body.appendChild(bar);
     }
-    bar.innerHTML = `✅ AI Ready | In: ${inputs} | Out: ${outputs}`;
+    bar.innerHTML = `✅ AI Ready | YOLO Out: ${yoloOutputs} | OSNet Out: ${osnetOutputs}`;
   } catch (error) {
     console.error("AI 모델 로드 실패:", error);
     alert(`AI 불러오기 실패:\n${error.message}`);

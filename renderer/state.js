@@ -27,6 +27,7 @@ export const state = {
   backgroundCtx: null,
   backgroundAnimationFrame: null,
   session: null,
+  osnetSession: null, // OSNet ReID 모델 세션
 
   // 라즈베리파이
   piWebSocket: null,
@@ -61,6 +62,7 @@ export const state = {
   // 배경 제거 대상 인물 선택
   targetPersonIndex: 0,
   detectedPeopleCount: 0,
+  targetTrackId: null, // 현재 추적(배경 제거) 중인 대상의 Track ID
 };
 
 export const MAX_RECONNECT_ATTEMPTS = 5;
