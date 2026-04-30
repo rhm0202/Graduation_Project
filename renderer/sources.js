@@ -14,6 +14,7 @@
  * state.sources[last] = 최하단 레이어 (처음에 그려짐)
  */
 import { state, isElectron } from "./state.js";
+import { sendObjectCoords } from "./rpi.js";
 
 // ─────────────────────────────────────────────────────────
 // 마스터 캔버스
@@ -471,6 +472,12 @@ async function _bgLoop(src) {
 
       // 확률이 50% 이상이고 유효한 사람이 감지되었을 때만 마스크 적용
       if (bestProb > 0.5 && bestAnc >= 0) {
+        if (state.autoTrackingEnabled) {
+          const obj_x = ((bestBox.x1 + bestBox.x2) / 2) * (w / 640);
+          const obj_y = ((bestBox.y1 + bestBox.y2) / 2) * (h / 640);
+          sendObjectCoords(obj_x, obj_y);
+        }
+
         const bestCoeffs = new Float32Array(32);
         for (let c = 0; c < 32; c++) {
           bestCoeffs[c] = output0[bestAnc * NUM_CHANNELS + COEFF_START + c];

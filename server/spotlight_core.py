@@ -178,6 +178,11 @@ async def ws_handler(websocket):
                     await send_to_pi({"tracking": tracking_state, "status": status})
                     logger.debug(f"추적 상태 변경: {tracking_state}")
 
+                elif data.get("type") == "object_detected":
+                    obj_x = float(data["obj_x"])
+                    obj_y = float(data["obj_y"])
+                    asyncio.ensure_future(process_object_detected(obj_x, obj_y))
+
             except json.JSONDecodeError:
                 pass
     except websockets.exceptions.ConnectionClosed:
@@ -195,36 +200,6 @@ async def start_desktop_server():
 # ==========================================
 # 진입점
 # ==========================================
-async def _stdin_test_task():
-    """터미널에서 좌표를 입력해 yolo_bridge → process_object_detected 흐름을 테스트한다.
-    tracking_state가 'on'일 때만 보정값이 계산되어 RPi로 전송된다.
-    입력 형식: <x> <y>  예) 1200 400
-    """
-    loop = asyncio.get_event_loop()
-    print("[테스트] 좌표 입력 모드 활성화 — 형식: <x> <y> | 종료: q")
-    while True:
-        try:
-            raw = await loop.run_in_executor(None, input, "yolo_test > ")
-        except (EOFError, KeyboardInterrupt):
-            break
-        raw = raw.strip()
-        if raw.lower() in ("q", "quit"):
-            break
-        parts = raw.split()
-        if len(parts) != 2:
-            print("  형식: <x> <y>  예) 1200 400")
-            continue
-        try:
-            obj_x, obj_y = float(parts[0]), float(parts[1])
-        except ValueError:
-            print("  숫자를 입력하세요.")
-            continue
-        yolo_bridge.submit(obj_x, obj_y)
-        print(f"  submit({obj_x}, {obj_y}) 호출됨")
-
-# ==========================================
-# 진입점
-# ==========================================
 async def main():
     global lock, pi_outbound_queue, pi_to_desktop_queue
     global motor_corrected_event, correction_calc
@@ -238,8 +213,7 @@ async def main():
 
     receiver_task = asyncio.create_task(receive_from_pi())
     server_task   = asyncio.create_task(start_desktop_server())
-    test_task     = asyncio.create_task(_stdin_test_task())
-    await asyncio.gather(receiver_task, server_task, test_task)
+    await asyncio.gather(receiver_task, server_task)
 
 if __name__ == '__main__':
     try:

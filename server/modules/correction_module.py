@@ -34,6 +34,7 @@ class CorrectionCalculator:
         frame_height: int,
         threshold: float = 30.0,
         gain: float = 0.05,
+        alpha: float = 0.35,
     ):
         """
         Args:
@@ -43,14 +44,21 @@ class CorrectionCalculator:
                           abs(dx) < threshold 이고 abs(dy) < threshold 이면 None 반환.
             gain:         픽셀 오프셋 → 각도 변환 비율 (degree/pixel).
                           예: 오프셋 100px → gain 0.05 → 5° 이동
+            alpha:        EMA 스무딩 계수 (0 < alpha ≤ 1).
+                          낮을수록 더 부드럽지만 반응이 느려짐. 기본값 0.35.
         """
-        self.cx = frame_width / 2.0
-        self.cy = frame_height / 2.0
+        self.center_x = frame_width / 2.0
+        self.center_y = frame_height / 2.0
         self.threshold = threshold
         self.gain = gain
+        self.alpha = alpha
+        self._smooth_x: float | None = None
+        self._smooth_y: float | None = None
 
     def calc(self, obj_x: float, obj_y: float) -> tuple[float, float] | None:
         """객체 중심 좌표를 받아 pan/tilt 보정값을 반환한다.
+
+        EMA 스무딩을 적용하여 YOLO 검출 좌표의 프레임 간 노이즈를 줄인다.
 
         Args:
             obj_x: 감지된 객체 중심의 x 좌표 (픽셀, 프레임 좌측 상단 기준)
@@ -60,8 +68,14 @@ class CorrectionCalculator:
             (pan_correction, tilt_correction) — 보정이 필요한 경우
             None                              — 오프셋이 threshold 미만 (보정 불필요)
         """
-        dx = obj_x - self.cx  # 양수 = 오른쪽, 음수 = 왼쪽
-        dy = obj_y - self.cy  # 양수 = 아래,   음수 = 위
+        if self._smooth_x is None:
+            self._smooth_x, self._smooth_y = obj_x, obj_y
+        else:
+            self._smooth_x = self.alpha * obj_x + (1 - self.alpha) * self._smooth_x
+            self._smooth_y = self.alpha * obj_y + (1 - self.alpha) * self._smooth_y
+
+        dx = self._smooth_x - self.center_x  # 양수 = 오른쪽, 음수 = 왼쪽
+        dy = self._smooth_y - self.center_y  # 양수 = 아래,   음수 = 위
 
         if abs(dx) < self.threshold and abs(dy) < self.threshold:
             return None
@@ -69,3 +83,8 @@ class CorrectionCalculator:
         pan_correction  = dx * self.gain
         tilt_correction = dy * self.gain
         return pan_correction, tilt_correction
+
+    def reset(self):
+        """추적 대상이 바뀌거나 잃어버렸을 때 EMA 상태를 초기화한다."""
+        self._smooth_x = None
+        self._smooth_y = None

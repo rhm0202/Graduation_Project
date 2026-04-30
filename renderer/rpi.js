@@ -16,7 +16,6 @@
 
 import { state, MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAY } from './state.js';
 // import { showErrorModal } from './media.js'; // [구버전] RPi 직접 연결 시 에러 모달에 사용
-import { processObjectTracking } from './tracking.js';
 import { addRpiSource, removeSource } from './sources.js';
 
 // ═══════════════════════════════════════════════════════════
@@ -161,7 +160,6 @@ function handlePiVideoFrame(frameData) {
 
         // 매 프레임마다 canvas에 그리기
         state.trackingCtx.drawImage(img, 0, 0);
-        if (state.autoTrackingEnabled) processObjectTracking();
       };
       img.src = `data:image/jpeg;base64,${frameData}`;
 
@@ -233,6 +231,11 @@ export function sendMotorControl(pan, tilt) {
   if (Math.abs(pan - state.lastMotorCommand.pan) < 1 && Math.abs(tilt - state.lastMotorCommand.tilt) < 1) return;
   state.lastMotorCommand = { pan, tilt };
   state.piWebSocket.send(JSON.stringify({ type: 'motor_control', pan, tilt, timestamp: Date.now() }));
+}
+
+export function sendObjectCoords(obj_x, obj_y) {
+  if (!state.piConnected || state.piWebSocket?.readyState !== WebSocket.OPEN) return;
+  state.piWebSocket.send(JSON.stringify({ type: 'object_detected', obj_x, obj_y }));
 }
 
 // ═══════════════════════════════════════════════════════════
