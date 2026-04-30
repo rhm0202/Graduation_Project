@@ -314,6 +314,38 @@ body {
   flex-basis: 15%;
 }
 
+#object-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.object-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.88em;
+  user-select: none;
+  transition: background-color 0.15s;
+}
+.object-item:hover {
+  background-color: var(--bg-light);
+}
+.object-item.selected {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+.object-item-empty {
+  cursor: default;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.object-item-empty:hover {
+  background-color: transparent;
+}
+
 /* 처리 전/후 비교 컨테이너 */
 #comparison-container {
   display: none;

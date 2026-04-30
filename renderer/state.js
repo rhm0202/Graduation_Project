@@ -57,6 +57,10 @@ export const state = {
   trackingAnimationFrame: null,
   lastMotorCommand: { pan: 0, tilt: 0 },
   pendingCorrection: { pan: 0, tilt: 0 },  // RPi 보정 완료 응답 수신 전까지 누적되는 보정값
+
+  // 배경 제거 대상 인물 선택
+  targetPersonIndex: 0,
+  detectedPeopleCount: 0,
 };
 
 export const MAX_RECONNECT_ATTEMPTS = 5;
