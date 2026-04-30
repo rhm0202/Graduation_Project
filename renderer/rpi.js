@@ -143,22 +143,14 @@ function handlePiVideoFrame(frameData) {
     if (typeof frameData === 'string') {
       const img = new Image();
       img.onload = () => {
-        // 최초 1회만 canvas/stream 초기화
         if (!state.trackingCanvas) {
           state.trackingCanvas = document.createElement('canvas');
           state.trackingCanvas.width = img.width;
           state.trackingCanvas.height = img.height;
           state.trackingCtx = state.trackingCanvas.getContext('2d');
-
-          const stream = state.trackingCanvas.captureStream(60);
-          state.mediaStream?.getAudioTracks().forEach(t => stream.addTrack(t));
-          state.piVideoStream = stream;
-
-          // Sources 패널에 RPi 소스 자동 추가
+          state.piVideoStream = state.trackingCanvas;
           addRpiSource();
         }
-
-        // 매 프레임마다 canvas에 그리기
         state.trackingCtx.drawImage(img, 0, 0);
       };
       img.src = `data:image/jpeg;base64,${frameData}`;
@@ -172,15 +164,13 @@ function handlePiVideoFrame(frameData) {
           state.trackingCanvas.width = img.width;
           state.trackingCanvas.height = img.height;
           state.trackingCtx = state.trackingCanvas.getContext('2d');
-
-          const stream = state.trackingCanvas.captureStream(60);
-          state.mediaStream?.getAudioTracks().forEach(t => stream.addTrack(t));
-          state.piVideoStream = stream;
+          state.piVideoStream = state.trackingCanvas;
           addRpiSource();
         }
         state.trackingCtx.drawImage(img, 0, 0);
         URL.revokeObjectURL(url);
       };
+      img.onerror = () => URL.revokeObjectURL(url);
       img.src = url;
     }
   } catch (error) {
