@@ -418,7 +418,7 @@ async function _bgLoop(src) {
         const score = output0[a * NUM_CHANNELS + SCORE_CH];
         const classId = output0[a * NUM_CHANNELS + 5];
 
-        if (classId === 0 && score > 0.25) {
+        if (classId === 0 && score > 0.55) {
           people.push({
             anc: a,
             score: score,
@@ -435,8 +435,13 @@ async function _bgLoop(src) {
       // ★ 핵심: 점수가 아니라 "화면 왼쪽부터 오른쪽 순서"로 사람들에게 번호를 매깁니다.
       people.sort((a, b) => a.box.x1 - b.box.x1);
 
-      // ★ 여기서 원하는 사람 번호를 코드에 입력합니다! (0: 첫번째, 1: 두번째...)
-      const TARGET_INDEX = 0;
+      // Object Panel 목록 갱신 (감지된 인원 수가 바뀔 때만)
+      if (people.length !== state.detectedPeopleCount) {
+        state.detectedPeopleCount = people.length;
+        renderObjectList(people.length);
+      }
+
+      const TARGET_INDEX = state.targetPersonIndex;
 
       let bestScore = -Infinity;
       let bestAnc = -1;
@@ -591,6 +596,39 @@ function _cleanupSource(src) {
     src.stream.getTracks().forEach((t) => t.stop());
   src.videoEl = null;
   src.stream = null;
+}
+
+// ─────────────────────────────────────────────────────────
+// Object Panel 목록 UI 렌더링
+// ─────────────────────────────────────────────────────────
+
+function renderObjectList(count) {
+  const list = document.getElementById("object-list");
+  if (!list) return;
+  list.innerHTML = "";
+
+  if (count === 0) {
+    const li = document.createElement("li");
+    li.className = "object-item object-item-empty";
+    li.textContent = "감지된 사람 없음";
+    list.appendChild(li);
+    return;
+  }
+
+  for (let i = 0; i < count; i++) {
+    const li = document.createElement("li");
+    li.className =
+      "object-item" + (i === state.targetPersonIndex ? " selected" : "");
+    li.textContent = `사람 ${i + 1}`;
+    li.addEventListener("click", () => {
+      if (state.targetPersonIndex === i) return;
+      state.targetPersonIndex = i;
+      list
+        .querySelectorAll(".object-item")
+        .forEach((el, idx) => el.classList.toggle("selected", idx === i));
+    });
+    list.appendChild(li);
+  }
 }
 
 // ─────────────────────────────────────────────────────────
