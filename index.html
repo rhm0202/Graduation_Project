@@ -139,18 +139,32 @@
               </button>
             </div>
           </div>
+          <div class="dock-panel" id="object-panel">
+            <div class="dock-header">
+              <h3>Object Panel</h3>
+            </div>
+            <div class="dock-content">
+              <ul id="object-list"></ul>
+            </div>
+          </div>
           <div class="dock-panel" id="sources-panel">
             <div class="dock-header" id="sources-dock-header">
               <h3>Sources</h3>
-              <button class="control-btn" id="add-source-btn" style="padding:2px 8px;font-size:1.1em">+</button>
-              <div id="add-source-menu" style="display:none">
+              <button
+                class="control-btn"
+                id="add-source-btn"
+                style="padding: 2px 8px; font-size: 1.1em"
+              >
+                +
+              </button>
+              <div id="add-source-menu" style="display: none">
                 <div data-add-source="webcam">웹캠 (Webcam)</div>
                 <div data-add-source="display">전체화면 캡처</div>
                 <div data-add-source="window">창 캡처</div>
                 <div data-add-source="rpi">RPi 카메라</div>
               </div>
             </div>
-            <div class="dock-content" style="padding:0">
+            <div class="dock-content" style="padding: 0">
               <ul id="sources-list"></ul>
             </div>
           </div>

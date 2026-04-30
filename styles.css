@@ -1,54 +1,57 @@
-
-
 /* === 색상 변수 정의 (Spotlight Cam 전용 색상 스킴) === */
 :root {
-    /* 배경 색상 - 더 깊고 모던한 톤 */
-    --bg-darkest: #0a0e14;      /* 최상위 배경 (거의 검정) */
-    --bg-dark: #141920;          /* 패널 배경 */
-    --bg-medium: #1e2530;       /* 헤더/툴바 배경 */
-    --bg-light: #252d3a;         /* 호버/활성 상태 */
-    
-    /* 테두리 및 구분선 */
-    --border-color: #2a3441;    /* 기본 구분선 */
-    --border-light: #3a4451;     /* 강조 구분선 */
-    
-    /* 텍스트 색상 */
-    --text-primary: #e8eaed;     /* 주요 텍스트 */
-    --text-secondary: #9aa0a6;   /* 보조 텍스트 */
-    --text-muted: #6b7280;        /* 비활성 텍스트 */
-    
-    /* 액센트 색상 - Spotlight Cam 브랜드 컬러 */
-    --color-primary: #6366f1;     /* 주요 액센트 (인디고) */
-    --color-primary-hover: #818cf8; /* 호버 상태 */
-    --color-success: #10b981;     /* 성공/녹화 상태 */
-    --color-danger: #ef4444;      /* 위험/중지 상태 */
-    --color-warning: #f59e0b;     /* 경고 */
-    --color-info: #3b82f6;       /* 정보 */
-    --color-blue: #3b82f6;        /* 파란색 (버튼 등) */
-    --color-green: #10b981;      /* 녹색 (볼륨 미터 등) */
-    --color-red: #ef4444;        /* 빨간색 (녹화 상태 등) */
-    --color-highlight: #6366f1;   /* 강조 색상 (프로그램 비디오 등) */
-    
-    /* 특수 색상 */
-    --color-recording: #ef4444;   /* 녹화 중 표시 */
-    --color-tracking: #10b981;    /* 추적 활성화 */
-    --color-ai-active: #8b5cf6;   /* AI 처리 중 */
+  /* 배경 색상 - 더 깊고 모던한 톤 */
+  --bg-darkest: #0a0e14; /* 최상위 배경 (거의 검정) */
+  --bg-dark: #141920; /* 패널 배경 */
+  --bg-medium: #1e2530; /* 헤더/툴바 배경 */
+  --bg-light: #252d3a; /* 호버/활성 상태 */
+
+  /* 테두리 및 구분선 */
+  --border-color: #2a3441; /* 기본 구분선 */
+  --border-light: #3a4451; /* 강조 구분선 */
+
+  /* 텍스트 색상 */
+  --text-primary: #e8eaed; /* 주요 텍스트 */
+  --text-secondary: #9aa0a6; /* 보조 텍스트 */
+  --text-muted: #6b7280; /* 비활성 텍스트 */
+
+  /* 액센트 색상 - Spotlight Cam 브랜드 컬러 */
+  --color-primary: #6366f1; /* 주요 액센트 (인디고) */
+  --color-primary-hover: #818cf8; /* 호버 상태 */
+  --color-success: #10b981; /* 성공/녹화 상태 */
+  --color-danger: #ef4444; /* 위험/중지 상태 */
+  --color-warning: #f59e0b; /* 경고 */
+  --color-info: #3b82f6; /* 정보 */
+  --color-blue: #5b5a5bc0; /* 파란색 (버튼 등) */
+  --color-green: #10b981; /* 녹색 (볼륨 미터 등) */
+  --color-red: #ef4444; /* 빨간색 (녹화 상태 등) */
+  --color-highlight: #5b5a5bc0; /* 강조 색상 (프로그램 비디오 등) */
+
+  /* 특수 색상 */
+  --color-recording: #ef4444; /* 녹화 중 표시 */
+  --color-tracking: #10b981; /* 추적 활성화 */
+  --color-ai-active: #8b5cf6; /* AI 처리 중 */
 }
 
 /* 라즈베리파이 연결 상태 표시 스타일 */
 #pi-status-indicator {
-    animation: pulse-status 2s infinite;
+  animation: pulse-status 2s infinite;
 }
 @keyframes pulse-status {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 #pi-status-indicator.connected {
-    background-color: var(--color-success) !important;
-    animation: none;
+  background-color: var(--color-success) !important;
+  animation: none;
 }
 #pi-status-indicator.disconnected {
-    background-color: var(--color-danger) !important;
+  background-color: var(--color-danger) !important;
 }
 
 /**
@@ -56,17 +59,27 @@
  * Spotlight Cam 애플리케이션의 기본 레이아웃 설정
  */
 body {
-    background: linear-gradient(135deg, var(--bg-darkest) 0%, #0f1419 100%);
-    color: var(--text-primary);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-        Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-    font-size: 14px;
-    margin: 0;
-    padding: 0;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-    display: flex;
+  background: linear-gradient(135deg, var(--bg-darkest) 0%, #0f1419 100%);
+  color: var(--text-primary);
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    "Open Sans",
+    "Helvetica Neue",
+    sans-serif;
+  font-size: 14px;
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
 }
 
 /**
@@ -74,15 +87,15 @@ body {
  * 전체 UI의 최상위 래퍼
  */
 .spotlight-window {
-    width: 100%;
-    height: 100%;
-    background-color: var(--bg-darkest);
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    display: flex;
-    flex-direction: column;
-    position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-darkest);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  position: relative;
 }
 
 /**
@@ -90,61 +103,64 @@ body {
  * File, Edit, View 등의 메인 메뉴가 위치하는 영역
  */
 .app-menubar {
-    background: linear-gradient(180deg, var(--bg-medium) 0%, var(--bg-dark) 100%);
-    padding: 8px 16px;
-    font-size: 0.9em;
-    border-bottom: 1px solid var(--border-color);
-    user-select: none;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(180deg, var(--bg-medium) 0%, var(--bg-dark) 100%);
+  padding: 8px 16px;
+  font-size: 0.9em;
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 .menu-item {
-    position: relative;
-    display: inline-block;
-    margin-right: 15px;
-    cursor: pointer;
+  position: relative;
+  display: inline-block;
+  margin-right: 15px;
+  cursor: pointer;
 }
 .dropdown-menu {
-    display: none; /* 평소엔 숨김 */
-    position: absolute;
-    top: calc(100% - 1px); /* 메뉴 아이템과 약간 겹치게 하여 간격 제거 */
-    left: 0;
-    background-color: var(--bg-dark);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 5px 0;
-    min-width: 180px;
-    z-index: 1001; /* 모달보다 위에 */
-    list-style: none;
-    margin: 0; /* 간격 제거 */
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  display: none; /* 평소엔 숨김 */
+  position: absolute;
+  top: calc(100% - 1px); /* 메뉴 아이템과 약간 겹치게 하여 간격 제거 */
+  left: 0;
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 5px 0;
+  min-width: 180px;
+  z-index: 1001; /* 모달보다 위에 */
+  list-style: none;
+  margin: 0; /* 간격 제거 */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
 }
 .dropdown-menu li {
-    padding: 8px 12px;
-    cursor: pointer;
-    white-space: nowrap;
+  padding: 8px 12px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 .dropdown-menu li:hover {
-    background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
-    color: white;
+  background: linear-gradient(
+    90deg,
+    var(--color-primary) 0%,
+    var(--color-primary-hover) 100%
+  );
+  color: white;
 }
 /* 클릭 방식으로 드롭다운 메뉴 표시 */
 .menu-item.active .dropdown-menu {
-    display: block;
+  display: block;
 }
-
 
 /**
  * 메인 콘텐츠 영역
  * 비디오 프리뷰와 하단 패널들이 위치하는 영역
  */
 .main-content {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 12px;
-    gap: 12px;
-    overflow: hidden;
-    background: var(--bg-darkest);
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 12px;
+  overflow: hidden;
+  background: var(--bg-darkest);
 }
 
 /**
@@ -152,79 +168,78 @@ body {
  * 라즈베리파이 카메라 스트림 또는 로컬 비디오를 표시하는 메인 화면
  */
 .preview-area {
-    flex-grow: 1;
-    background: linear-gradient(135deg, #000000 0%, #0a0a0a 100%);
-    border: 2px solid var(--border-color);
-    border-radius: 8px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-    position: relative;
-    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
-    min-height: 200px;
+  flex-grow: 1;
+  background: linear-gradient(135deg, #000000 0%, #0a0a0a 100%);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+  min-height: 200px;
 }
 
 /* 리사이즈 바 - 하단 패널 상단 경계 */
 .resize-bar {
-    height: 4px;
-    background: var(--border-color);
-    cursor: ns-resize;
-    position: relative;
-    flex-shrink: 0;
-    transition: background-color 0.2s;
-    z-index: 10;
+  height: 4px;
+  background: var(--border-color);
+  cursor: ns-resize;
+  position: relative;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+  z-index: 10;
 }
 
 .resize-bar:hover {
-    background: var(--color-primary);
-    height: 6px;
+  background: var(--color-primary);
+  height: 6px;
 }
 
 .resize-bar::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 40px;
-    height: 2px;
-    background: var(--text-secondary);
-    border-radius: 2px;
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 2px;
+  background: var(--text-secondary);
+  border-radius: 2px;
 }
 
 .resize-bar:hover::before {
-    background: var(--text-primary);
+  background: var(--text-primary);
 }
 #studio-mode-container {
-    display: grid;
-    width: 100%;
-    height: 100%;
+  display: grid;
+  width: 100%;
+  height: 100%;
 }
 /* 카메라 피드를 위한 비디오 태그 스타일 */
 #main-video-feed {
-    width: 100%;
-    height: 100%;
-    background-color: #000;
-    object-fit: contain; /* 비율 유지하며 채우기 */
+  width: 100%;
+  height: 100%;
+  background-color: #000;
+  object-fit: contain; /* 비율 유지하며 채우기 */
 }
-
 
 /* 3-2. 하단 독 컨테이너 */
 .docks-container.docks-hidden {
-    display: none;
+  display: none;
 }
 
 .resize-bar.docks-hidden {
-    display: none;
+  display: none;
 }
 
 .docks-container {
-    display: flex;
-    gap: 10px;
-    flex-grow: 0;
-    flex-shrink: 0;
-    min-height: 150px;
+  display: flex;
+  gap: 10px;
+  flex-grow: 0;
+  flex-shrink: 0;
+  min-height: 150px;
 }
 
 /**
@@ -232,312 +247,352 @@ body {
  * Scenes, Sources, Audio Mixer 등 모든 패널의 공통 스타일
  */
 .dock-panel {
-    background: linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-medium) 100%);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  background: linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-medium) 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .dock-header {
-    background-color: var(--bg-medium);
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-medium);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
 }
 .dock-header h3 {
-    margin: 0;
-    font-size: 0.9em;
-    font-weight: 500;
+  margin: 0;
+  font-size: 0.9em;
+  font-weight: 500;
 }
 .dock-content {
-    flex-grow: 1;
-    padding: 10px;
-    overflow-y: auto; /* 내용 많아지면 스크롤 */
+  flex-grow: 1;
+  padding: 10px;
+  overflow-y: auto; /* 내용 많아지면 스크롤 */
 }
 .dock-toolbar {
-    background-color: var(--bg-medium);
-    padding: 5px;
-    display: flex;
-    justify-content: center;
-    gap: 5px;
-    border-top: 1px solid var(--border-color);
+  background-color: var(--bg-medium);
+  padding: 5px;
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  border-top: 1px solid var(--border-color);
 }
 .dock-toolbar button {
-    background: none;
-    border: none;
-    color: var(--text-primary);
-    font-size: 1.1em;
-    cursor: pointer;
-    width: 25px;
-    padding: 4px;
-    border-radius: 3px;
-    transition: background-color 0.2s;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1.1em;
+  cursor: pointer;
+  width: 25px;
+  padding: 4px;
+  border-radius: 3px;
+  transition: background-color 0.2s;
 }
 .dock-toolbar button:hover {
-    background-color: var(--bg-light);
+  background-color: var(--bg-light);
 }
 .dock-toolbar button:active {
-    background-color: var(--color-primary);
+  background-color: var(--color-primary);
 }
 
 /* --- 개별 독 패널 크기 조정 (Flexbox) --- */
-#audio-mixer-panel { flex-basis: 30%; }
-#controls-panel { flex-basis: 20%; }
-#recordings-panel { flex-basis: 20%; }
+#audio-mixer-panel {
+  flex-basis: 25%;
+}
+#controls-panel {
+  flex-basis: 20%;
+}
+#recordings-panel {
+  flex-basis: 15%;
+}
+#sources-panel {
+  flex-basis: 25%;
+}
+#object-panel {
+  flex-basis: 15%;
+}
 
 /* 처리 전/후 비교 컨테이너 */
 #comparison-container {
-    display: none;
-    width: 100%;
-    height: 100%;
-    grid-template-columns: 1fr 1fr;
-    gap: 5px;
+  display: none;
+  width: 100%;
+  height: 100%;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
 }
 #comparison-container.active {
-    display: grid;
+  display: grid;
 }
 .comparison-video-wrapper {
-    border: 2px solid var(--border-color);
-    position: relative;
-    overflow: hidden;
+  border: 2px solid var(--border-color);
+  position: relative;
+  overflow: hidden;
 }
 .comparison-video-wrapper.processed {
-    border-color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 .comparison-label {
-    position: absolute;
-    top: 5px;
-    left: 5px;
-    background: var(--bg-dark);
-    padding: 3px 8px;
-    border-radius: 3px;
-    font-size: 0.8em;
-    z-index: 10;
-    color: var(--text-primary);
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  background: var(--bg-dark);
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-size: 0.8em;
+  z-index: 10;
+  color: var(--text-primary);
 }
 .comparison-label.processed-label {
-    background: var(--color-primary);
-    color: white;
+  background: var(--color-primary);
+  color: white;
 }
 #comparison-container video {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 /* --- 4. 하단 상태바 --- */
 .status-bar {
-    background-color: var(--bg-medium);
-    padding: 6px 12px;
-    font-size: 0.85em;
-    color: var(--text-secondary);
-    border-top: 1px solid var(--border-color);
-    display: flex;
-    justify-content: space-between;
-    flex-shrink: 0;
+  background-color: var(--bg-medium);
+  padding: 6px 12px;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  flex-shrink: 0;
 }
-.status-left span { margin-right: 20px; }
+.status-left span {
+  margin-right: 20px;
+}
 .status-left span#rec-status.recording {
-    color: var(--color-red);
-    font-weight: bold;
+  color: var(--color-red);
+  font-weight: bold;
 }
-
 
 /* --- 패널 내부 상세 스타일 --- */
 
 /* 장면(Scenes) */
-.dock-content ul { list-style: none; padding: 0; margin: 0; }
+.dock-content ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
 .dock-content li {
-    padding: 5px 8px;
-    border-radius: 3px;
+  padding: 5px 8px;
+  border-radius: 3px;
 }
 .dock-content li.active {
-    background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
-    color: white;
-    font-weight: 500;
+  background: linear-gradient(
+    90deg,
+    var(--color-primary) 0%,
+    var(--color-primary-hover) 100%
+  );
+  color: white;
+  font-weight: 500;
 }
 
 /* 오디오 믹서(Audio Mixer) */
-.audio-track { margin-bottom: 15px; }
-.track-header {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: 10px;
-    font-size: 0.9em;
-    margin-bottom: 5px;
+.audio-track {
+  margin-bottom: 15px;
 }
-.icon-button { cursor: pointer; color: var(--text-secondary); }
-.icon-button:hover { color: var(--text-primary); }
+.track-header {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  font-size: 0.9em;
+  margin-bottom: 5px;
+}
+.icon-button {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.icon-button:hover {
+  color: var(--text-primary);
+}
 .mute-btn {
-    transition: opacity 0.2s;
+  transition: opacity 0.2s;
 }
 .mute-btn:not([data-muted="true"]) {
-    opacity: 0.5; /* 음소거가 아닐 때 반투명 */
+  opacity: 0.5; /* 음소거가 아닐 때 반투명 */
 }
 
 .volume-meter {
-    background-color: #1e2124;
-    height: 12px;
-    border-radius: 3px;
-    overflow: hidden;
-    border: 1px solid #111;
+  background-color: #1e2124;
+  height: 12px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid #111;
 }
 .meter-fill {
-    background-color: var(--color-green);
-    height: 100%;
-    width: 0%; /* JS로 제어하기 위해 0으로 시작 */
-    transition: width 0.05s linear; /* 부드럽게 움직이도록 */
+  background-color: var(--color-green);
+  height: 100%;
+  width: 0%; /* JS로 제어하기 위해 0으로 시작 */
+  transition: width 0.05s linear; /* 부드럽게 움직이도록 */
 }
 .track-controls {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: center;
-    gap: 10px;
-    margin-top: 5px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
 }
 input[type="range"] {
-    width: 100%;
-    margin: 0;
+  width: 100%;
+  margin: 0;
 }
 
 /* 장면 전환(Transitions) */
 .dock-content select {
-    width: 100%;
-    background-color: var(--bg-medium);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    padding: 5px;
-    border-radius: 3px;
+  width: 100%;
+  background-color: var(--bg-medium);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 5px;
+  border-radius: 3px;
 }
 .transition-details {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: 10px;
-    align-items: center;
-    margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
 }
 
 /* 제어(Controls) */
 .dock-content .control-btn {
-    display: block;
-    width: 100%;
-    background-color: var(--color-blue);
-    border: 1px solid #555;
-    color: var(--text-primary);
-    padding: 8px;
-    border-radius: 4px;
-    text-align: center;
-    margin-bottom: 8px;
-    cursor: pointer;
+  display: block;
+  width: 100%;
+  background-color: var(--color-blue);
+  border: 1px solid #555;
+  color: var(--text-primary);
+  padding: 8px;
+  border-radius: 4px;
+  text-align: center;
+  margin-bottom: 8px;
+  cursor: pointer;
 }
 .dock-content .control-btn:hover {
-    background-color: #5a5e66;
+  background-color: #5a5e66;
 }
 /* 녹화 중일 때 버튼 스타일 */
 .dock-content .control-btn.recording {
-    background: linear-gradient(135deg, var(--color-recording) 0%, #dc2626 100%);
-    border-color: #fca5a5;
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
-    animation: pulse-recording 2s infinite;
+  background: linear-gradient(135deg, var(--color-recording) 0%, #dc2626 100%);
+  border-color: #fca5a5;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  animation: pulse-recording 2s infinite;
 }
 @keyframes pulse-recording {
-    0%, 100% { box-shadow: 0 0 12px rgba(239, 68, 68, 0.4); }
-    50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+  }
 }
 .dock-content .control-btn.recording:hover {
-    background: linear-gradient(135deg, #dc2626 0%, var(--color-recording) 100%);
+  background: linear-gradient(135deg, #dc2626 0%, var(--color-recording) 100%);
 }
-
 
 /* --- 5. 설정 모달 스타일 --- */
 .modal-overlay {
-    position: fixed; /* 화면 전체 덮기 */
-    top: 0; left: 0; width: 100%; height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: none; /* 평소엔 숨김 */
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
+  position: fixed; /* 화면 전체 덮기 */
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: none; /* 평소엔 숨김 */
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
 }
 
 /* JavaScript로 이 클래스를 추가/제거하여 모달을 켜고 끕니다 */
 .modal-overlay.visible {
-    display: flex;
+  display: flex;
 }
 
 .modal-content {
-    background-color: var(--bg-dark);
-    padding: 20px;
-    border-radius: 8px;
-    width: 600px;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+  background-color: var(--bg-dark);
+  padding: 20px;
+  border-radius: 8px;
+  width: 600px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
 }
-.modal-content h2 { margin-top: 0; }
+.modal-content h2 {
+  margin-top: 0;
+}
 .modal-content fieldset {
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    margin-bottom: 15px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-bottom: 15px;
 }
 .modal-content legend {
-    padding: 0 5px;
-    color: var(--text-secondary);
+  padding: 0 5px;
+  color: var(--text-secondary);
 }
 .setting-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
 }
 .setting-item label {
-    flex-basis: 120px;
+  flex-basis: 120px;
 }
 .setting-item select,
 .setting-item .control-btn,
-.setting-item input[type="number"] { /* input[type="number"] 추가 */
-    flex-grow: 1;
-    background-color: var(--bg-medium);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    padding: 5px;
-    border-radius: 3px;
+.setting-item input[type="number"] {
+  /* input[type="number"] 추가 */
+  flex-grow: 1;
+  background-color: var(--bg-medium);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 5px;
+  border-radius: 3px;
 }
 .setting-item .control-btn {
-    background-color: var(--color-blue);
-    cursor: pointer;
+  background-color: var(--color-blue);
+  cursor: pointer;
 }
 /* (CSS 숫자 입력 필드의 스피너 버튼 스타일링 - Webkit/Firefox) */
-.setting-item input[type=number]::-webkit-inner-spin-button, 
-.setting-item input[type=number]::-webkit-outer-spin-button { 
-    -webkit-appearance: none; 
-    margin: 0; 
+.setting-item input[type="number"]::-webkit-inner-spin-button,
+.setting-item input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
-.setting-item input[type=number] {
-    -moz-appearance: textfield;
-    appearance: none;
+.setting-item input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: none;
 }
 
-.modal-buttons { 
-    text-align: right; 
-    margin-top: 20px;
+.modal-buttons {
+  text-align: right;
+  margin-top: 20px;
 }
 .modal-buttons .control-btn {
-    background-color: var(--color-primary);
-    color: white;
-    border: 1px solid var(--color-primary-hover);
-    cursor: pointer;
-    font-weight: 500;
-    transition: background-color 0.2s, transform 0.1s;
+  background-color: var(--color-primary);
+  color: white;
+  border: 1px solid var(--color-primary-hover);
+  cursor: pointer;
+  font-weight: 500;
+  transition:
+    background-color 0.2s,
+    transform 0.1s;
 }
 .modal-buttons .control-btn:hover {
-    background-color: var(--color-primary-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  background-color: var(--color-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 .modal-buttons .control-btn:active {
-    transform: translateY(0);
+  transform: translateY(0);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -545,155 +600,156 @@ input[type="range"] {
    ═══════════════════════════════════════════════════════════ */
 
 #sources-panel .dock-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 #sources-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    min-height: 40px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 40px;
 }
 
 .source-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 8px;
-    cursor: pointer;
-    border-bottom: 1px solid var(--border-color);
-    user-select: none;
-    transition: background-color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  transition: background-color 0.15s;
 }
 .source-item:hover {
-    background-color: var(--bg-light);
+  background-color: var(--bg-light);
 }
 .source-item.selected {
-    background-color: var(--color-primary);
-    color: #fff;
+  background-color: var(--color-primary);
+  color: #fff;
 }
 .source-item.dragging {
-    opacity: 0.4;
+  opacity: 0.4;
 }
 .source-item.drag-over {
-    border-top: 2px solid var(--color-primary);
+  border-top: 2px solid var(--color-primary);
 }
 
 .src-drag {
-    cursor: grab;
-    color: var(--text-muted);
-    font-size: 1.1em;
-    flex-shrink: 0;
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 1.1em;
+  flex-shrink: 0;
 }
 .src-eye {
-    cursor: pointer;
-    flex-shrink: 0;
-    font-size: 0.95em;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.95em;
 }
 .src-label {
-    flex: 1;
-    font-size: 0.88em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  flex: 1;
+  font-size: 0.88em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .src-ai-badge {
-    display: inline-block;
-    margin-left: 5px;
-    padding: 1px 4px;
-    background-color: var(--color-ai-active);
-    color: #fff;
-    border-radius: 3px;
-    font-size: 0.75em;
-    vertical-align: middle;
+  display: inline-block;
+  margin-left: 5px;
+  padding: 1px 4px;
+  background-color: var(--color-ai-active);
+  color: #fff;
+  border-radius: 3px;
+  font-size: 0.75em;
+  vertical-align: middle;
 }
 .src-del {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 0 2px;
-    font-size: 0.85em;
-    flex-shrink: 0;
-    line-height: 1;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 0.85em;
+  flex-shrink: 0;
+  line-height: 1;
 }
 .src-del:hover {
-    color: var(--color-danger);
+  color: var(--color-danger);
 }
 
 /* 소스 추가 드롭다운 메뉴 */
 #add-source-menu {
-    position: fixed;
-    background-color: var(--bg-medium);
-    border: 1px solid var(--border-light);
-    border-radius: 4px;
-    z-index: 9999;
-    min-width: 160px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  position: fixed;
+  background-color: var(--bg-medium);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  z-index: 9999;
+  min-width: 160px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 #add-source-menu [data-add-source] {
-    padding: 8px 14px;
-    font-size: 0.88em;
-    cursor: pointer;
-    color: var(--text-primary);
-    white-space: nowrap;
+  padding: 8px 14px;
+  font-size: 0.88em;
+  cursor: pointer;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 #add-source-menu [data-add-source]:hover {
-    background-color: var(--bg-light);
+  background-color: var(--bg-light);
 }
 
 /* 소스 선택 피커 모달 */
 .src-picker-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 10px;
-    max-height: 360px;
-    overflow-y: auto;
-    padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px;
 }
 .src-picker-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    cursor: pointer;
-    text-align: center;
-    transition: background-color 0.15s, border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
 }
 .src-picker-item:hover {
-    background-color: var(--bg-light);
-    border-color: var(--color-primary);
+  background-color: var(--bg-light);
+  border-color: var(--color-primary);
 }
 .src-picker-item img {
-    width: 100%;
-    height: 80px;
-    object-fit: cover;
-    border-radius: 3px;
-    margin-bottom: 6px;
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 3px;
+  margin-bottom: 6px;
 }
 .src-picker-item p {
-    font-size: 0.8em;
-    color: var(--text-secondary);
-    margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    width: 100%;
+  font-size: 0.8em;
+  color: var(--text-secondary);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
 }
 .src-picker-ph {
-    width: 100%;
-    height: 80px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--bg-darkest);
-    border-radius: 3px;
-    font-size: 1.5em;
-    color: var(--text-muted);
-    margin-bottom: 6px;
+  width: 100%;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-darkest);
+  border-radius: 3px;
+  font-size: 1.5em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
 }
-
