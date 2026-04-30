@@ -16,7 +16,6 @@
 
 import { state, MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAY } from './state.js';
 // import { showErrorModal } from './media.js'; // [구버전] RPi 직접 연결 시 에러 모달에 사용
-import { processObjectTracking } from './tracking.js';
 import { addRpiSource, removeSource } from './sources.js';
 
 // ═══════════════════════════════════════════════════════════
@@ -161,7 +160,6 @@ function handlePiVideoFrame(frameData) {
 
         // 매 프레임마다 canvas에 그리기
         state.trackingCtx.drawImage(img, 0, 0);
-        if (state.autoTrackingEnabled) processObjectTracking();
       };
       img.src = `data:image/jpeg;base64,${frameData}`;
 
