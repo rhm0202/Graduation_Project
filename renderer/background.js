@@ -13,12 +13,7 @@ import { toggleBgRemovalForSelectedSource } from "./sources.js";
 export async function loadModel() {
   try {
     console.log("AI 모델 로딩 중");
-    state.session = await ort.InferenceSession.create(
-      "AI_models//yolo26n-seg.onnx",
-      {
-        executionProviders: ["webgpu", "webgl", "wasm"],
-      },
-    );
+    state.session = await ort.InferenceSession.create("AI_models//yolo26n-seg.onnx", { executionProviders: ["webgpu", "webgl", "wasm"], },);
     const inputs = state.session.inputNames.join(", ");
     const outputs = state.session.outputNames.join(", ");
     console.log(`AI 모델 로드 완료. 입력: [${inputs}] / 출력: [${outputs}]`);
@@ -45,14 +40,6 @@ export async function loadModel() {
   } catch (error) {
     console.error("AI 모델 로드 실패:", error);
     alert(`AI 불러오기 실패:\n${error.message}`);
-    let bar = document.getElementById("ai-debug-bar");
-    if (!bar) {
-      bar = document.createElement("div");
-      bar.id = "ai-debug-bar";
-      document.body.appendChild(bar);
-    }
-    bar.innerHTML = `❌ AI 로드 오류: ${error.message}`;
-    bar.style.backgroundColor = "rgba(255,0,0,0.7)";
   }
 }
 

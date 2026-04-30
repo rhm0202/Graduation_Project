@@ -352,9 +352,7 @@ async function _bgLoop(src) {
   // 임시 캔버스에 그려서 처리 성공 시에만 출력 캔버스에 반영합니다.
   if (!src.hiddenCanvas) {
     src.hiddenCanvas = document.createElement("canvas");
-    src.hiddenCtx = src.hiddenCanvas.getContext("2d", {
-      willReadFrequently: true,
-    });
+    src.hiddenCtx = src.hiddenCanvas.getContext("2d", { willReadFrequently: true, });
   }
   if (src.hiddenCanvas.width !== w || src.hiddenCanvas.height !== h) {
     src.hiddenCanvas.width = w;
@@ -370,24 +368,16 @@ async function _bgLoop(src) {
       tmp.width = MODEL_SIZE;
       tmp.height = MODEL_SIZE;
       tmp.getContext("2d").drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
-      const tmpData = tmp
-        .getContext("2d")
-        .getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
+      const tmpData = tmp.getContext("2d").getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
 
       const tensorData = new Float32Array(3 * MODEL_SIZE * MODEL_SIZE);
       for (let i = 0; i < MODEL_SIZE * MODEL_SIZE; i++) {
         tensorData[i] = tmpData.data[i * 4] / 255;
         tensorData[MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 1] / 255;
-        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] =
-          tmpData.data[i * 4 + 2] / 255;
+        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 2] / 255;
       }
 
-      const inputTensor = new ort.Tensor("float32", tensorData, [
-        1,
-        3,
-        MODEL_SIZE,
-        MODEL_SIZE,
-      ]);
+      const inputTensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE,]);
       const feeds = { [state.session.inputNames[0]]: inputTensor };
       const results = await state.session.run(feeds);
 
@@ -459,20 +449,6 @@ async function _bgLoop(src) {
 
       const bestProb = bestScore;
 
-      // 화면 상단 바에 진단 정보 표시 (30프레임마다)
-      if (!window._diagFrame) window._diagFrame = 0;
-      if (window._diagFrame++ % 30 === 0) {
-        const bar = document.getElementById("ai-debug-bar");
-        if (bar) {
-          bar.innerHTML =
-            `[NMS 모델] bestAnc=${bestAnc} | prob=${bestProb.toFixed(3)} | ` +
-            (bestAnc >= 0
-              ? `box:[${Math.round(bestBox.x1)}, ${Math.round(bestBox.y1)} ~ ${Math.round(bestBox.x2)}, ${Math.round(bestBox.y2)}]`
-              : "") +
-            ` → ${bestProb > 0.5 ? "✅감지" : "❌미감지"}`;
-        }
-      }
-
       if (window._deepDiagDone) window._deepDiagDone = false;
 
       // 확률이 50% 이상이고 유효한 사람이 감지되었을 때만 마스크 적용
@@ -511,13 +487,7 @@ async function _bgLoop(src) {
             const mx = Math.floor((x / imgW) * 160);
             const my = Math.floor((y / imgH) * 160);
 
-            if (
-              mx < bx1 ||
-              mx > bx2 ||
-              my < by1 ||
-              my > by2 ||
-              mask160[my * 160 + mx] < 0.75
-            ) {
+            if (mx < bx1 || mx > bx2 || my < by1 || my > by2 || mask160[my * 160 + mx] < 0.75) {
               imageData.data[(y * imgW + x) * 4 + 3] = 0;
             }
           }
@@ -586,7 +556,7 @@ function _createVideoEl(stream) {
   v.autoplay = true;
   v.muted = true;
   v.playsInline = true;
-  v.play().catch(() => {});
+  v.play().catch(() => { });
   return v;
 }
 
