@@ -449,20 +449,6 @@ async function _bgLoop(src) {
 
       const bestProb = bestScore;
 
-      // 화면 상단 바에 진단 정보 표시 (30프레임마다)
-      if (!window._diagFrame) window._diagFrame = 0;
-      if (window._diagFrame++ % 30 === 0) {
-        const bar = document.getElementById("ai-debug-bar");
-        if (bar) {
-          bar.innerHTML =
-            `[NMS 모델] bestAnc=${bestAnc} | prob=${bestProb.toFixed(3)} | ` +
-            (bestAnc >= 0
-              ? `box:[${Math.round(bestBox.x1)}, ${Math.round(bestBox.y1)} ~ ${Math.round(bestBox.x2)}, ${Math.round(bestBox.y2)}]`
-              : "") +
-            ` → ${bestProb > 0.5 ? "✅감지" : "❌미감지"}`;
-        }
-      }
-
       if (window._deepDiagDone) window._deepDiagDone = false;
 
       // 확률이 50% 이상이고 유효한 사람이 감지되었을 때만 마스크 적용
