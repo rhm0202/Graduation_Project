@@ -135,7 +135,19 @@ export function updateVideoDisplay() {
     );
     const originalVideo = document.getElementById("original-video");
     const processedVideo = document.getElementById("processed-video");
-    if (originalVideo) originalVideo.srcObject = selected?.stream ?? stream;
+    if (originalVideo) {
+      if (selected?.stream) {
+        originalVideo.srcObject = selected.stream;
+      } else if (selected?.videoEl instanceof HTMLCanvasElement) {
+        // RPi 소스는 stream 없이 캔버스에 직접 그리므로 captureStream으로 원본 표시
+        if (!selected._displayStream) {
+          selected._displayStream = selected.videoEl.captureStream(30);
+        }
+        originalVideo.srcObject = selected._displayStream;
+      } else {
+        originalVideo.srcObject = stream;
+      }
+    }
     if (processedVideo) processedVideo.srcObject = stream;
   } else {
     comparisonContainer?.classList.remove("active");

@@ -14,6 +14,7 @@
  * state.sources[last] = 최하단 레이어 (처음에 그려짐)
  */
 import { state, isElectron } from "./state.js";
+import { sendObjectCoords } from "./rpi.js";
 
 // ─────────────────────────────────────────────────────────
 // 마스터 캔버스
@@ -51,20 +52,33 @@ function _startCompositing() {
   requestAnimationFrame(loop);
 }
 
+function _drawLetterboxed(ctx, img, canvasW, canvasH) {
+  const srcW = img.videoWidth ?? img.width ?? canvasW;
+  const srcH = img.videoHeight ?? img.height ?? canvasH;
+  if (srcW === 0 || srcH === 0) return;
+  const scale = Math.min(canvasW / srcW, canvasH / srcH);
+  const dw = srcW * scale;
+  const dh = srcH * scale;
+  const dx = (canvasW - dw) / 2;
+  const dy = (canvasH - dh) / 2;
+  ctx.drawImage(img, dx, dy, dw, dh);
+}
+
 function _compositeFrame() {
   if (!state.masterCtx) return;
   const ctx = state.masterCtx;
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
   const src = state.sources.find((s) => s.id === state.selectedSourceId);
   if (!src || !src.visible) return;
 
   if (src.bgRemoval && src.bgCanvas && src.bgCanvas.width > 0) {
-    ctx.drawImage(src.bgCanvas, 0, 0, CANVAS_W, CANVAS_H);
+    _drawLetterboxed(ctx, src.bgCanvas, CANVAS_W, CANVAS_H);
   } else {
     const vid = src.videoEl;
     if (!vid || vid.readyState < 2) return;
-    ctx.drawImage(vid, 0, 0, CANVAS_W, CANVAS_H);
+    _drawLetterboxed(ctx, vid, CANVAS_W, CANVAS_H);
   }
 }
 
@@ -191,17 +205,16 @@ export async function addWindowSource(sourceId, label) {
 }
 
 /**
- * RPi 소스를 추가합니다. state.piVideoStream이 있어야 합니다.
+ * RPi 소스를 추가합니다. state.trackingCanvas가 있어야 합니다.
  */
 export function addRpiSource() {
-  if (!state.piVideoStream) return null;
+  if (!state.trackingCanvas) return null;
   if (state.sources.find((s) => s.type === "rpi")) return null; // 중복 방지
 
   const src = _makeSource({
     type: "rpi",
     label: "RPi 카메라",
-    stream: state.piVideoStream,
-    videoEl: _createVideoEl(state.piVideoStream),
+    videoEl: state.trackingCanvas,
   });
   state.sources.unshift(src); // 최상단 레이어
   if (!state.selectedSourceId) state.selectedSourceId = src.id;
@@ -338,9 +351,7 @@ async function _bgLoop(src) {
   // 임시 캔버스에 그려서 처리 성공 시에만 출력 캔버스에 반영합니다.
   if (!src.hiddenCanvas) {
     src.hiddenCanvas = document.createElement("canvas");
-    src.hiddenCtx = src.hiddenCanvas.getContext("2d", {
-      willReadFrequently: true,
-    });
+    src.hiddenCtx = src.hiddenCanvas.getContext("2d", { willReadFrequently: true, });
   }
   if (src.hiddenCanvas.width !== w || src.hiddenCanvas.height !== h) {
     src.hiddenCanvas.width = w;
@@ -351,24 +362,23 @@ async function _bgLoop(src) {
   if (state.session && !state.sessionBusy) {
     try {
       state.sessionBusy = true;
-      const M = 512;
+      const MODEL_SIZE = 640;
       const tmp = document.createElement("canvas");
-      tmp.width = M;
-      tmp.height = M;
-      tmp.getContext("2d").drawImage(vid, 0, 0, M, M);
-      const imgData = tmp.getContext("2d").getImageData(0, 0, M, M);
+      tmp.width = MODEL_SIZE;
+      tmp.height = MODEL_SIZE;
+      tmp.getContext("2d").drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
+      const tmpData = tmp.getContext("2d").getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
 
-      const td = new Float32Array(3 * M * M);
-      for (let i = 0; i < M * M; i++) {
-        td[i] = imgData.data[i * 4] / 255;
-        td[M * M + i] = imgData.data[i * 4 + 1] / 255;
-        td[2 * M * M + i] = imgData.data[i * 4 + 2] / 255;
+      const tensorData = new Float32Array(3 * MODEL_SIZE * MODEL_SIZE);
+      for (let i = 0; i < MODEL_SIZE * MODEL_SIZE; i++) {
+        tensorData[i] = tmpData.data[i * 4] / 255;
+        tensorData[MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 1] / 255;
+        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 2] / 255;
       }
-      const tensor = new ort.Tensor("float32", td, [1, 3, M, M]);
-      const result = await state.session.run({
-        [state.session.inputNames[0]]: tensor,
-      });
-      const mask = result[state.session.outputNames[0]].data;
+
+      const inputTensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE,]);
+      const feeds = { [state.session.inputNames[0]]: inputTensor };
+      const results = await state.session.run(feeds);
 
       // 추론 대기 중 소스가 변경되어 bgRemoval이 중단된 경우 조기 종료
       if (!src.bgRemoval || !src.bgCtx) {
@@ -377,11 +387,114 @@ async function _bgLoop(src) {
       }
 
       const frame = src.hiddenCtx.getImageData(0, 0, w, h);
-      for (let py = 0; py < h; py++) {
-        for (let px = 0; px < w; px++) {
-          const mx = Math.floor((px / w) * M);
-          const my = Math.floor((py / h) * M);
-          if (mask[my * M + mx] < 0.5) frame.data[(py * w + px) * 4 + 3] = 0;
+      const imageData = frame;
+
+      // ── 기본 모델 출력 파싱 (출력 형태 [1, 300, 38] 고정) ──────────────
+      const out0Tensor = results[state.session.outputNames[0]];
+      const out1Tensor = results[state.session.outputNames[1]];
+      const output0 = out0Tensor.data;
+      const protos = out1Tensor.data;
+
+      const NUM_ANCHORS = 300;
+      const NUM_CHANNELS = 38;
+
+      const SCORE_CH = 4;
+      const COEFF_START = 6;
+
+      // 1. 감지된 "사람(classId=0)" 앵커들을 모두 수집
+      let people = [];
+      for (let a = 0; a < NUM_ANCHORS; a++) {
+        const score = output0[a * NUM_CHANNELS + SCORE_CH];
+        const classId = output0[a * NUM_CHANNELS + 5];
+
+        if (classId === 0 && score > 0.55) {
+          people.push({
+            anc: a,
+            score: score,
+            box: {
+              x1: output0[a * NUM_CHANNELS + 0],
+              y1: output0[a * NUM_CHANNELS + 1],
+              x2: output0[a * NUM_CHANNELS + 2],
+              y2: output0[a * NUM_CHANNELS + 3],
+            },
+          });
+        }
+      }
+
+      // ★ 핵심: 점수가 아니라 "화면 왼쪽부터 오른쪽 순서"로 사람들에게 번호를 매깁니다.
+      people.sort((a, b) => a.box.x1 - b.box.x1);
+
+      // Object Panel 목록 갱신 (감지된 인원 수가 바뀔 때만)
+      if (people.length !== state.detectedPeopleCount) {
+        state.detectedPeopleCount = people.length;
+        renderObjectList(people.length);
+      }
+
+      const TARGET_INDEX = state.targetPersonIndex;
+
+      let bestScore = -Infinity;
+      let bestAnc = -1;
+      let bestBox = null;
+
+      if (people.length > TARGET_INDEX) {
+        bestScore = people[TARGET_INDEX].score;
+        bestAnc = people[TARGET_INDEX].anc;
+        bestBox = people[TARGET_INDEX].box;
+      } else if (people.length > 0) {
+        bestScore = people[0].score;
+        bestAnc = people[0].anc;
+        bestBox = people[0].box;
+      }
+
+      const bestProb = bestScore;
+
+      if (window._deepDiagDone) window._deepDiagDone = false;
+
+      // 확률이 50% 이상이고 유효한 사람이 감지되었을 때만 마스크 적용
+      if (bestProb > 0.5 && bestAnc >= 0) {
+        if (state.autoTrackingEnabled) {
+          const obj_x = ((bestBox.x1 + bestBox.x2) / 2) * (w / 640);
+          const obj_y = ((bestBox.y1 + bestBox.y2) / 2) * (h / 640);
+          sendObjectCoords(obj_x, obj_y);
+        }
+
+        const bestCoeffs = new Float32Array(32);
+        for (let c = 0; c < 32; c++) {
+          bestCoeffs[c] = output0[bestAnc * NUM_CHANNELS + COEFF_START + c];
+        }
+
+        const mask160 = new Float32Array(160 * 160);
+        for (let p = 0; p < 160 * 160; p++) {
+          let sum = 0;
+          for (let c = 0; c < 32; c++) {
+            sum += bestCoeffs[c] * protos[c * 160 * 160 + p];
+          }
+          mask160[p] = 1 / (1 + Math.exp(-sum)); // sigmoid
+        }
+
+        // 박스 좌표를 160x160 마스크 스케일로 변환
+        const bx1 = Math.floor(bestBox.x1 * (160 / 640));
+        const by1 = Math.floor(bestBox.y1 * (160 / 640));
+        const bx2 = Math.ceil(bestBox.x2 * (160 / 640));
+        const by2 = Math.ceil(bestBox.y2 * (160 / 640));
+
+        const imgW = imageData.width;
+        const imgH = imageData.height;
+
+        for (let y = 0; y < imgH; y++) {
+          for (let x = 0; x < imgW; x++) {
+            const mx = Math.floor((x / imgW) * 160);
+            const my = Math.floor((y / imgH) * 160);
+
+            if (mx < bx1 || mx > bx2 || my < by1 || my > by2 || mask160[my * 160 + mx] < 0.75) {
+              imageData.data[(y * imgW + x) * 4 + 3] = 0;
+            }
+          }
+        }
+      } else {
+        const total = imageData.width * imageData.height;
+        for (let i = 0; i < total; i++) {
+          imageData.data[i * 4 + 3] = 0;
         }
       }
 
@@ -442,7 +555,7 @@ function _createVideoEl(stream) {
   v.autoplay = true;
   v.muted = true;
   v.playsInline = true;
-  v.play().catch(() => {});
+  v.play().catch(() => { });
   return v;
 }
 
@@ -452,6 +565,39 @@ function _cleanupSource(src) {
     src.stream.getTracks().forEach((t) => t.stop());
   src.videoEl = null;
   src.stream = null;
+}
+
+// ─────────────────────────────────────────────────────────
+// Object Panel 목록 UI 렌더링
+// ─────────────────────────────────────────────────────────
+
+function renderObjectList(count) {
+  const list = document.getElementById("object-list");
+  if (!list) return;
+  list.innerHTML = "";
+
+  if (count === 0) {
+    const li = document.createElement("li");
+    li.className = "object-item object-item-empty";
+    li.textContent = "감지된 사람 없음";
+    list.appendChild(li);
+    return;
+  }
+
+  for (let i = 0; i < count; i++) {
+    const li = document.createElement("li");
+    li.className =
+      "object-item" + (i === state.targetPersonIndex ? " selected" : "");
+    li.textContent = `사람 ${i + 1}`;
+    li.addEventListener("click", () => {
+      if (state.targetPersonIndex === i) return;
+      state.targetPersonIndex = i;
+      list
+        .querySelectorAll(".object-item")
+        .forEach((el, idx) => el.classList.toggle("selected", idx === i));
+    });
+    list.appendChild(li);
+  }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -590,7 +736,7 @@ async function _handleAddType(type) {
         alert("먼저 RPi를 연결하세요. (설정 모달 → 연결)");
         return;
       }
-      if (!state.piVideoStream) {
+      if (!state.trackingCanvas) {
         alert("RPi 영상 수신 대기 중입니다. 잠시 후 다시 시도하세요.");
         return;
       }
