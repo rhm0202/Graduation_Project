@@ -49,6 +49,7 @@ export const state = {
   bgColor: null,               // 배경 제거 후 적용할 단색 (hex)
 
   // 객체 추적
+  objectTrackingEnabled: false,
   autoTrackingEnabled: false,
   yoloModel: null,
   trackingCanvas: null,
