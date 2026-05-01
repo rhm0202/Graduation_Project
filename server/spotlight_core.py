@@ -14,15 +14,16 @@ logger = get_logger("spotlight_core")
 # ==========================================
 # 전역 변수 (main()에서 초기화)
 # ==========================================
-output_frame = None              # RPi에서 수신한 최신 프레임
-lock: asyncio.Lock = None        # output_frame 동시 접근 방지
-pi_outbound_queue: asyncio.Queue = None      # PC → RPi 전송 대기열
-pi_to_desktop_queue: asyncio.Queue = None    # RPi → Electron 메시지 전달 대기열
+output_frame = None  # RPi에서 수신한 최신 프레임
+lock: asyncio.Lock = None  # output_frame 동시 접근 방지
+pi_outbound_queue: asyncio.Queue = None  # PC → RPi 전송 대기열
+pi_to_desktop_queue: asyncio.Queue = None  # RPi → Electron 메시지 전달 대기열
 motor_corrected_event: asyncio.Event = None  # RPi 보정 완료 신호
-tracking_state = "off"           # 추적 기능 활성화 상태 (Electron 앱에서 설정)
+tracking_state = "off"  # 추적 기능 활성화 상태 (Electron 앱에서 설정)
 _correction_in_progress = False  # 보정 중 중복 요청 방지 플래그
 
 correction_calc: CorrectionCalculator = None  # 보정값 계산기
+
 
 # ==========================================
 # 공용 API
@@ -30,6 +31,7 @@ correction_calc: CorrectionCalculator = None  # 보정값 계산기
 async def send_to_pi(data_dict):
     """PC → RPi로 데이터를 보낼 때 호출. 전송 대기열에 추가됨."""
     await pi_outbound_queue.put(data_dict)
+
 
 # ==========================================
 # 객체 추적 보정 로직
@@ -55,21 +57,29 @@ async def process_object_detected(obj_x: float, obj_y: float):
 
     _correction_in_progress = True
     try:
-        logger.debug(f"객체 좌표 수신 — obj_x: {obj_x:.1f}, obj_y: {obj_y:.1f} (중심: {correction_calc.center_x}, {correction_calc.center_y})")
+        logger.debug(
+            f"객체 좌표 수신 — obj_x: {obj_x:.1f}, obj_y: {obj_y:.1f} (중심: {correction_calc.center_x}, {correction_calc.center_y})"
+        )
         correction = correction_calc.calc(obj_x, obj_y)
         if correction is None:
-            logger.debug(f"보정 불필요 — 객체가 중앙 근처 (obj_x={obj_x:.1f}, obj_y={obj_y:.1f})")
+            logger.debug(
+                f"보정 불필요 — 객체가 중앙 근처 (obj_x={obj_x:.1f}, obj_y={obj_y:.1f})"
+            )
             return
 
         pan, tilt = correction
-        logger.info(f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f} | dx: {obj_x - correction_calc.center_x:.1f}, dy: {obj_y - correction_calc.center_y:.1f}")
+        logger.info(
+            f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f} | dx: {obj_x - correction_calc.center_x:.1f}, dy: {obj_y - correction_calc.center_y:.1f}"
+        )
 
         motor_corrected_event.clear()
-        await send_to_pi({
-            "tracking": "on",
-            "control": {"pan": -pan, "tilt": tilt},
-            "status": "tracking",
-        })
+        await send_to_pi(
+            {
+                "tracking": "on",
+                "control": {"pan": pan, "tilt": tilt},
+                "status": "tracking",
+            }
+        )
 
         try:
             await asyncio.wait_for(motor_corrected_event.wait(), timeout=3.0)
@@ -78,6 +88,7 @@ async def process_object_detected(obj_x: float, obj_y: float):
             logger.warning("모터 보정 완료 응답 타임아웃 — 다음 프레임에서 재시도")
     finally:
         _correction_in_progress = False
+
 
 # ==========================================
 # 1. RPi 통신
@@ -91,6 +102,7 @@ async def pi_sender_task(websocket):
             logger.debug(f"RPi 전송: {data}")
         except Exception as e:
             logger.error(f"RPi 전송 실패: {e}")
+
 
 async def receive_from_pi():
     """RPi에 접속해 영상을 수신하고, 제어 명령을 역방향으로 송신하는 메인 루프.
@@ -137,6 +149,7 @@ async def receive_from_pi():
             logger.error(f"RPi 연결 오류: {e} — 3초 후 재접속 시도")
             await asyncio.sleep(3)
 
+
 # ==========================================
 # 2. Electron 앱 통신
 # ==========================================
@@ -164,6 +177,7 @@ async def desktop_sender_task(websocket):
     except websockets.exceptions.ConnectionClosed:
         pass
 
+
 async def ws_handler(websocket):
     """Electron 앱 접속 시 호출. 영상 송신과 제어 수신을 동시 처리."""
     global tracking_state
@@ -177,6 +191,8 @@ async def ws_handler(websocket):
 
                 if "tracking" in data:
                     tracking_state = data["tracking"]
+                    if tracking_state == "on":
+                        correction_calc.reset()
                     status = "searching" if tracking_state == "on" else "lost"
                     await send_to_pi({"tracking": tracking_state, "status": status})
                     logger.debug(f"추적 상태 변경: {tracking_state}")
@@ -194,11 +210,13 @@ async def ws_handler(websocket):
         logger.info("Desktop App 연결 해제됨")
         sender.cancel()
 
+
 async def start_desktop_server():
     """Electron 앱의 접속을 대기하는 WebSocket 서버."""
     logger.info(f"Desktop App WebSocket 서버 시작: ws://0.0.0.0:{WS_PORT}")
     async with websockets.serve(ws_handler, "0.0.0.0", WS_PORT):
         await asyncio.Future()
+
 
 # ==========================================
 # 진입점
@@ -215,10 +233,11 @@ async def main():
     yolo_bridge.register(process_object_detected, asyncio.get_event_loop())
 
     receiver_task = asyncio.create_task(receive_from_pi())
-    server_task   = asyncio.create_task(start_desktop_server())
+    server_task = asyncio.create_task(start_desktop_server())
     await asyncio.gather(receiver_task, server_task)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
