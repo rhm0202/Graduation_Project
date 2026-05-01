@@ -55,6 +55,5 @@ def get_logger(name: str) -> logging.Logger:
     console_handler.setFormatter(formatter)
 
     logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
 
     return logger
