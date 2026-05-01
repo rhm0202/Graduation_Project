@@ -208,17 +208,16 @@ export async function addWindowSource(sourceId, label) {
 }
 
 /**
- * RPi 소스를 추가합니다. state.piVideoStream이 있어야 합니다.
+ * RPi 소스를 추가합니다. state.trackingCanvas가 있어야 합니다.
  */
 export function addRpiSource() {
-  if (!state.piVideoStream) return null;
+  if (!state.trackingCanvas) return null;
   if (state.sources.find((s) => s.type === "rpi")) return null; // 중복 방지
 
   const src = _makeSource({
     type: "rpi",
     label: "RPi 카메라",
-    stream: state.piVideoStream,
-    videoEl: _createVideoEl(state.piVideoStream),
+    videoEl: state.trackingCanvas,
   });
   state.sources.unshift(src); // 최상단 레이어
   if (!state.selectedSourceId) state.selectedSourceId = src.id;
@@ -763,7 +762,7 @@ async function _handleAddType(type) {
         alert("먼저 RPi를 연결하세요. (설정 모달 → 연결)");
         return;
       }
-      if (!state.piVideoStream) {
+      if (!state.trackingCanvas) {
         alert("RPi 영상 수신 대기 중입니다. 잠시 후 다시 시도하세요.");
         return;
       }

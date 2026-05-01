@@ -37,10 +37,10 @@ export function connectToSpotlightCore() {
     };
 
     state.piWebSocket.onmessage = (event) => {
-      try {
-        handlePiMessage(JSON.parse(event.data));
-      } catch {
+      if (event.data instanceof Blob) {
         handlePiVideoFrame(event.data);
+      } else {
+        handlePiMessage(JSON.parse(event.data));
       }
     };
 
@@ -143,53 +143,35 @@ function handlePiVideoFrame(frameData) {
     if (typeof frameData === 'string') {
       const img = new Image();
       img.onload = () => {
-        // 최초 1회만 canvas/stream 초기화
         if (!state.trackingCanvas) {
           state.trackingCanvas = document.createElement('canvas');
           state.trackingCanvas.width = img.width;
           state.trackingCanvas.height = img.height;
           state.trackingCtx = state.trackingCanvas.getContext('2d');
-
-          const stream = state.trackingCanvas.captureStream(60);
-          state.mediaStream?.getAudioTracks().forEach(t => stream.addTrack(t));
-          state.piVideoStream = stream;
-
-          // Sources 패널에 RPi 소스 자동 추가
+          state.piVideoStream = state.trackingCanvas;
           addRpiSource();
         }
-
-        // 매 프레임마다 canvas에 그리기
         state.trackingCtx.drawImage(img, 0, 0);
       };
       img.src = `data:image/jpeg;base64,${frameData}`;
 
     } else if (frameData instanceof Blob) {
-      const tempVideo = document.createElement('video');
-      tempVideo.src = URL.createObjectURL(frameData);
-      tempVideo.autoplay = true;
-      tempVideo.muted = true;
-      tempVideo.playsInline = true;
-
-      tempVideo.addEventListener('loadedmetadata', () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = tempVideo.videoWidth;
-        canvas.height = tempVideo.videoHeight;
-        const ctx = canvas.getContext('2d');
-
-        const drawFrame = () => {
-          if (tempVideo.readyState >= 2) {
-            ctx.drawImage(tempVideo, 0, 0);
-            if (!state.piVideoStream) {
-              const stream = canvas.captureStream(30);
-              state.piVideoStream = stream;
-              addRpiSource();
-            }
-          } else {
-            requestAnimationFrame(drawFrame);
-          }
-        };
-        drawFrame();
-      });
+      const url = URL.createObjectURL(frameData);
+      const img = new Image();
+      img.onload = () => {
+        if (!state.trackingCanvas) {
+          state.trackingCanvas = document.createElement('canvas');
+          state.trackingCanvas.width = img.width;
+          state.trackingCanvas.height = img.height;
+          state.trackingCtx = state.trackingCanvas.getContext('2d');
+          state.piVideoStream = state.trackingCanvas;
+          addRpiSource();
+        }
+        state.trackingCtx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = () => URL.revokeObjectURL(url);
+      img.src = url;
     }
   } catch (error) {
     console.error('비디오 프레임 처리 오류:', error);
