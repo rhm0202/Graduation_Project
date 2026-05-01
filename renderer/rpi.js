@@ -106,7 +106,70 @@ export function setupPiConnectionUI() {
   const disconnectBtn = document.getElementById('disconnect-pi-btn');
   connectBtn?.addEventListener('click', () => connectToSpotlightCore());
   disconnectBtn?.addEventListener('click', disconnectFromSpotlightCore);
+
+  document.getElementById('rpi-ssh-start-btn')?.addEventListener('click', remoteStartRpi);
+  document.getElementById('rpi-ssh-stop-btn')?.addEventListener('click', remoteStopRpi);
+
   updatePiConnectionStatus(false);
+}
+
+function _getSshParams() {
+  const ip = document.getElementById('raspberry-pi-ip')?.value.trim();
+  const username = document.getElementById('rpi-ssh-user')?.value.trim() || 'pi';
+  const password = document.getElementById('rpi-ssh-password')?.value;
+  const scriptPath = document.getElementById('rpi-script-path')?.value.trim() || '~/spotlight_core.py';
+  return { ip, username, password, scriptPath };
+}
+
+function _setSshStatus(msg, isError = false) {
+  const el = document.getElementById('rpi-ssh-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--color-danger)' : 'var(--color-success)';
+}
+
+async function remoteStartRpi() {
+  const { ip, username, password, scriptPath } = _getSshParams();
+  if (!ip) { alert('IP 주소를 입력하세요.'); return; }
+  if (!password) { alert('SSH 비밀번호를 입력하세요.'); return; }
+
+  _setSshStatus('서버 시작 중...', false);
+  document.getElementById('rpi-ssh-start-btn').disabled = true;
+
+  try {
+    const result = await window.electronAPI.invoke('ssh-exec-rpi', { ip, username, password, scriptPath });
+    if (result.success) {
+      _setSshStatus('서버 시작됨');
+    } else {
+      _setSshStatus(`실패: ${result.error}`, true);
+    }
+  } catch (e) {
+    _setSshStatus(`오류: ${e.message}`, true);
+  } finally {
+    document.getElementById('rpi-ssh-start-btn').disabled = false;
+  }
+}
+
+async function remoteStopRpi() {
+  const { ip, username, password, scriptPath } = _getSshParams();
+  if (!ip) { alert('IP 주소를 입력하세요.'); return; }
+  if (!password) { alert('SSH 비밀번호를 입력하세요.'); return; }
+
+  _setSshStatus('서버 중지 중...', false);
+  document.getElementById('rpi-ssh-stop-btn').disabled = true;
+
+  try {
+    const result = await window.electronAPI.invoke('ssh-stop-rpi', { ip, username, password, scriptPath });
+    if (result.success) {
+      _setSshStatus('서버 중지됨');
+    } else {
+      _setSshStatus(`실패: ${result.error}`, true);
+    }
+  } catch (e) {
+    _setSshStatus(`오류: ${e.message}`, true);
+  } finally {
+    document.getElementById('rpi-ssh-stop-btn').disabled = false;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════

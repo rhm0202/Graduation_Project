@@ -11,6 +11,7 @@ const fs = require("fs");
 const https = require("https");
 const http = require("http");
 const { exec } = require("child_process");
+const { Client: SshClient } = require("ssh2");
 
 //webGPU 가속 활성화
 app.commandLine.appendSwitch("enable-unsafe-webgpu");
@@ -330,6 +331,69 @@ ipcMain.handle("disconnect-rpi", () => {
     rpiSocket = null;
   }
   return { success: true };
+});
+
+/**
+ * SSH로 RPi 서버 파일을 원격 실행합니다.
+ * 접속 후 백그라운드로 실행하고 SSH 연결은 즉시 종료합니다.
+ */
+ipcMain.handle("ssh-exec-rpi", (_event, { ip, username, password, scriptPath }) => {
+  return new Promise((resolve) => {
+    const conn = new SshClient();
+
+    conn.on("ready", () => {
+      const cmd = `nohup python3 ${scriptPath} > /tmp/spotlight.log 2>&1 &`;
+      conn.exec(cmd, (err, stream) => {
+        if (err) {
+          conn.end();
+          return resolve({ success: false, error: err.message });
+        }
+        stream.on("close", () => {
+          conn.end();
+          resolve({ success: true });
+        });
+        stream.on("data", () => {});
+        stream.stderr.on("data", () => {});
+      });
+    });
+
+    conn.on("error", (err) => {
+      resolve({ success: false, error: err.message });
+    });
+
+    conn.connect({ host: ip, port: 22, username, password, readyTimeout: 8000 });
+  });
+});
+
+/**
+ * SSH로 RPi 서버 프로세스를 종료합니다.
+ */
+ipcMain.handle("ssh-stop-rpi", (_event, { ip, username, password, scriptPath }) => {
+  return new Promise((resolve) => {
+    const conn = new SshClient();
+    const scriptName = scriptPath.split("/").pop();
+
+    conn.on("ready", () => {
+      conn.exec(`pkill -f ${scriptName}`, (err, stream) => {
+        if (err) {
+          conn.end();
+          return resolve({ success: false, error: err.message });
+        }
+        stream.on("close", () => {
+          conn.end();
+          resolve({ success: true });
+        });
+        stream.on("data", () => {});
+        stream.stderr.on("data", () => {});
+      });
+    });
+
+    conn.on("error", (err) => {
+      resolve({ success: false, error: err.message });
+    });
+
+    conn.connect({ host: ip, port: 22, username, password, readyTimeout: 8000 });
+  });
 });
 
 ipcMain.on("send-control", (event, { pan, tilt }) => {

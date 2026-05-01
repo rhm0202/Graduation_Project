@@ -18,7 +18,7 @@ module.exports = {
       /^\/.*\.md$/,
       /^\/forge\.config\.js$/,
     ],
-    icon: "./assets/icon.ico",
+    icon: "assets\\icon.ico",
   },
   rebuildConfig: {},
   makers: [
@@ -27,7 +27,7 @@ module.exports = {
       config: {
         name: "Spotlight_Cam_V3.1.0",
         setupExe: "Spotlight_Cam-Setup.exe",
-        setupIcon: "./assets/icon.ico",
+        setupIcon: "assets\\icon.ico",
         // loadingGif: './assets/loading.gif', // 선택사항
       },
     },

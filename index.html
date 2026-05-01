@@ -259,7 +259,7 @@
         <fieldset>
           <legend>라즈베리파이 연결</legend>
           <div class="setting-item">
-            <label for="raspberry-pi-ip">라즈베리파이 IP 주소:</label>
+            <label for="raspberry-pi-ip">IP 주소:</label>
             <div style="display: flex; gap: 5px; flex-grow: 1">
               <input
                 type="text"
@@ -292,6 +292,67 @@
                   font-size: 0.9em;
                 "
               />
+            </div>
+          </div>
+          <div class="setting-item">
+            <label for="rpi-ssh-user">SSH 사용자명:</label>
+            <input
+              type="text"
+              id="rpi-ssh-user"
+              placeholder="pi"
+              value="pi"
+              style="
+                flex-grow: 1;
+                background-color: var(--bg-medium);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 5px;
+                border-radius: 3px;
+                font-size: 0.9em;
+              "
+            />
+          </div>
+          <div class="setting-item">
+            <label for="rpi-ssh-password">SSH 비밀번호:</label>
+            <input
+              type="password"
+              id="rpi-ssh-password"
+              placeholder="비밀번호"
+              style="
+                flex-grow: 1;
+                background-color: var(--bg-medium);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 5px;
+                border-radius: 3px;
+                font-size: 0.9em;
+              "
+            />
+          </div>
+          <div class="setting-item">
+            <label for="rpi-script-path">스크립트 경로:</label>
+            <input
+              type="text"
+              id="rpi-script-path"
+              placeholder="~/spotlight_core.py"
+              value="~/spotlight_core.py"
+              style="
+                flex-grow: 1;
+                background-color: var(--bg-medium);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 5px;
+                border-radius: 3px;
+                font-size: 0.9em;
+              "
+            />
+          </div>
+          <div class="setting-item">
+            <label>원격 실행:</label>
+            <div style="display: flex; gap: 5px; flex-grow: 1">
+              <button class="control-btn" id="rpi-ssh-start-btn">서버 시작</button>
+              <button class="control-btn" id="rpi-ssh-stop-btn">서버 중지</button>
+              <span id="rpi-ssh-status" style="font-size: 0.85em; color: var(--text-secondary); align-self: center;"></span>
             </div>
           </div>
           <div class="setting-item">

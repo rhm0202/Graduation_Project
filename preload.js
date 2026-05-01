@@ -40,7 +40,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'show-recordings',
       'check-for-updates',
       'get-gpu-list',
-      'get-desktop-sources'
+      'get-desktop-sources',
+      'ssh-exec-rpi',
+      'ssh-stop-rpi'
     ];
     if (validChannels.includes(channel)) {
       return ipcRenderer.invoke(channel, ...args);
