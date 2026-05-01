@@ -1,9 +1,17 @@
 /**
  * BoT-SORT JS Implementation
  * Combines Bounding Box IoU + Kalman Filter with OSNet ReID Features
+ *
+ * 개선사항:
+ * - 2단계 매칭 (확정 트랙 → 미확정 트랙)
+ * - ReID 매칭 시 공간 게이트 적용 (먼 거리 ID 스왑 방지)
+ * - 트랙 확정 시스템 (최소 3회 연속 감지 후 확정)
  */
 
-// 1. Simple Constant Velocity Kalman Filter for Bounding Boxes (x, y, a, h, vx, vy, va, vh)
+// ─────────────────────────────────────────────────────────
+// Kalman Filter (Constant Velocity Model)
+// ─────────────────────────────────────────────────────────
+
 class KalmanFilter {
   constructor() {
     this.ndim = 4;
@@ -94,15 +102,13 @@ class KalmanFilter {
       }
     }
 
-    // K = P * H^T * S^-1 (Simplified pseudo-inverse or diagonal approximation for speed)
-    // For diagonal S approximation:
+    // K = P * H^T * S^-1 (diagonal approximation)
     const K = Array.from({ length: 8 }, () => new Array(4).fill(0));
     for (let i = 0; i < 8; i++) {
       for (let j = 0; j < 4; j++) {
-        // P * H^T
         let PHT = 0;
         for (let k = 0; k < 8; k++) PHT += this.P[i][k] * this.H[j][k];
-        K[i][j] = PHT / (S[j][j] + 1e-6); // Approx inversion
+        K[i][j] = PHT / (S[j][j] + 1e-6);
       }
     }
 
@@ -130,6 +136,12 @@ class KalmanFilter {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// Track
+// ─────────────────────────────────────────────────────────
+
+const MIN_HITS = 3; // 트랙이 "확정"되기 위한 최소 연속 감지 횟수
+
 class Track {
   constructor(id, box, feature) {
     this.id = id;
@@ -139,6 +151,10 @@ class Track {
     this.timeSinceUpdate = 0;
     this.hits = 1;
     this.box = box; // {x1, y1, x2, y2}
+  }
+
+  get confirmed() {
+    return this.hits >= MIN_HITS;
   }
 
   boxToZ(box) {
@@ -191,18 +207,23 @@ class Track {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// BoT-SORT Tracker
+// ─────────────────────────────────────────────────────────
+
 let trackIdCounter = 1;
 
 export class BoTSORT {
   constructor() {
     this.tracks = [];
-    this.maxAge = 30; // Max frames to keep an un-updated track
-    this.reidThreshold = 0.5; // Cosine distance threshold
-    this.iouThreshold = 0.3; // IoU distance threshold
+    this.maxAge = 50;           // 미감지 허용 프레임 수 (30→50)
+    this.reidThreshold = 0.45;  // ReID cosine distance 임계값
+    this.iouThreshold = 0.2;    // IoU 매칭 최소 임계값
+    this.maxReidCenterDist = 250; // ReID 적용 최대 중심 거리 (px, 640x640 기준)
   }
 
   async update(detections, sourceCanvas, osnetSession) {
-    // 1. Extract ReID features for all detections
+    // 1. 모든 감지 결과에 대해 ReID 특성 추출
     const detFeatures = [];
     for (let det of detections) {
       let feature = null;
@@ -212,80 +233,135 @@ export class BoTSORT {
       detFeatures.push({ ...det, feature });
     }
 
-    // 2. Predict next state for existing tracks
+    // 2. 기존 트랙의 다음 상태 예측
     for (let trk of this.tracks) {
       trk.predict();
     }
 
-    // 3. Compute cost matrix
-    const numTrk = this.tracks.length;
-    const numDet = detFeatures.length;
-    const costMatrix = Array.from({ length: numTrk }, () => new Array(numDet).fill(1e5));
+    // 3. 2단계 매칭
+    const confirmedIdx = [];
+    const unconfirmedIdx = [];
+    this.tracks.forEach((_, i) => {
+      if (this.tracks[i].confirmed) confirmedIdx.push(i);
+      else unconfirmedIdx.push(i);
+    });
+    const allDetIdx = detFeatures.map((_, i) => i);
 
-    for (let t = 0; t < numTrk; t++) {
-      for (let d = 0; d < numDet; d++) {
-        const trk = this.tracks[t];
-        const det = detFeatures[d];
-        const iouDist = 1 - this.calculateIoU(trk.box, det.box);
-        let reidDist = 1;
-        if (trk.features && det.feature) {
-          reidDist = this.cosineDistance(trk.features, det.feature);
-        }
+    // Stage 1: 확정 트랙 ↔ 전체 감지 (IoU + ReID, 공간 게이트 적용)
+    const { matches: m1, unmatchedTrks: ut1, unmatchedDets: ud1 } =
+      this._greedyMatch(confirmedIdx, allDetIdx, detFeatures, true);
 
-        // Only consider match if within thresholds
-        if (iouDist < 1 - this.iouThreshold || reidDist < this.reidThreshold) {
-          costMatrix[t][d] = 0.8 * reidDist + 0.2 * iouDist;
-        }
-      }
+    for (const [ti, di] of m1) {
+      this.tracks[ti].update(detFeatures[di].box, detFeatures[di].feature);
+      detFeatures[di].trackId = this.tracks[ti].id;
     }
 
-    // 4. Greedy matching (O(N^2 log N))
-    const matches = [];
-    const unmatchedTrks = new Set(this.tracks.map((_, i) => i));
-    const unmatchedDets = new Set(detFeatures.map((_, i) => i));
+    // Stage 2: 미확정 트랙 + Stage1 미매칭 확정 트랙 ↔ 남은 감지 (IoU만)
+    const stage2TrkIdx = [...unconfirmedIdx, ...ut1];
+    const { matches: m2, unmatchedDets: ud2 } =
+      this._greedyMatch(stage2TrkIdx, ud1, detFeatures, false);
 
-    const costList = [];
-    for (let t = 0; t < numTrk; t++) {
-      for (let d = 0; d < numDet; d++) {
-        if (costMatrix[t][d] < 1e4) {
-          costList.push({ t, d, cost: costMatrix[t][d] });
-        }
-      }
-    }
-    costList.sort((a, b) => a.cost - b.cost);
-
-    for (let { t, d, cost } of costList) {
-      if (unmatchedTrks.has(t) && unmatchedDets.has(d)) {
-        matches.push([t, d]);
-        unmatchedTrks.delete(t);
-        unmatchedDets.delete(d);
-      }
+    for (const [ti, di] of m2) {
+      this.tracks[ti].update(detFeatures[di].box, detFeatures[di].feature);
+      detFeatures[di].trackId = this.tracks[ti].id;
     }
 
-    // 5. Update matched tracks
-    for (let [t, d] of matches) {
-      this.tracks[t].update(detFeatures[d].box, detFeatures[d].feature);
-      detFeatures[d].trackId = this.tracks[t].id;
-    }
-
-    // 6. Create new tracks for unmatched detections
-    for (let d of unmatchedDets) {
+    // 4. 미매칭 감지 → 새 트랙 생성
+    for (const d of ud2) {
       const det = detFeatures[d];
-      const newTrack = new Track(trackIdCounter++, det.box, det.feature);
-      this.tracks.push(newTrack);
-      det.trackId = newTrack.id;
+      if (!det.trackId) {
+        const newTrack = new Track(trackIdCounter++, det.box, det.feature);
+        this.tracks.push(newTrack);
+        det.trackId = newTrack.id;
+      }
     }
 
-    // 7. Remove dead tracks
+    // 5. 수명 초과 트랙 제거
     this.tracks = this.tracks.filter((t) => t.timeSinceUpdate <= this.maxAge);
 
     return detFeatures;
   }
 
+  /**
+   * Greedy 매칭 (트랙 인덱스 ↔ 감지 인덱스)
+   * @param {number[]} trkIndices  - this.tracks 내 인덱스 배열
+   * @param {number[]} detIndices  - detFeatures 내 인덱스 배열
+   * @param {object[]} detFeatures - 감지 특성 배열
+   * @param {boolean}  useReID     - ReID 사용 여부
+   */
+  _greedyMatch(trkIndices, detIndices, detFeatures, useReID) {
+    const costList = [];
+
+    for (const ti of trkIndices) {
+      for (const di of detIndices) {
+        const trk = this.tracks[ti];
+        const det = detFeatures[di];
+        const iou = this.calculateIoU(trk.box, det.box);
+        const iouDist = 1 - iou;
+
+        let cost = 1e5;
+
+        if (useReID && trk.features && det.feature) {
+          const reidDist = this.cosineDistance(trk.features, det.feature);
+          const centerDist = this._centerDistance(trk.box, det.box);
+
+          // ★ 공간 게이트: ReID는 두 박스가 충분히 가까울 때만 적용
+          //   → 멀리 있는 사람끼리 옷이 비슷해도 ID 스왑 방지
+          if (centerDist < this.maxReidCenterDist) {
+            // 두 지표 모두 나쁘면 거부
+            if (reidDist < 0.7 || iouDist < 0.85) {
+              cost = 0.6 * reidDist + 0.4 * iouDist;
+            }
+          } else if (iou > this.iouThreshold) {
+            // 멀지만 IoU가 있는 경우 (빠른 이동) → IoU만 사용
+            cost = iouDist;
+          }
+        } else {
+          // ReID 없이 IoU만 사용
+          if (iou > this.iouThreshold) {
+            cost = iouDist;
+          }
+        }
+
+        if (cost < 1e4) {
+          costList.push({ ti, di, cost });
+        }
+      }
+    }
+
+    costList.sort((a, b) => a.cost - b.cost);
+
+    const matches = [];
+    const matchedTrks = new Set();
+    const matchedDets = new Set();
+
+    for (const { ti, di } of costList) {
+      if (!matchedTrks.has(ti) && !matchedDets.has(di)) {
+        matches.push([ti, di]);
+        matchedTrks.add(ti);
+        matchedDets.add(di);
+      }
+    }
+
+    const unmatchedTrks = trkIndices.filter((i) => !matchedTrks.has(i));
+    const unmatchedDets = detIndices.filter((i) => !matchedDets.has(i));
+
+    return { matches, unmatchedTrks, unmatchedDets };
+  }
+
+  /** 두 박스의 중심점 간 유클리드 거리 */
+  _centerDistance(box1, box2) {
+    const cx1 = (box1.x1 + box1.x2) / 2;
+    const cy1 = (box1.y1 + box1.y2) / 2;
+    const cx2 = (box2.x1 + box2.x2) / 2;
+    const cy2 = (box2.y1 + box2.y2) / 2;
+    return Math.sqrt((cx1 - cx2) ** 2 + (cy1 - cy2) ** 2);
+  }
+
   async extractFeature(box, canvas, session) {
     const OSNET_W = 128;
     const OSNET_H = 256;
-    
+
     const bx1 = Math.max(0, Math.floor(box.x1));
     const by1 = Math.max(0, Math.floor(box.y1));
     const bx2 = Math.min(canvas.width, Math.ceil(box.x2));
@@ -326,17 +402,17 @@ export class BoTSORT {
 
     const tensor = new ort.Tensor("float32", floatData, [1, 3, OSNET_H, OSNET_W]);
     const feeds = { [session.inputNames[0]]: tensor };
-    
+
     try {
       const results = await session.run(feeds);
       const feature = results[session.outputNames[0]].data;
-      
+
       // L2 Normalize
       let sumSq = 0;
       for (let j = 0; j < feature.length; j++) sumSq += feature[j] * feature[j];
       const norm = Math.sqrt(sumSq) + 1e-6;
       for (let j = 0; j < feature.length; j++) feature[j] /= norm;
-      
+
       return feature;
     } catch (e) {
       console.error("OSNet 추론 오류:", e);

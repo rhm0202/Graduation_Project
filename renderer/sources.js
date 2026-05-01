@@ -449,6 +449,7 @@ async function _bgLoop(src) {
           // 화면의 왼쪽부터 정렬해서 UI 리스트 인덱스와 매칭
           const sortedPeople = [...people].sort((a, b) => a.box.x1 - b.box.x1);
           state.targetTrackId = sortedPeople[state.targetPersonIndex].trackId;
+          state._lastTargetBox = { ...sortedPeople[state.targetPersonIndex].box };
         }
         state._lastTargetPersonIndex = state.targetPersonIndex;
       }
@@ -460,12 +461,29 @@ async function _bgLoop(src) {
       // 지정된 Target ID를 가진 사람 찾기
       let targetObj = people.find((p) => p.trackId === state.targetTrackId);
 
-      // 만약 추적 대상을 일시적으로 놓쳤다면 임시로 화면상 첫 번째 사람으로 Fallback
-      if (!targetObj && people.length > 0) {
-        targetObj = [...people].sort((a, b) => a.box.x1 - b.box.x1)[0];
+      // ★ 개선된 복구 로직: 마지막 위치 기반 최근접 사람으로 복구
+      if (!targetObj && people.length > 0 && state._lastTargetBox) {
+        const lastCx = (state._lastTargetBox.x1 + state._lastTargetBox.x2) / 2;
+        const lastCy = (state._lastTargetBox.y1 + state._lastTargetBox.y2) / 2;
+        let minDist = Infinity;
+        let closest = null;
+        for (const p of people) {
+          const cx = (p.box.x1 + p.box.x2) / 2;
+          const cy = (p.box.y1 + p.box.y2) / 2;
+          const dist = Math.sqrt((cx - lastCx) ** 2 + (cy - lastCy) ** 2);
+          if (dist < minDist) { minDist = dist; closest = p; }
+        }
+        // 거리가 합리적인 범위(200px, 640기준) 내인 경우에만 복구
+        if (closest && minDist < 200) {
+          targetObj = closest;
+          state.targetTrackId = closest.trackId;
+        }
+        // 범위 밖이면 targetObj = null → 이전 프레임 유지 (깜빡임 방지)
       }
 
+      // 마지막 위치 갱신
       if (targetObj) {
+        state._lastTargetBox = { ...targetObj.box };
         bestScore = targetObj.score;
         bestAnc = targetObj.anc;
         bestBox = targetObj.box;

@@ -15,7 +15,7 @@ export async function loadModel() {
     console.log("AI 모델 로딩 중");
 
     // YOLOv8 Segmentation 모델 로드
-    state.session = await ort.InferenceSession.create("AI_models/yolo26n-seg.onnx", { executionProviders: ["webgpu", "webgl", "wasm"] });
+    state.session = await ort.InferenceSession.create("AI_models/yolo26l-seg.onnx", { executionProviders: ["webgpu", "webgl", "wasm"] });
     const yoloInputs = state.session.inputNames.join(", ");
     const yoloOutputs = state.session.outputNames.join(", ");
     console.log(`YOLO 모델 로드 완료. 입력: [${yoloInputs}] / 출력: [${yoloOutputs}]`);
