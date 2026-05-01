@@ -33,7 +33,7 @@ class CorrectionCalculator:
         frame_width: int,
         frame_height: int,
         threshold: float = 80.0,
-        gain: float = 0.03,
+        gain: float = 0.01,
         alpha: float = 0.35,
     ):
         """
