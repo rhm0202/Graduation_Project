@@ -340,8 +340,8 @@ async function _bgLoop(src) {
     return;
   }
 
-  const w = vid.videoWidth || 640;
-  const h = vid.videoHeight || 480;
+  const w = vid.videoWidth || vid.width || 640;
+  const h = vid.videoHeight || vid.height || 480;
   if (src.bgCanvas.width !== w || src.bgCanvas.height !== h) {
     src.bgCanvas.width = w;
     src.bgCanvas.height = h;
@@ -351,7 +351,9 @@ async function _bgLoop(src) {
   // 임시 캔버스에 그려서 처리 성공 시에만 출력 캔버스에 반영합니다.
   if (!src.hiddenCanvas) {
     src.hiddenCanvas = document.createElement("canvas");
-    src.hiddenCtx = src.hiddenCanvas.getContext("2d", { willReadFrequently: true, });
+    src.hiddenCtx = src.hiddenCanvas.getContext("2d", {
+      willReadFrequently: true,
+    });
   }
   if (src.hiddenCanvas.width !== w || src.hiddenCanvas.height !== h) {
     src.hiddenCanvas.width = w;
@@ -367,16 +369,24 @@ async function _bgLoop(src) {
       tmp.width = MODEL_SIZE;
       tmp.height = MODEL_SIZE;
       tmp.getContext("2d").drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
-      const tmpData = tmp.getContext("2d").getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
+      const tmpData = tmp
+        .getContext("2d")
+        .getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
 
       const tensorData = new Float32Array(3 * MODEL_SIZE * MODEL_SIZE);
       for (let i = 0; i < MODEL_SIZE * MODEL_SIZE; i++) {
         tensorData[i] = tmpData.data[i * 4] / 255;
         tensorData[MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 1] / 255;
-        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 2] / 255;
+        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] =
+          tmpData.data[i * 4 + 2] / 255;
       }
 
-      const inputTensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE,]);
+      const inputTensor = new ort.Tensor("float32", tensorData, [
+        1,
+        3,
+        MODEL_SIZE,
+        MODEL_SIZE,
+      ]);
       const feeds = { [state.session.inputNames[0]]: inputTensor };
       const results = await state.session.run(feeds);
 
@@ -453,8 +463,9 @@ async function _bgLoop(src) {
       // 확률이 50% 이상이고 유효한 사람이 감지되었을 때만 마스크 적용
       if (bestProb > 0.5 && bestAnc >= 0) {
         if (state.autoTrackingEnabled) {
-          const obj_x = ((bestBox.x1 + bestBox.x2) / 2) * (w / 640);
-          const obj_y = ((bestBox.y1 + bestBox.y2) / 2) * (h / 640);
+          // 모델 출력(0~640)을 [0,1]로 정규화 — 소스 해상도와 무관하게 일관된 좌표 전달
+          const obj_x = (bestBox.x1 + bestBox.x2) / 2 / 640;
+          const obj_y = (bestBox.y1 + bestBox.y2) / 2 / 640;
           sendObjectCoords(obj_x, obj_y);
         }
 
@@ -486,7 +497,13 @@ async function _bgLoop(src) {
             const mx = Math.floor((x / imgW) * 160);
             const my = Math.floor((y / imgH) * 160);
 
-            if (mx < bx1 || mx > bx2 || my < by1 || my > by2 || mask160[my * 160 + mx] < 0.75) {
+            if (
+              mx < bx1 ||
+              mx > bx2 ||
+              my < by1 ||
+              my > by2 ||
+              mask160[my * 160 + mx] < 0.75
+            ) {
               imageData.data[(y * imgW + x) * 4 + 3] = 0;
             }
           }
@@ -517,6 +534,13 @@ async function _bgLoop(src) {
       fgCv.height = h;
       fgCv.getContext("2d").putImageData(frame, 0, 0);
       src.bgCtx.drawImage(fgCv, 0, 0);
+
+      // w/h 디버그 오버레이
+      src.bgCtx.font = "bold 16px monospace";
+      src.bgCtx.fillStyle = "rgba(0,0,0,0.5)";
+      src.bgCtx.fillRect(4, 4, 160, 24);
+      src.bgCtx.fillStyle = "#00ff00";
+      src.bgCtx.fillText(`w:${w}  h:${h}`, 8, 20);
     } catch (e) {
       console.error("[BG] 추론 오류:", e);
     } finally {
@@ -555,7 +579,7 @@ function _createVideoEl(stream) {
   v.autoplay = true;
   v.muted = true;
   v.playsInline = true;
-  v.play().catch(() => { });
+  v.play().catch(() => {});
   return v;
 }
 

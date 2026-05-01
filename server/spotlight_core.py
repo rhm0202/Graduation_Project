@@ -57,10 +57,12 @@ async def process_object_detected(obj_x: float, obj_y: float):
 
     _correction_in_progress = True
     try:
+        px_x = obj_x * FRAME_WIDTH
+        px_y = obj_y * FRAME_HEIGHT
         logger.debug(
-            f"객체 좌표 수신 — obj_x: {obj_x:.1f}, obj_y: {obj_y:.1f} (중심: {correction_calc.center_x}, {correction_calc.center_y})"
+            f"객체 좌표 수신 — px({px_x:.1f}, {px_y:.1f}) (중심: {correction_calc.center_x}, {correction_calc.center_y})"
         )
-        correction = correction_calc.calc(obj_x, obj_y)
+        correction = correction_calc.calc(px_x, px_y)
         if correction is None:
             logger.debug(
                 f"보정 불필요 — 객체가 중앙 근처 (obj_x={obj_x:.1f}, obj_y={obj_y:.1f})"
@@ -69,14 +71,14 @@ async def process_object_detected(obj_x: float, obj_y: float):
 
         pan, tilt = correction
         logger.info(
-            f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f} | dx: {obj_x - correction_calc.center_x:.1f}, dy: {obj_y - correction_calc.center_y:.1f}"
+            f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f} | dx: {px_x - correction_calc.center_x:.1f}, dy: {px_y - correction_calc.center_y:.1f}"
         )
 
         motor_corrected_event.clear()
         await send_to_pi(
             {
                 "tracking": "on",
-                "control": {"pan": pan, "tilt": tilt},
+                "control": {"pan": -pan, "tilt": tilt},
                 "status": "tracking",
             }
         )

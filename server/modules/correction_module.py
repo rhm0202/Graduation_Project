@@ -32,7 +32,7 @@ class CorrectionCalculator:
         self,
         frame_width: int,
         frame_height: int,
-        threshold: float = 80.0,
+        threshold: float = 20.0,
         gain: float = 0.05,  # 카메라 FOV 기반 계산값 (66° / 1280px)
         alpha: float = 0.35,
     ):
