@@ -32,8 +32,8 @@ class CorrectionCalculator:
         self,
         frame_width: int,
         frame_height: int,
-        threshold: float = 30.0,
-        gain: float = 0.05,
+        threshold: float = 80.0,
+        gain: float = 0.03,
         alpha: float = 0.35,
     ):
         """
