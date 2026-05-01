@@ -20,6 +20,7 @@ pi_outbound_queue: asyncio.Queue = None      # PC → RPi 전송 대기열
 pi_to_desktop_queue: asyncio.Queue = None    # RPi → Electron 메시지 전달 대기열
 motor_corrected_event: asyncio.Event = None  # RPi 보정 완료 신호
 tracking_state = "off"           # 추적 기능 활성화 상태 (Electron 앱에서 설정)
+_correction_in_progress = False  # 보정 중 중복 요청 방지 플래그
 
 correction_calc: CorrectionCalculator = None  # 보정값 계산기
 
@@ -45,32 +46,38 @@ async def process_object_detected(obj_x: float, obj_y: float):
         obj_x: 감지된 객체 중심의 x 좌표 (픽셀)
         obj_y: 감지된 객체 중심의 y 좌표 (픽셀)
     """
+    global _correction_in_progress
+
     if tracking_state != "on":
         return
-
-    logger.debug(f"객체 좌표 수신 — obj_x: {obj_x:.1f}, obj_y: {obj_y:.1f} (중심: {correction_calc.center_x}, {correction_calc.center_y})")
-    correction = correction_calc.calc(obj_x, obj_y)
-    if correction is None:
-        logger.debug(f"보정 불필요 — 객체가 중앙 근처 (obj_x={obj_x:.1f}, obj_y={obj_y:.1f})")
+    if _correction_in_progress:
         return
 
-    pan, tilt = correction
-    logger.info(f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f} | dx: {obj_x - correction_calc.center_x:.1f}, dy: {obj_y - correction_calc.center_y:.1f}")
-
-    # 이전 보정 완료 이벤트 초기화 후 RPi로 전송
-    motor_corrected_event.clear()
-    await send_to_pi({
-        "tracking": "on",
-        "control": {"pan": pan, "tilt": -tilt},
-        "status": "tracking",
-    })
-
-    # RPi의 보정 완료 응답 대기 (타임아웃: 1초)
+    _correction_in_progress = True
     try:
-        await asyncio.wait_for(motor_corrected_event.wait(), timeout=3.0)
-        logger.debug("모터 보정 완료 확인")
-    except asyncio.TimeoutError:
-        logger.warning("모터 보정 완료 응답 타임아웃 — 다음 프레임에서 재시도")
+        logger.debug(f"객체 좌표 수신 — obj_x: {obj_x:.1f}, obj_y: {obj_y:.1f} (중심: {correction_calc.center_x}, {correction_calc.center_y})")
+        correction = correction_calc.calc(obj_x, obj_y)
+        if correction is None:
+            logger.debug(f"보정 불필요 — 객체가 중앙 근처 (obj_x={obj_x:.1f}, obj_y={obj_y:.1f})")
+            return
+
+        pan, tilt = correction
+        logger.info(f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f} | dx: {obj_x - correction_calc.center_x:.1f}, dy: {obj_y - correction_calc.center_y:.1f}")
+
+        motor_corrected_event.clear()
+        await send_to_pi({
+            "tracking": "on",
+            "control": {"pan": pan, "tilt": -tilt},
+            "status": "tracking",
+        })
+
+        try:
+            await asyncio.wait_for(motor_corrected_event.wait(), timeout=3.0)
+            logger.debug("모터 보정 완료 확인")
+        except asyncio.TimeoutError:
+            logger.warning("모터 보정 완료 응답 타임아웃 — 다음 프레임에서 재시도")
+    finally:
+        _correction_in_progress = False
 
 # ==========================================
 # 1. RPi 통신
