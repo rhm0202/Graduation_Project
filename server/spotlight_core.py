@@ -67,7 +67,7 @@ async def process_object_detected(obj_x: float, obj_y: float):
         motor_corrected_event.clear()
         await send_to_pi({
             "tracking": "on",
-            "control": {"pan": pan, "tilt": -tilt},
+            "control": {"pan": pan, "tilt": tilt},
             "status": "tracking",
         })
 
