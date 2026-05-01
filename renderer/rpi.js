@@ -167,7 +167,12 @@ function handlePiVideoFrame(frameData) {
           state.piVideoStream = state.trackingCanvas;
           addRpiSource();
         }
-        state.trackingCtx.drawImage(img, 0, 0);
+        const ctx = state.trackingCtx;
+        ctx.save();
+        ctx.translate(img.width, img.height);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(img, 0, 0);
+        ctx.restore();
         URL.revokeObjectURL(url);
       };
       img.onerror = () => URL.revokeObjectURL(url);

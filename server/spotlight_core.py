@@ -48,19 +48,20 @@ async def process_object_detected(obj_x: float, obj_y: float):
     if tracking_state != "on":
         return
 
+    logger.debug(f"객체 좌표 수신 — obj_x: {obj_x:.1f}, obj_y: {obj_y:.1f} (중심: {correction_calc.center_x}, {correction_calc.center_y})")
     correction = correction_calc.calc(obj_x, obj_y)
     if correction is None:
         logger.debug(f"보정 불필요 — 객체가 중앙 근처 (obj_x={obj_x:.1f}, obj_y={obj_y:.1f})")
         return
 
     pan, tilt = correction
-    logger.debug(f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f}")
+    logger.info(f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f} | dx: {obj_x - correction_calc.center_x:.1f}, dy: {obj_y - correction_calc.center_y:.1f}")
 
     # 이전 보정 완료 이벤트 초기화 후 RPi로 전송
     motor_corrected_event.clear()
     await send_to_pi({
         "tracking": "on",
-        "control": {"pan": pan, "tilt": tilt},
+        "control": {"pan": -pan, "tilt": -tilt},
         "status": "tracking",
     })
 
