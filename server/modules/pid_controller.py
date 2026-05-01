@@ -132,7 +132,8 @@ class MotorPIDManager:
         output_limit: float = 10.0,
         ema_alpha: float = 0.2,
         ema_history_len: int = 5,
-        dead_zone: float = 80.0,
+        x_dead_zone: float = 200.0,
+        y_dead_zone: float = 100.0,
     ):
         center_x = frame_width / 2.0
         center_y = frame_height / 2.0
@@ -157,14 +158,15 @@ class MotorPIDManager:
         self.tilt_angle = 90.0
 
         # 데드존: 객체가 중심에서 이 픽셀 범위 안에 있으면 보정하지 않음
-        self.dead_zone = dead_zone
+        self.x_dead_zone = x_dead_zone
+        self.y_dead_zone = y_dead_zone
         self.center_x = center_x
         self.center_y = center_y
 
         logger.info(
             f"PID 매니저 초기화 — setpoint=({center_x}, {center_y}), "
             f"Kp={pid_kp}, Ki={pid_ki}, Kd={pid_kd}, "
-            f"output_limit=±{output_limit}°, EMA α={ema_alpha}, dead_zone={dead_zone}px"
+            f"output_limit=±{output_limit}°, EMA α={ema_alpha}, x_dead_zone={x_dead_zone}px, y_dead_zone={y_dead_zone}px"
         )
 
     def update(self, obj_x: float, obj_y: float) -> tuple[float, float]:
@@ -184,15 +186,15 @@ class MotorPIDManager:
         # 데드존: 객체가 중앙 근처에 있으면 보정 무시 + 적분 리셋
         dx = abs(obj_x - self.center_x)
         dy = abs(obj_y - self.center_y)
-        if dx < self.dead_zone:
+        if dx < self.x_dead_zone:
             pan_correction = 0.0
             self.pan_pid._integral = 0.0
-        if dy < self.dead_zone:
+        if dy < self.y_dead_zone:
             tilt_correction = 0.0
             self.tilt_pid._integral = 0.0
 
         # 목표 각도 산출 (서보 장착 방향에 따라 부호 조정)
-        raw_pan = self.pan_angle - pan_correction
+        raw_pan = self.pan_angle + pan_correction
         raw_tilt = self.tilt_angle - tilt_correction
 
         # 서보 물리적 한계 적용 (0~180°)

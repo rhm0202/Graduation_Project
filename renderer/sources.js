@@ -340,8 +340,8 @@ async function _bgLoop(src) {
     return;
   }
 
-  const w = vid.videoWidth || 640;
-  const h = vid.videoHeight || 480;
+  const w = vid.videoWidth || vid.width || 640;
+  const h = vid.videoHeight || vid.height || 480;
   if (src.bgCanvas.width !== w || src.bgCanvas.height !== h) {
     src.bgCanvas.width = w;
     src.bgCanvas.height = h;
