@@ -32,7 +32,7 @@ class CorrectionCalculator:
         self,
         frame_width: int,
         frame_height: int,
-        threshold: float = 20.0,
+        threshold: float = 80.0,
         gain: float = 0.05,  # 카메라 FOV 기반 계산값 (66° / 1280px)
         alpha: float = 0.35,
     ):
@@ -40,8 +40,8 @@ class CorrectionCalculator:
         Args:
             frame_width:  카메라 프레임 가로 해상도 (픽셀)
             frame_height: 카메라 프레임 세로 해상도 (픽셀)
-            threshold:    보정을 무시할 최소 오프셋 (픽셀).
-                          abs(dx) < threshold 이고 abs(dy) < threshold 이면 None 반환.
+            threshold_x:  좌우 보정을 무시할 최소 오프셋 (픽셀).
+            threshold_y:  상하 보정을 무시할 최소 오프셋 (픽셀).
             gain:         픽셀 오프셋 → 각도 변환 비율 (degree/pixel).
                           예: 오프셋 100px → gain 0.05 → 5° 이동
             alpha:        EMA 스무딩 계수 (0 < alpha ≤ 1).
@@ -49,7 +49,8 @@ class CorrectionCalculator:
         """
         self.center_x = frame_width / 2.0
         self.center_y = frame_height / 2.0
-        self.threshold = threshold
+        self.threshold_x = threshold_x
+        self.threshold_y = threshold_y
         self.gain = gain
         self.alpha = alpha
         self._smooth_x: float | None = None
@@ -77,7 +78,7 @@ class CorrectionCalculator:
         dx = self._smooth_x - self.center_x  # 양수 = 오른쪽, 음수 = 왼쪽
         dy = self._smooth_y - self.center_y  # 양수 = 아래,   음수 = 위
 
-        if abs(dx) < self.threshold and abs(dy) < self.threshold:
+        if abs(dx) < self.threshold_x and abs(dy) < self.threshold_y:
             return None
 
         pan_correction  = dx * self.gain
