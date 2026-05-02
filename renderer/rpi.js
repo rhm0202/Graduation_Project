@@ -34,6 +34,7 @@ export function connectToSpotlightCore() {
       state.piConnected = true;
       state.piReconnectAttempts = 0;
       updatePiConnectionStatus(true);
+      state.piWebSocket.send(JSON.stringify({ type: 'servo_init' }));
     };
 
     state.piWebSocket.onmessage = (event) => {
@@ -204,6 +205,11 @@ export function updatePiConnectionStatus(connected, message) {
 export function sendObjectCoords(obj_x, obj_y) {
   if (!state.piConnected || state.piWebSocket?.readyState !== WebSocket.OPEN) return;
   state.piWebSocket.send(JSON.stringify({ type: 'object_detected', obj_x, obj_y }));
+}
+
+export function sendServoInit() {
+  if (!state.piConnected || state.piWebSocket?.readyState !== WebSocket.OPEN) return;
+  state.piWebSocket.send(JSON.stringify({ type: 'servo_init' }));
 }
 
 // ═══════════════════════════════════════════════════════════

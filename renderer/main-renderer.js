@@ -6,7 +6,7 @@ import { getDevices, startStream, setupMediaControls } from './media.js';
 import { initMasterCanvas, setupSourcesPanel } from './sources.js';
 import { setupAudioMixerControls } from './audio.js';
 import { setupRecordingControls } from './recording.js';
-import { setupPiConnectionUI, sendObjectCoords } from './rpi.js';
+import { setupPiConnectionUI, sendServoInit } from './rpi.js';
 import { toggleAutoTracking } from './tracking.js';
 import { state } from './state.js';
 import { loadModel, toggleBackgroundRemoval, toggleComparison, setupBackgroundReplaceModal } from './background.js';
@@ -50,13 +50,10 @@ setupGpuStatusListeners();
     // 자동 추적 토글
     document.getElementById('toggle-auto-tracking')?.addEventListener('click', toggleAutoTracking);
 
-    // 새로고침: 자동 추적 OFF 후 카메라를 정중앙으로 초기화
+    // 새로고침: 자동 추적 OFF 후 카메라를 정중앙(90°, 90°)으로 초기화
     document.getElementById('refresh-btn')?.addEventListener('click', () => {
       if (state.autoTrackingEnabled) toggleAutoTracking();
-      const canvas = state.masterCanvas;
-      const cx = canvas ? canvas.width / 2 : 960;
-      const cy = canvas ? canvas.height / 2 : 540;
-      sendObjectCoords(cx, cy);
+      sendServoInit();
     });
 
     // 배경 교체 버튼
