@@ -2,9 +2,12 @@ import json
 import asyncio
 import websockets
 from modules.logger import get_logger
-from modules.correction_module import CorrectionCalculator
+from modules.pid_controller import MotorPIDManager
 from modules import yolo_bridge
-from modules.config import RPI_WS_URL, WS_PORT, FRAME_WIDTH, FRAME_HEIGHT
+from modules.config import (
+    RPI_WS_URL, WS_PORT, FRAME_WIDTH, FRAME_HEIGHT,
+    PID_KP, PID_KI, PID_KD, PID_OUTPUT_LIMIT, EMA_ALPHA,
+)
 
 # ==========================================
 # 로거
@@ -14,14 +17,15 @@ logger = get_logger("spotlight_core")
 # ==========================================
 # 전역 변수 (main()에서 초기화)
 # ==========================================
-output_frame = None              # RPi에서 수신한 최신 프레임
-lock: asyncio.Lock = None        # output_frame 동시 접근 방지
-pi_outbound_queue: asyncio.Queue = None      # PC → RPi 전송 대기열
-pi_to_desktop_queue: asyncio.Queue = None    # RPi → Electron 메시지 전달 대기열
-motor_corrected_event: asyncio.Event = None  # RPi 보정 완료 신호
-tracking_state = "off"           # 추적 기능 활성화 상태 (Electron 앱에서 설정)
+output_frame = None  # RPi에서 수신한 최신 프레임
+lock: asyncio.Lock = None  # output_frame 동시 접근 방지
+pi_outbound_queue: asyncio.Queue = None  # PC → RPi 전송 대기열
+pi_to_desktop_queue: asyncio.Queue = None  # RPi → Electron 메시지 전달 대기열
+tracking_state = "off"  # 추적 기능 활성화 상태 (Electron 앱에서 설정)
+_correction_in_progress = False  # 보정 중 중복 요청 방지 플래그
 
-correction_calc: CorrectionCalculator = None  # 보정값 계산기
+pid_manager: MotorPIDManager = None  # PID 기반 모터 제어 매니저
+
 
 # ==========================================
 # 공용 API
@@ -30,46 +34,46 @@ async def send_to_pi(data_dict):
     """PC → RPi로 데이터를 보낼 때 호출. 전송 대기열에 추가됨."""
     await pi_outbound_queue.put(data_dict)
 
+
 # ==========================================
 # 객체 추적 보정 로직
 # ==========================================
 async def process_object_detected(obj_x: float, obj_y: float):
     """YOLO 측에서 객체를 감지했을 때 yolo_bridge를 통해 호출된다.
 
-    1. CorrectionCalculator로 pan/tilt 보정값 계산
-    2. 보정이 필요하면 RPi로 전송
-    3. RPi의 motor_corrected 응답을 대기 (최대 1초)
-    4. 응답 수신 후 루프는 다음 프레임 탐지 시 자동 반복
+    1. MotorPIDManager로 PID 연산 + EMA 평활화 수행
+    2. 산출된 절대 서보 각도(pan_angle, tilt_angle)를 RPi에 전송
+    3. RPi는 수신한 각도를 PCA9685 PWM으로 즉시 반영 (응답 대기 없음)
 
     Args:
         obj_x: 감지된 객체 중심의 x 좌표 (픽셀)
         obj_y: 감지된 객체 중심의 y 좌표 (픽셀)
     """
+    global _correction_in_progress
+
     if tracking_state != "on":
         return
-
-    correction = correction_calc.calc(obj_x, obj_y)
-    if correction is None:
-        logger.debug(f"보정 불필요 — 객체가 중앙 근처 (obj_x={obj_x:.1f}, obj_y={obj_y:.1f})")
+    if _correction_in_progress:
         return
 
-    pan, tilt = correction
-    logger.debug(f"보정값 계산 — pan: {pan:.2f}, tilt: {tilt:.2f}")
-
-    # 이전 보정 완료 이벤트 초기화 후 RPi로 전송
-    motor_corrected_event.clear()
-    await send_to_pi({
-        "tracking": "on",
-        "control": {"pan": pan, "tilt": tilt},
-        "status": "tracking",
-    })
-
-    # RPi의 보정 완료 응답 대기 (타임아웃: 1초)
+    _correction_in_progress = True
     try:
-        await asyncio.wait_for(motor_corrected_event.wait(), timeout=3.0)
-        logger.debug("모터 보정 완료 확인")
-    except asyncio.TimeoutError:
-        logger.warning("모터 보정 완료 응답 타임아웃 — 다음 프레임에서 재시도")
+        # PID 연산 + EMA 평활화 → 절대 서보 각도 반환
+        pan_angle, tilt_angle = pid_manager.update(obj_x, obj_y)
+
+        logger.debug(
+            f"PID 연산 — obj({obj_x:.1f}, {obj_y:.1f}) → servo(pan={pan_angle:.2f}°, tilt={tilt_angle:.2f}°)"
+        )
+
+        # RPi에 절대 서보 각도 전송 (비동기 일방향, 응답 대기 없음)
+        await send_to_pi({
+            "type": "servo_angle",
+            "pan_angle": round(pan_angle, 2),
+            "tilt_angle": round(tilt_angle, 2),
+        })
+    finally:
+        _correction_in_progress = False
+
 
 # ==========================================
 # 1. RPi 통신
@@ -83,6 +87,7 @@ async def pi_sender_task(websocket):
             logger.debug(f"RPi 전송: {data}")
         except Exception as e:
             logger.error(f"RPi 전송 실패: {e}")
+
 
 async def receive_from_pi():
     """RPi에 접속해 영상을 수신하고, 제어 명령을 역방향으로 송신하는 메인 루프.
@@ -110,11 +115,9 @@ async def receive_from_pi():
                             if frame_count % 100 == 0:
                                 logger.debug(f"RPi 프레임 수신: {frame_count}장")
                         else:
-                            # RPi → Electron 메시지 처리 (예: motor_corrected)
+                            # RPi → Electron 메시지 처리
                             try:
                                 data = json.loads(message)
-                                if data.get("type") == "motor_corrected":
-                                    motor_corrected_event.set()
                                 await pi_to_desktop_queue.put(data)
                                 logger.debug(f"RPi → Desktop 중계: {data}")
                             except json.JSONDecodeError:
@@ -128,6 +131,7 @@ async def receive_from_pi():
         except Exception as e:
             logger.error(f"RPi 연결 오류: {e} — 3초 후 재접속 시도")
             await asyncio.sleep(3)
+
 
 # ==========================================
 # 2. Electron 앱 통신
@@ -156,6 +160,7 @@ async def desktop_sender_task(websocket):
     except websockets.exceptions.ConnectionClosed:
         pass
 
+
 async def ws_handler(websocket):
     """Electron 앱 접속 시 호출. 영상 송신과 제어 수신을 동시 처리."""
     global tracking_state
@@ -169,6 +174,8 @@ async def ws_handler(websocket):
 
                 if "tracking" in data:
                     tracking_state = data["tracking"]
+                    if tracking_state == "on":
+                        pid_manager.reset()
                     status = "searching" if tracking_state == "on" else "lost"
                     await send_to_pi({"tracking": tracking_state, "status": status})
                     logger.debug(f"추적 상태 변경: {tracking_state}")
@@ -186,31 +193,41 @@ async def ws_handler(websocket):
         logger.info("Desktop App 연결 해제됨")
         sender.cancel()
 
+
 async def start_desktop_server():
     """Electron 앱의 접속을 대기하는 WebSocket 서버."""
     logger.info(f"Desktop App WebSocket 서버 시작: ws://0.0.0.0:{WS_PORT}")
     async with websockets.serve(ws_handler, "0.0.0.0", WS_PORT):
         await asyncio.Future()
 
+
 # ==========================================
 # 진입점
 # ==========================================
 async def main():
     global lock, pi_outbound_queue, pi_to_desktop_queue
-    global motor_corrected_event, correction_calc
+    global pid_manager
 
     lock = asyncio.Lock()
     pi_outbound_queue = asyncio.Queue()
     pi_to_desktop_queue = asyncio.Queue()
-    motor_corrected_event = asyncio.Event()
-    correction_calc = CorrectionCalculator(FRAME_WIDTH, FRAME_HEIGHT)
+    pid_manager = MotorPIDManager(
+        frame_width=FRAME_WIDTH,
+        frame_height=FRAME_HEIGHT,
+        pid_kp=PID_KP,
+        pid_ki=PID_KI,
+        pid_kd=PID_KD,
+        output_limit=PID_OUTPUT_LIMIT,
+        ema_alpha=EMA_ALPHA,
+    )
     yolo_bridge.register(process_object_detected, asyncio.get_event_loop())
 
     receiver_task = asyncio.create_task(receive_from_pi())
-    server_task   = asyncio.create_task(start_desktop_server())
+    server_task = asyncio.create_task(start_desktop_server())
     await asyncio.gather(receiver_task, server_task)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
