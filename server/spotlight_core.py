@@ -180,6 +180,11 @@ async def ws_handler(websocket):
                     await send_to_pi({"tracking": tracking_state, "status": status})
                     logger.debug(f"추적 상태 변경: {tracking_state}")
 
+                elif data.get("type") == "servo_init":
+                    pid_manager.reset()
+                    await send_to_pi({"type": "servo_angle", "pan_angle": 90.0, "tilt_angle": 90.0})
+                    logger.debug("서보 초기화 — pan=90°, tilt=90°")
+
                 elif data.get("type") == "object_detected":
                     obj_x = float(data["obj_x"])
                     obj_y = float(data["obj_y"])
