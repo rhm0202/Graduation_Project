@@ -223,7 +223,10 @@ export function addRpiSource() {
     videoEl: state.trackingCanvas,
   });
   state.sources.unshift(src); // 최상단 레이어
-  if (!state.selectedSourceId) state.selectedSourceId = src.id;
+  if (!state.selectedSourceId) {
+    state.selectedSourceId = src.id;
+    _previewSelectedSource();
+  }
   renderSourcesList();
   return src;
 }
@@ -278,8 +281,18 @@ function _previewSelectedSource() {
 
   if (state.comparisonMode) {
     const originalVideo = document.getElementById("original-video");
-    if (originalVideo)
-      originalVideo.srcObject = src?.stream ?? state.masterStream;
+    if (originalVideo) {
+      if (src?.stream) {
+        originalVideo.srcObject = src.stream;
+      } else if (src?.videoEl instanceof HTMLCanvasElement) {
+        if (!src._displayStream) {
+          src._displayStream = src.videoEl.captureStream(60);
+        }
+        originalVideo.srcObject = src._displayStream;
+      } else {
+        originalVideo.srcObject = state.masterStream;
+      }
+    }
     return;
   }
 
