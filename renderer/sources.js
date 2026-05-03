@@ -18,6 +18,7 @@ import { sendObjectCoords } from "./rpi.js";
 import { HybridTracker } from "./hybridTracker.js";
 
 const globalTracker = new HybridTracker();
+let _trackSnapshot = '';
 
 // ─────────────────────────────────────────────────────────
 // 마스터 캔버스
@@ -414,7 +415,7 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
   ctx.restore();
 
   // 각 사람별 바운딩박스 + 중심점 + 라벨
-  people.forEach((person, idx) => {
+  people.forEach((person) => {
     const { x1, y1, x2, y2 } = person.box;
     const bx = x1 * sx;
     const by = y1 * sy;
@@ -449,7 +450,7 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
     ctx.stroke();
 
     // 라벨 배경 + 텍스트
-    const label = `사람 ${idx + 1}`;
+    const label = `ID ${person.id}`;
     ctx.font = `bold ${fontSize}px sans-serif`;
     const tw = ctx.measureText(label).width;
     const pad = 4;
@@ -560,20 +561,17 @@ async function _aiLoop(src) {
       // UI 표시 및 인덱스 매칭을 위해 현재 프레임 기준 X좌표 순(왼쪽부터)으로 정렬
       people.sort((a, b) => a.box.x1 - b.box.x1);
 
-      // Object Panel 목록 갱신 (감지된 인원 수가 바뀔 때만)
-      if (people.length !== state.detectedPeopleCount) {
-        state.detectedPeopleCount = people.length;
-        renderObjectList(people.length);
+      // Object Panel 목록 갱신 (트래커 ID 집합 또는 소실 상태가 바뀔 때)
+      const _snap = globalTracker.tracks.map(t => `${t.id}:${t.missingFrames > 0 ? 1 : 0}`).join(',');
+      if (_snap !== _trackSnapshot) {
+        _trackSnapshot = _snap;
+        renderObjectList(globalTracker.tracks);
       }
-
-      const TARGET_INDEX = state.targetPersonIndex;
 
       // 3. 타겟 추적 로직 (ID 기반)
       if (people.length > 0) {
-        // UI에서 새 인덱스를 클릭해서 타겟 ID가 초기화되었거나 아직 설정되지 않은 경우
         if (state.targetPersonId === undefined || state.targetPersonId === null) {
-          const idx = Math.min(TARGET_INDEX, people.length - 1);
-          state.targetPersonId = people[idx].id; // 해당 위치(인덱스)에 있는 사람의 고유 ID를 캡처하여 고정
+          state.targetPersonId = people[0].id;
         }
       } else {
         // 화면에 아무도 없으면 타겟 ID 초기화
@@ -593,12 +591,11 @@ async function _aiLoop(src) {
         bestBox = targetPerson.box;
       } else if (people.length > 0) {
         if (!globalTracker.isTrackAlive(state.targetPersonId)) {
-          // 트래커가 완전히 삭제한 경우에만 fallback — ID 스왑 방지
-          const fallbackIdx = Math.min(TARGET_INDEX, people.length - 1);
-          bestScore = people[fallbackIdx].score;
-          bestAnc = people[fallbackIdx].anc;
-          bestBox = people[fallbackIdx].box;
-          state.targetPersonId = people[fallbackIdx].id;
+          // 트래커가 완전히 삭제한 경우에만 fallback — 가장 왼쪽 사람으로 교체
+          bestScore = people[0].score;
+          bestAnc = people[0].anc;
+          bestBox = people[0].box;
+          state.targetPersonId = people[0].id;
         }
         // 트래커가 아직 해당 ID를 기억 중(일시 소실)이면 이 프레임은 생략
       }
@@ -739,12 +736,12 @@ function _cleanupSource(src) {
 // Object Panel 목록 UI 렌더링
 // ─────────────────────────────────────────────────────────
 
-function renderObjectList(count) {
+function renderObjectList(tracks) {
   const list = document.getElementById("object-list");
   if (!list) return;
   list.innerHTML = "";
 
-  if (count === 0) {
+  if (tracks.length === 0) {
     const li = document.createElement("li");
     li.className = "object-item object-item-empty";
     li.textContent = "감지된 사람 없음";
@@ -752,19 +749,32 @@ function renderObjectList(count) {
     return;
   }
 
-  for (let i = 0; i < count; i++) {
+  // X좌표 기준 정렬 (안정적인 표시 순서 유지)
+  const sorted = [...tracks].sort((a, b) => a.box.x1 - b.box.x1);
+
+  sorted.forEach((track, idx) => {
+    const missing = track.missingFrames > 0;
+    const isSelected = track.id === state.targetPersonId;
+
     const li = document.createElement("li");
-    li.className =
-      "object-item" + (i === state.targetPersonIndex ? " selected" : "");
-    li.textContent = `사람 ${i + 1}`;
+    li.className = "object-item" + (isSelected ? " selected" : "");
+    li.textContent = `사람 ${idx + 1}` + (missing ? " (사라짐)" : "");
+
+    if (missing) {
+      li.style.opacity = "0.45";
+      li.style.fontStyle = "italic";
+    }
+
     li.addEventListener("click", () => {
-      if (state.targetPersonIndex === i) return;
-      state.targetPersonIndex = i;
-      state.targetPersonId = null; // 인덱스가 변경되면 기존 ID 추적을 풀고, 다음 프레임에서 새로 ID를 캡처하게 함
-      list.querySelectorAll(".object-item").forEach((el, idx) => el.classList.toggle("selected", idx === i));
+      state.targetPersonId = track.id; // 클릭 즉시 ID 고정 (다음 프레임 대기 불필요)
+      list.querySelectorAll(".object-item").forEach(el => {
+        el.classList.remove("selected");
+      });
+      li.classList.add("selected");
     });
+
     list.appendChild(li);
-  }
+  });
 }
 
 // ─────────────────────────────────────────────────────────
