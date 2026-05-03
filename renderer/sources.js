@@ -761,9 +761,7 @@ function renderObjectList(count) {
       if (state.targetPersonIndex === i) return;
       state.targetPersonIndex = i;
       state.targetPersonId = null; // 인덱스가 변경되면 기존 ID 추적을 풀고, 다음 프레임에서 새로 ID를 캡처하게 함
-      list
-        .querySelectorAll(".object-item")
-        .forEach((el, idx) => el.classList.toggle("selected", idx === i));
+      list.querySelectorAll(".object-item").forEach((el, idx) => el.classList.toggle("selected", idx === i));
     });
     list.appendChild(li);
   }
