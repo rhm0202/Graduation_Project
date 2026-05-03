@@ -19,6 +19,24 @@ import { HybridTracker } from "./hybridTracker.js";
 
 const globalTracker = new HybridTracker();
 
+// ─── AI Worker (픽셀 루프 오프로드) ──────────────────────────────────────────
+const _aiWorker = new Worker(new URL('./ai-worker.js', import.meta.url));
+const _workerCbs = new Map();
+let _workerCallId = 0;
+
+_aiWorker.onmessage = (e) => {
+  const cb = _workerCbs.get(e.data.id);
+  if (cb) { _workerCbs.delete(e.data.id); cb(e.data); }
+};
+
+function _workerRun(type, data, transfers = []) {
+  const id = _workerCallId++;
+  return new Promise(resolve => {
+    _workerCbs.set(id, resolve);
+    _aiWorker.postMessage({ id, type, ...data }, transfers);
+  });
+}
+
 // ─────────────────────────────────────────────────────────
 // 마스터 캔버스
 // ─────────────────────────────────────────────────────────
@@ -385,6 +403,10 @@ function _stopAiLoop(src) {
   src.bgCtx = null;
   src.hiddenCanvas = null;
   src.hiddenCtx = null;
+  src.inferCanvas = null;
+  src.inferCtx = null;
+  src.fgCanvas = null;
+  src.fgCtx = null;
 }
 
 /**
@@ -496,20 +518,23 @@ async function _aiLoop(src) {
     try {
       state.sessionBusy = true;
       const MODEL_SIZE = 640;
-      const tmp = document.createElement("canvas");
-      tmp.width = MODEL_SIZE;
-      tmp.height = MODEL_SIZE;
-      tmp.getContext("2d").drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
-      const tmpData = tmp.getContext("2d").getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
-
-      const tensorData = new Float32Array(3 * MODEL_SIZE * MODEL_SIZE);
-      for (let i = 0; i < MODEL_SIZE * MODEL_SIZE; i++) {
-        tensorData[i] = tmpData.data[i * 4] / 255;
-        tensorData[MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 1] / 255;
-        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 2] / 255;
+      if (!src.inferCanvas) {
+        src.inferCanvas = document.createElement("canvas");
+        src.inferCanvas.width = MODEL_SIZE;
+        src.inferCanvas.height = MODEL_SIZE;
+        src.inferCtx = src.inferCanvas.getContext("2d");
       }
+      src.inferCtx.drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
+      const inferImgData = src.inferCtx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
 
-      const inputTensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE,]);
+      // 텐서 준비 → Worker (메인 스레드 409,600회 루프 제거)
+      const { tensorData } = await _workerRun(
+        'prep',
+        { pixels: inferImgData.data.buffer },
+        [inferImgData.data.buffer]
+      );
+
+      const inputTensor = new ort.Tensor("float32", new Float32Array(tensorData), [1, 3, MODEL_SIZE, MODEL_SIZE]);
       const feeds = { [state.session.inputNames[0]]: inputTensor };
       const results = await state.session.run(feeds);
 
@@ -608,59 +633,36 @@ async function _aiLoop(src) {
       if (window._deepDiagDone) window._deepDiagDone = false;
 
       // 확률이 50% 이상이고 유효한 사람이 감지되었을 때만 처리
+      let maskedPixels = null;
+
       if (bestProb > 0.5 && bestAnc >= 0) {
-        // 객체추적이 켜져 있으면 좌표 전송
         if (state.autoTrackingEnabled) {
           const obj_x = ((bestBox.x1 + bestBox.x2) / 2) * (w / 640);
           const obj_y = ((bestBox.y1 + bestBox.y2) / 2) * (h / 640);
           sendObjectCoords(obj_x, obj_y);
         }
 
-        // 배경 제거가 켜져 있을 때만 마스크 적용
         if (src.bgRemoval) {
+          // 계수 추출 (32회 루프 — 메인 스레드 유지)
           const bestCoeffs = new Float32Array(32);
           for (let c = 0; c < 32; c++) {
             bestCoeffs[c] = output0[bestAnc * NUM_CHANNELS + COEFF_START + c];
           }
+          // ONNX 버퍼는 전송 불가(WASM 메모리), slice()로 복사
+          const protosCopy   = protos.slice();
+          const framePixels  = frame.data.slice();
 
-          const mask160 = new Float32Array(160 * 160);
-          for (let p = 0; p < 160 * 160; p++) {
-            let sum = 0;
-            for (let c = 0; c < 32; c++) {
-              sum += bestCoeffs[c] * protos[c * 160 * 160 + p];
-            }
-            mask160[p] = 1 / (1 + Math.exp(-sum)); // sigmoid
-          }
-
-          // 박스 좌표를 160x160 마스크 스케일로 변환
-          const bx1 = Math.floor(bestBox.x1 * (160 / 640));
-          const by1 = Math.floor(bestBox.y1 * (160 / 640));
-          const bx2 = Math.ceil(bestBox.x2 * (160 / 640));
-          const by2 = Math.ceil(bestBox.y2 * (160 / 640));
-
-          const imgW = imageData.width;
-          const imgH = imageData.height;
-
-          for (let y = 0; y < imgH; y++) {
-            for (let x = 0; x < imgW; x++) {
-              const mx = Math.floor((x / imgW) * 160);
-              const my = Math.floor((y / imgH) * 160);
-
-              if (mx < bx1 || mx > bx2 || my < by1 || my > by2 || mask160[my * 160 + mx] < 0.75) {
-                imageData.data[(y * imgW + x) * 4 + 3] = 0;
-              }
-            }
-          }
-        }
-      } else if (src.bgRemoval) {
-        // 배경 제거 ON인데 사람 미감지 시 전체 투명
-        const total = imageData.width * imageData.height;
-        for (let i = 0; i < total; i++) {
-          imageData.data[i * 4 + 3] = 0;
+          // 마스크 계산 + 알파 적용 → Worker (메인 스레드 중첩 루프 제거)
+          const result = await _workerRun(
+            'mask',
+            { bestCoeffs: bestCoeffs.buffer, protos: protosCopy.buffer, bestBox, framePixels: framePixels.buffer, w, h },
+            [bestCoeffs.buffer, protosCopy.buffer, framePixels.buffer]
+          );
+          maskedPixels = result.pixels;
         }
       }
 
-      // 배경 이미지/영상/색 합성 (배경 제거 ON일 때만 배경 교체)
+      // 배경 합성
       src.bgCtx.clearRect(0, 0, w, h);
       if (src.bgRemoval) {
         if (state.backgroundImage) {
@@ -674,12 +676,19 @@ async function _aiLoop(src) {
           src.bgCtx.fillStyle = "#000000";
           src.bgCtx.fillRect(0, 0, w, h);
         }
+        if (maskedPixels) {
+          if (!src.fgCanvas || src.fgCanvas.width !== w || src.fgCanvas.height !== h) {
+            src.fgCanvas = document.createElement("canvas");
+            src.fgCanvas.width = w;
+            src.fgCanvas.height = h;
+            src.fgCtx = src.fgCanvas.getContext("2d");
+          }
+          src.fgCtx.putImageData(new ImageData(new Uint8ClampedArray(maskedPixels), w, h), 0, 0);
+          src.bgCtx.drawImage(src.fgCanvas, 0, 0);
+        }
+      } else {
+        src.bgCtx.drawImage(vid, 0, 0, w, h);
       }
-      const fgCv = document.createElement("canvas");
-      fgCv.width = w;
-      fgCv.height = h;
-      fgCv.getContext("2d").putImageData(frame, 0, 0);
-      src.bgCtx.drawImage(fgCv, 0, 0);
 
       // 바운딩박스, 데드존, 중심점 디버그 그리기
       if (src.objectTracking) {
