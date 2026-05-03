@@ -28,7 +28,7 @@ function calculateIoU(box1, box2) {
  */
 function extractRegionColors(box, imageData, modelWidth = 640, modelHeight = 640) {
   const { width, height, data } = imageData; // 원본 캔버스 해상도
-  
+
   // 모델 좌표계(예: 640x640)를 원본 캔버스 좌표계로 변환
   const startX = Math.floor(box.x1 * (width / modelWidth));
   const startY = Math.floor(box.y1 * (height / modelHeight));
@@ -97,7 +97,7 @@ export class HybridTracker {
   constructor() {
     this.tracks = []; // 추적 중인 객체 배열: { id, box, color, missingFrames, score, anc }
     this.nextId = 0;
-    this.maxMissingFrames = 10; // 몇 프레임 동안 객체를 놓쳐도 ID를 유지할지 결정
+    this.maxMissingFrames = 30; // 몇 프레임 동안 객체를 놓쳐도 ID를 유지할지 결정
   }
 
   /**
@@ -123,7 +123,7 @@ export class HybridTracker {
       for (const det of currentDetections) {
         const iou = calculateIoU(track.box, det.box);
         const colorSim = calculateColorSimilarity(track.color, det.color);
-        
+
         // [핵심 방어 로직] 하얀 옷과 검은 옷처럼 색상이 완전히 다르면 동일인이 아님! (교차 시 ID 탈취 방지)
         if (colorSim < 0.5) continue;
 
@@ -144,11 +144,11 @@ export class HybridTracker {
       if (unassignedTracks.has(pair.track) && unassignedDetections.has(pair.det)) {
         // 매칭 성공: 정보 업데이트
         pair.track.box = pair.det.box;
-        pair.track.color = pair.det.color; 
+        pair.track.color = pair.det.color;
         pair.track.missingFrames = 0;
         pair.track.anc = pair.det.anc;
         pair.track.score = pair.det.score;
-        
+
         matchedTracks.push(pair.track);
         unassignedTracks.delete(pair.track);
         unassignedDetections.delete(pair.det);
@@ -176,9 +176,13 @@ export class HybridTracker {
       this.tracks.push(newTrack);
       matchedTracks.push(newTrack);
     }
-    
-    // UI 표시의 안정성을 위해 X좌표 순이나 ID 순으로 정렬할 수 있습니다. 
+
+    // UI 표시의 안정성을 위해 X좌표 순이나 ID 순으로 정렬할 수 있습니다.
     // 여기서는 추적의 일관성을 위해 매칭된 객체들을 반환합니다.
     return matchedTracks;
+  }
+
+  isTrackAlive(id) {
+    return this.tracks.some(t => t.id === id);
   }
 }

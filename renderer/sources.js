@@ -223,7 +223,10 @@ export function addRpiSource() {
     videoEl: state.trackingCanvas,
   });
   state.sources.unshift(src); // 최상단 레이어
-  if (!state.selectedSourceId) state.selectedSourceId = src.id;
+  if (!state.selectedSourceId) {
+    state.selectedSourceId = src.id;
+    _previewSelectedSource();
+  }
   renderSourcesList();
   return src;
 }
@@ -278,8 +281,18 @@ function _previewSelectedSource() {
 
   if (state.comparisonMode) {
     const originalVideo = document.getElementById("original-video");
-    if (originalVideo)
-      originalVideo.srcObject = src?.stream ?? state.masterStream;
+    if (originalVideo) {
+      if (src?.stream) {
+        originalVideo.srcObject = src.stream;
+      } else if (src?.videoEl instanceof HTMLCanvasElement) {
+        if (!src._displayStream) {
+          src._displayStream = src.videoEl.captureStream(60);
+        }
+        originalVideo.srcObject = src._displayStream;
+      } else {
+        originalVideo.srcObject = state.masterStream;
+      }
+    }
     return;
   }
 
@@ -372,6 +385,84 @@ function _stopAiLoop(src) {
   src.bgCtx = null;
   src.hiddenCanvas = null;
   src.hiddenCtx = null;
+}
+
+/**
+ * 객체 추적을 위한 오버레이를 그립니다.
+ * 디버깅용으로 pid_controller.py의 데드존, 바운딩박스, 중심점을 함께 그립니다.
+ * @param {CanvasRenderingContext2D} ctx - 그릴 캔버스 컨텍스트
+ * @param {Array<Object>} people - 추적 결과 (각 객체에 id, box가 있어야 함)
+ * @param {string} targetPersonId - 추적 중인 사람 ID (없으면 모든 사람 표시)
+ */
+function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
+  const sx = w / 640;
+  const sy = h / 640;
+  const fontSize = Math.max(13, Math.round(w * 0.02));
+
+  // PID 데드존 시각화 (pid_controller.py: x_dead_zone=200@1280px, y_dead_zone=100@720px)
+  const dzHalfW = 200 * w / 1280;
+  const dzHalfH = 100 * h / 720;
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 220, 0, 0.9)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 5]);
+  ctx.strokeRect(w / 2 - dzHalfW, h / 2 - dzHalfH, dzHalfW * 2, dzHalfH * 2);
+  ctx.setLineDash([]);
+  ctx.font = `${fontSize - 2}px monospace`;
+  ctx.fillStyle = "rgba(255, 220, 0, 0.9)";
+  ctx.fillText("DEAD ZONE", w / 2 - dzHalfW + 4, h / 2 - dzHalfH - 5);
+  ctx.restore();
+
+  // 각 사람별 바운딩박스 + 중심점 + 라벨
+  people.forEach((person, idx) => {
+    const { x1, y1, x2, y2 } = person.box;
+    const bx = x1 * sx;
+    const by = y1 * sy;
+    const bw = (x2 - x1) * sx;
+    const bh = (y2 - y1) * sy;
+    const cx = ((x1 + x2) / 2) * sx;
+    const cy = ((y1 + y2) / 2) * sy;
+
+    const isTarget = person.id === targetPersonId;
+    const boxColor = isTarget ? "#00ff44" : "#ff9500";
+    const labelBg = isTarget ? "rgba(0, 150, 40, 0.85)" : "rgba(180, 90, 0, 0.85)";
+
+    ctx.save();
+
+    // 바운딩박스
+    ctx.strokeStyle = boxColor;
+    ctx.lineWidth = isTarget ? 3 : 2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    // 중심점 + 십자선
+    ctx.fillStyle = boxColor;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = boxColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, cy);
+    ctx.lineTo(cx + 10, cy);
+    ctx.moveTo(cx, cy - 10);
+    ctx.lineTo(cx, cy + 10);
+    ctx.stroke();
+
+    // 라벨 배경 + 텍스트
+    const label = `사람 ${idx + 1}`;
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    const tw = ctx.measureText(label).width;
+    const pad = 4;
+    const lh = fontSize + pad * 2;
+    const lx = Math.max(0, bx);
+    const ly = by > lh ? by : by + lh;
+    ctx.fillStyle = labelBg;
+    ctx.fillRect(lx, ly - lh, tw + pad * 2, lh);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(label, lx + pad, ly - pad);
+
+    ctx.restore();
+  });
 }
 
 async function _aiLoop(src) {
@@ -501,13 +592,15 @@ async function _aiLoop(src) {
         bestAnc = targetPerson.anc;
         bestBox = targetPerson.box;
       } else if (people.length > 0) {
-        // 만약 추적하던 ID를 완전히 놓쳤다면(화면 밖으로 나감 등), 기존 로직처럼 UI 인덱스에 해당하는 사람 임시 추적
-        const fallbackIdx = Math.min(TARGET_INDEX, people.length - 1);
-        bestScore = people[fallbackIdx].score;
-        bestAnc = people[fallbackIdx].anc;
-        bestBox = people[fallbackIdx].box;
-        // 새로운 타겟으로 ID 갱신 시도
-        state.targetPersonId = people[fallbackIdx].id;
+        if (!globalTracker.isTrackAlive(state.targetPersonId)) {
+          // 트래커가 완전히 삭제한 경우에만 fallback — ID 스왑 방지
+          const fallbackIdx = Math.min(TARGET_INDEX, people.length - 1);
+          bestScore = people[fallbackIdx].score;
+          bestAnc = people[fallbackIdx].anc;
+          bestBox = people[fallbackIdx].box;
+          state.targetPersonId = people[fallbackIdx].id;
+        }
+        // 트래커가 아직 해당 ID를 기억 중(일시 소실)이면 이 프레임은 생략
       }
 
       const bestProb = bestScore;
@@ -587,6 +680,11 @@ async function _aiLoop(src) {
       fgCv.height = h;
       fgCv.getContext("2d").putImageData(frame, 0, 0);
       src.bgCtx.drawImage(fgCv, 0, 0);
+
+      // 바운딩박스, 데드존, 중심점 디버그 그리기
+      if (src.objectTracking) {
+        _drawTrackingOverlay(src.bgCtx, people, state.targetPersonId, w, h);
+      }
     } catch (e) {
       console.error("[BG] 추론 오류:", e);
     } finally {
@@ -663,9 +761,7 @@ function renderObjectList(count) {
       if (state.targetPersonIndex === i) return;
       state.targetPersonIndex = i;
       state.targetPersonId = null; // 인덱스가 변경되면 기존 ID 추적을 풀고, 다음 프레임에서 새로 ID를 캡처하게 함
-      list
-        .querySelectorAll(".object-item")
-        .forEach((el, idx) => el.classList.toggle("selected", idx === i));
+      list.querySelectorAll(".object-item").forEach((el, idx) => el.classList.toggle("selected", idx === i));
     });
     list.appendChild(li);
   }
