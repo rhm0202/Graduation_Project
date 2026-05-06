@@ -2,12 +2,12 @@ const { FusesPlugin } = require("@electron-forge/plugin-fuses");
 const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 
 module.exports = {
-  outDir: "C:\\electron_app2\\out",
+  outDir: "out",
   packagerConfig: {
     asar: true,
     prune: true,
-    name: "Spotlight_Cam_V3.1.0",
-    executableName: "Spotlight_Cam_V3.1.0",
+    name: "Spotlight_Cam_v1.0.0",
+    executableName: "Spotlight_Cam_v1.0.0",
     ignore: [
       /^\/docs/,
       /^\/website/,
@@ -25,8 +25,8 @@ module.exports = {
     {
       name: "@electron-forge/maker-squirrel",
       config: {
-        name: "Spotlight_Cam_V3.1.0",
-        setupExe: "Spotlight_Cam-Setup.exe",
+        name: "Spotlight_Cam_v1.0.0",
+        setupExe: "Spotlight_Cam-Setup_v1.0.0.exe",
         setupIcon: "./assets/icon.ico",
         // loadingGif: './assets/loading.gif', // 선택사항
       },

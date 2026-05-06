@@ -5,8 +5,8 @@
  * ─ 신규 방식 ─────────────────────────────────────────────
  *   connectToSpotlightCore()     : spotlight_core.py에 접속
  *   disconnectFromSpotlightCore(): 연결 해제
- *   sendMotorControl(pan, tilt)  : 모터 제어 명령 전송 (core가 RPi로 중계)
  *   sendTrackingState(enabled)   : 추적 on/off 전송 (core가 RPi로 중계)
+ *   sendObjectCoords(obj_x,obj_y): 객체 좌표 전송 (core가 PID 연산 후 RPi로 서보 각도 전송)
  *   setupPiConnectionUI()        : 연결/해제 버튼 이벤트 등록
  *
  * ─ 구버전 방식 (주석 보존) ───────────────────────────────
@@ -34,6 +34,7 @@ export function connectToSpotlightCore() {
       state.piConnected = true;
       state.piReconnectAttempts = 0;
       updatePiConnectionStatus(true);
+      state.piWebSocket.send(JSON.stringify({ type: 'servo_init' }));
     };
 
     state.piWebSocket.onmessage = (event) => {
@@ -116,25 +117,10 @@ export function setupPiConnectionUI() {
 function handlePiMessage(data) {
   switch (data.type) {
     case 'video_frame': handlePiVideoFrame(data.frame); break;
-    case 'motor_corrected': handleMotorCorrected(data.control); break;
-    case 'motor_status': break;
     case 'system_info': break;
   }
 }
 
-/**
- * 모터 보정 완료 응답 처리.
- * RPi가 보정을 적용한 뒤 pan/tilt를 0으로 초기화해 전송하면 호출된다.
- * tracking.js의 pendingCorrection을 리셋해 보정값 누적을 방지한다.
- * @param {{ pan: number, tilt: number }} control
- */
-function handleMotorCorrected(control) {
-  if (!control) return;
-  if (state.pendingCorrection) {
-    state.pendingCorrection.pan  = control.pan;
-    state.pendingCorrection.tilt = control.tilt;
-  }
-}
 
 function handlePiVideoFrame(frameData) {
   if (!frameData) return;
@@ -151,7 +137,12 @@ function handlePiVideoFrame(frameData) {
           state.piVideoStream = state.trackingCanvas;
           addRpiSource();
         }
-        state.trackingCtx.drawImage(img, 0, 0);
+        const ctx = state.trackingCtx;
+        ctx.save();
+        ctx.translate(0, state.trackingCanvas.height);
+        ctx.scale(1, -1);
+        ctx.drawImage(img, 0, 0);
+        ctx.restore();
       };
       img.src = `data:image/jpeg;base64,${frameData}`;
 
@@ -167,7 +158,12 @@ function handlePiVideoFrame(frameData) {
           state.piVideoStream = state.trackingCanvas;
           addRpiSource();
         }
-        state.trackingCtx.drawImage(img, 0, 0);
+        const ctx = state.trackingCtx;
+        ctx.save();
+        ctx.translate(img.width, img.height);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(img, 0, 0);
+        ctx.restore();
         URL.revokeObjectURL(url);
       };
       img.onerror = () => URL.revokeObjectURL(url);
@@ -179,7 +175,7 @@ function handlePiVideoFrame(frameData) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 상태 표시 / 모터 제어
+// 상태 표시 / 객체 좌표 전송
 // ═══════════════════════════════════════════════════════════
 
 export function updatePiConnectionStatus(connected, message) {
@@ -206,18 +202,14 @@ export function updatePiConnectionStatus(connected, message) {
   }
 }
 
-export function sendMotorControl(pan, tilt) {
-  if (!state.piConnected || state.piWebSocket?.readyState !== WebSocket.OPEN) return;
-  pan = Math.max(-90, Math.min(90, pan));
-  tilt = Math.max(-90, Math.min(90, tilt));
-  if (Math.abs(pan - state.lastMotorCommand.pan) < 1 && Math.abs(tilt - state.lastMotorCommand.tilt) < 1) return;
-  state.lastMotorCommand = { pan, tilt };
-  state.piWebSocket.send(JSON.stringify({ type: 'motor_control', pan, tilt, timestamp: Date.now() }));
-}
-
 export function sendObjectCoords(obj_x, obj_y) {
   if (!state.piConnected || state.piWebSocket?.readyState !== WebSocket.OPEN) return;
   state.piWebSocket.send(JSON.stringify({ type: 'object_detected', obj_x, obj_y }));
+}
+
+export function sendServoInit() {
+  if (!state.piConnected || state.piWebSocket?.readyState !== WebSocket.OPEN) return;
+  state.piWebSocket.send(JSON.stringify({ type: 'servo_init' }));
 }
 
 // ═══════════════════════════════════════════════════════════

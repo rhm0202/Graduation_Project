@@ -1,7 +1,7 @@
 {
-  "name": "Spotlight_Cam_V3.1.0",
+  "name": "Spotlight_Cam_v1.0.0",
   "productName": "Video Tracker",
-  "version": "3.1.0",
+  "version": "1.0.0",
   "main": "main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

@@ -1,271 +1,248 @@
 <!doctype html>
 <html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:;"
-    />
-    <title>Spotlight Cam - AI 객체 추적 및 배경 제거</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
 
-  <body>
-    <!-- 
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:;" />
+  <title>Spotlight Cam - AI 객체 추적 및 배경 제거</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <!-- 
         Spotlight Cam 메인 애플리케이션 컨테이너
         전체 UI의 최상위 래퍼 요소
     -->
 
-    <div class="spotlight-window">
-      <header class="app-menubar">
-        <div class="menu-item">
-          <span>File</span>
-          <ul class="dropdown-menu">
-            <li id="menu-show-recordings">Show Recordings</li>
-            <li id="menu-settings">Settings</li>
-            <li id="menu-exit">Exit</li>
-          </ul>
-        </div>
+  <div class="spotlight-window">
+    <header class="app-menubar">
+      <div class="menu-item">
+        <span>File</span>
+        <ul class="dropdown-menu">
+          <li id="menu-show-recordings">Show Recordings</li>
+          <li id="menu-settings">Settings</li>
+          <li id="menu-exit">Exit</li>
+        </ul>
+      </div>
 
-        <div class="menu-item">
-          <span>View</span>
-          <ul class="dropdown-menu">
-            <li id="menu-toggle-fullscreen">Toggle Fullscreen</li>
-            <li id="menu-toggle-docks">Docks</li>
-            <hr />
-            <li id="menu-reload">Force Reload</li>
-          </ul>
-        </div>
-        <div class="menu-item">
-          <span>Help</span>
-          <ul class="dropdown-menu">
-            <li id="menu-check-updates">Check for Updates</li>
-            <li id="menu-about">About</li>
-          </ul>
-        </div>
-      </header>
+      <div class="menu-item">
+        <span>View</span>
+        <ul class="dropdown-menu">
+          <li id="menu-toggle-fullscreen">Toggle Fullscreen</li>
+          <li id="menu-toggle-docks">Docks</li>
+          <hr />
+          <li id="menu-reload">Force Reload</li>
+        </ul>
+      </div>
+      <div class="menu-item">
+        <span>Help</span>
+        <ul class="dropdown-menu">
+          <li id="menu-check-updates">Check for Updates</li>
+          <li id="menu-about">About</li>
+        </ul>
+      </div>
+    </header>
 
-      <main class="main-content">
-        <section class="preview-area" id="preview-area">
-          <!-- 처리 전/후 비교 모드 -->
-          <div id="comparison-container">
-            <div class="comparison-video-wrapper">
-              <div class="comparison-label original-label">원본</div>
-              <video id="original-video" autoplay muted playsinline></video>
-            </div>
-            <div class="comparison-video-wrapper processed">
-              <div class="comparison-label processed-label">처리 후</div>
-              <video id="processed-video" autoplay muted playsinline></video>
-            </div>
+    <main class="main-content">
+      <section class="preview-area" id="preview-area">
+        <!-- 처리 전/후 비교 모드 -->
+        <div id="comparison-container">
+          <div class="comparison-video-wrapper">
+            <div class="comparison-label original-label">원본</div>
+            <video id="original-video" autoplay muted playsinline></video>
           </div>
-          <!-- 일반 모드 -->
-          <video id="main-video-feed" autoplay muted playsinline></video>
-        </section>
+          <div class="comparison-video-wrapper processed">
+            <div class="comparison-label processed-label">처리 후</div>
+            <video id="processed-video" autoplay muted playsinline></video>
+          </div>
+        </div>
+        <!-- 일반 모드 -->
+        <video id="main-video-feed" autoplay muted playsinline></video>
+      </section>
 
-        <!-- 리사이즈 바 -->
-        <div class="resize-bar" id="docks-resize-bar"></div>
+      <!-- 리사이즈 바 -->
+      <div class="resize-bar" id="docks-resize-bar"></div>
 
-        <section class="docks-container" id="docks-container">
-          <div class="dock-panel" id="audio-mixer-panel">
-            <div class="dock-header">
-              <h3>Audio Mixer</h3>
-            </div>
-            <div class="dock-content">
-              <div class="audio-track" data-track="desktop">
-                <div class="track-header">
-                  <span>Desktop Audio</span>
-                  <span class="db-display">0.0 dB</span>
-                  <span class="icon-button">⚙</span>
-                </div>
-                <div class="volume-meter">
-                  <div class="meter-fill" data-meter-name="desktop"></div>
-                </div>
-                <div class="track-controls">
-                  <span class="icon-button mute-btn" data-mute="desktop"
-                    >🔊</span
-                  >
-                  <input
-                    type="range"
-                    class="volume-slider"
-                    data-volume="desktop"
-                    min="-100"
-                    max="0"
-                    value="0"
-                  />
-                </div>
+      <section class="docks-container" id="docks-container">
+        <div class="dock-panel" id="audio-mixer-panel">
+          <div class="dock-header">
+            <h3>Audio Mixer</h3>
+          </div>
+          <div class="dock-content">
+            <div class="audio-track" data-track="desktop">
+              <div class="track-header">
+                <span>Desktop Audio</span>
+                <span class="db-display">0.0 dB</span>
+                <span class="icon-button">⚙</span>
               </div>
-              <div class="audio-track" data-track="mic">
-                <div class="track-header">
-                  <span>Mic/Aux</span>
-                  <span class="db-display">0.0 dB</span>
-                  <span class="icon-button">⚙</span>
-                </div>
-                <div class="volume-meter">
-                  <div class="meter-fill" data-meter-name="mic"></div>
-                </div>
-                <div class="track-controls">
-                  <span class="icon-button mute-btn" data-mute="mic">🔊</span>
-                  <input
-                    type="range"
-                    class="volume-slider"
-                    data-volume="mic"
-                    min="-100"
-                    max="0"
-                    value="0"
-                  />
-                </div>
+              <div class="volume-meter">
+                <div class="meter-fill" data-meter-name="desktop"></div>
+              </div>
+              <div class="track-controls">
+                <span class="icon-button mute-btn" data-mute="desktop">🔊</span>
+                <input type="range" class="volume-slider" data-volume="desktop" min="-100" max="0" value="0" />
+              </div>
+            </div>
+            <div class="audio-track" data-track="mic">
+              <div class="track-header">
+                <span>Mic/Aux</span>
+                <span class="db-display">0.0 dB</span>
+                <span class="icon-button">⚙</span>
+              </div>
+              <div class="volume-meter">
+                <div class="meter-fill" data-meter-name="mic"></div>
+              </div>
+              <div class="track-controls">
+                <span class="icon-button mute-btn" data-mute="mic">🔊</span>
+                <input type="range" class="volume-slider" data-volume="mic" min="-100" max="0" value="0" />
               </div>
             </div>
           </div>
-          <!--기존의 controls 패널 오른쪽에 새로운 controls 패널 만들기-->
+        </div>
+        <!--기존의 controls 패널 오른쪽에 새로운 controls 패널 만들기-->
 
-          <div class="dock-panel" id="controls-panel">
-            <div class="dock-header">
-              <h3>Controls</h3>
-            </div>
-            <div class="dock-content">
-              <button class="control-btn" id="toggle-background-removal">
-                배경 제거: OFF
-              </button>
-              <button class="control-btn" id="toggle-background-replace">
-                배경 교체
-              </button>
-              <button class="control-btn" id="toggle-comparison">
-                전/후 비교 보기
-              </button>
-              <button class="control-btn" id="toggle-auto-tracking">
+        <div class="dock-panel" id="controls-panel">
+          <div class="dock-header">
+            <h3>Controls</h3>
+          </div>
+          <div class="dock-content">
+            <button class="control-btn" id="toggle-background-removal">
+              배경 제거: OFF
+            </button>
+            <button class="control-btn" id="toggle-background-replace">
+              배경 교체
+            </button>
+            <button class="control-btn" id="toggle-comparison">
+              전/후 비교 보기
+            </button>
+            <div style="display: flex; gap: 4px;">
+              <button class="control-btn" id="toggle-auto-tracking" style="flex: 1.7;">
                 자동 추적: OFF
               </button>
-            </div>
-          </div>
-          <div class="dock-panel" id="object-panel">
-            <div class="dock-header">
-              <h3>Object Panel</h3>
-            </div>
-            <div class="dock-content">
-              <ul id="object-list"></ul>
-            </div>
-          </div>
-          <div class="dock-panel" id="sources-panel">
-            <div class="dock-header" id="sources-dock-header">
-              <h3>Sources</h3>
-              <button
-                class="control-btn"
-                id="add-source-btn"
-                style="padding: 2px 8px; font-size: 1.1em"
-              >
-                +
+              <button class="control-btn" id="refresh-btn" style="flex: 0.3;">
+                ↻
               </button>
-              <div id="add-source-menu" style="display: none">
-                <div data-add-source="webcam">웹캠 (Webcam)</div>
-                <div data-add-source="display">전체화면 캡처</div>
-                <div data-add-source="window">창 캡처</div>
-                <div data-add-source="rpi">RPi 카메라</div>
-              </div>
-            </div>
-            <div class="dock-content" style="padding: 0">
-              <ul id="sources-list"></ul>
             </div>
           </div>
-
-          <div class="dock-panel" id="recordings-panel">
-            <div class="dock-header">
-              <h3>Recordings</h3>
-            </div>
-            <div class="dock-content">
-              <button class="control-btn" id="start-recording-btn">
-                Start Recording
-              </button>
-              <button class="control-btn" id="open-settings">Settings</button>
-              <button class="control-btn" id="exit-button">Exit</button>
+        </div>
+        <div class="dock-panel" id="object-panel">
+          <div class="dock-header">
+            <h3>Object Panel</h3>
+          </div>
+          <div class="dock-content">
+            <ul id="object-list"></ul>
+          </div>
+        </div>
+        <div class="dock-panel" id="sources-panel">
+          <div class="dock-header" id="sources-dock-header">
+            <h3>Sources</h3>
+            <button class="control-btn" id="add-source-btn" style="padding: 2px 8px; font-size: 1.1em">
+              +
+            </button>
+            <div id="add-source-menu" style="display: none">
+              <div data-add-source="webcam">웹캠 (Webcam)</div>
+              <div data-add-source="display">전체화면 캡처</div>
+              <div data-add-source="window">창 캡처</div>
+              <div data-add-source="rpi">RPi 카메라</div>
             </div>
           </div>
-        </section>
-      </main>
+          <div class="dock-content" style="padding: 0">
+            <ul id="sources-list"></ul>
+          </div>
+        </div>
 
-      <footer class="status-bar">
-        <div class="status-left">
-          <span>LIVE: 00:00:00</span>
-          <span id="rec-status">REC: 00:00:00</span>
-          <span id="pi-status" style="margin-left: 20px">
-            <span
-              id="pi-status-indicator"
-              style="
+        <div class="dock-panel" id="recordings-panel">
+          <div class="dock-header">
+            <h3>Recordings</h3>
+          </div>
+          <div class="dock-content">
+            <button class="control-btn" id="start-recording-btn">
+              Start Recording
+            </button>
+            <button class="control-btn" id="open-settings">Settings</button>
+            <button class="control-btn" id="exit-button">Exit</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="status-bar">
+      <div class="status-left">
+        <span>LIVE: 00:00:00</span>
+        <span id="rec-status">REC: 00:00:00</span>
+        <span id="pi-status" style="margin-left: 20px">
+          <span id="pi-status-indicator" style="
                 display: inline-block;
                 width: 8px;
                 height: 8px;
                 border-radius: 50%;
                 background-color: var(--color-danger);
                 margin-right: 5px;
-              "
-            ></span>
-            <span id="pi-status-text">라즈베리파이: 연결 안 됨</span>
-          </span>
+              "></span>
+          <span id="pi-status-text">라즈베리파이: 연결 안 됨</span>
+        </span>
+      </div>
+      <div class="status-right">
+        <span id="gpu-name-status"></span>
+        <span id="gpu-status">GPU: --%</span>
+      </div>
+    </footer>
+  </div>
+
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal-content">
+      <h2>설정 (Settings)</h2>
+
+      <fieldset>
+        <legend>비디오 설정</legend>
+        <div class="setting-item">
+          <label for="video-source">카메라:</label>
+          <select id="video-source"></select>
         </div>
-        <div class="status-right">
-          <span id="gpu-name-status"></span>
-          <span id="gpu-status">GPU: --%</span>
+        <div class="setting-item">
+          <label for="video-resolution">해상도:</label>
+          <select id="video-resolution">
+            <option value="auto">자동</option>
+            <option value="1080p">1920x1080</option>
+            <option value="720p">1280x720</option>
+          </select>
         </div>
-      </footer>
-    </div>
+        <div class="setting-item">
+          <label for="video-framerate">프레임레이트:</label>
+          <select id="video-framerate">
+            <option value="auto">자동</option>
+            <option value="30">30 fps</option>
+            <option value="60">60 fps</option>
+          </select>
+        </div>
+      </fieldset>
 
-    <div class="modal-overlay" id="settings-modal">
-      <div class="modal-content">
-        <h2>설정 (Settings)</h2>
+      <fieldset>
+        <legend>오디오 설정</legend>
+        <div class="setting-item">
+          <label for="audio-source">마이크:</label>
+          <select id="audio-source"></select>
+        </div>
+      </fieldset>
 
-        <fieldset>
-          <legend>비디오 설정</legend>
-          <div class="setting-item">
-            <label for="video-source">카메라:</label>
-            <select id="video-source"></select>
-          </div>
-          <div class="setting-item">
-            <label for="video-resolution">해상도:</label>
-            <select id="video-resolution">
-              <option value="auto">자동</option>
-              <option value="1080p">1920x1080</option>
-              <option value="720p">1280x720</option>
-            </select>
-          </div>
-          <div class="setting-item">
-            <label for="video-framerate">프레임레이트:</label>
-            <select id="video-framerate">
-              <option value="auto">자동</option>
-              <option value="30">30 fps</option>
-              <option value="60">60 fps</option>
-            </select>
-          </div>
-        </fieldset>
+      <fieldset>
+        <legend>GPU 설정</legend>
+        <div class="setting-item">
+          <label for="gpu-select">사용 GPU:</label>
+          <select id="gpu-select">
+            <option value="">불러오는 중...</option>
+          </select>
+        </div>
+      </fieldset>
 
-        <fieldset>
-          <legend>오디오 설정</legend>
-          <div class="setting-item">
-            <label for="audio-source">마이크:</label>
-            <select id="audio-source"></select>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>GPU 설정</legend>
-          <div class="setting-item">
-            <label for="gpu-select">사용 GPU:</label>
-            <select id="gpu-select">
-              <option value="">불러오는 중...</option>
-            </select>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>라즈베리파이 연결</legend>
-          <div class="setting-item">
-            <label for="raspberry-pi-ip">라즈베리파이 IP 주소:</label>
-            <div style="display: flex; gap: 5px; flex-grow: 1">
-              <input
-                type="text"
-                id="raspberry-pi-ip"
-                placeholder="예: 192.168.1.100"
-                style="
+      <fieldset>
+        <legend>라즈베리파이 연결</legend>
+        <div class="setting-item">
+          <label for="raspberry-pi-ip">라즈베리파이 IP 주소:</label>
+          <div style="display: flex; gap: 5px; flex-grow: 1">
+            <input type="text" id="raspberry-pi-ip" placeholder="예: 192.168.1.100" style="
                   flex-grow: 1;
                   background-color: var(--bg-medium);
                   color: var(--text-primary);
@@ -273,16 +250,8 @@
                   padding: 5px;
                   border-radius: 3px;
                   font-size: 0.9em;
-                "
-              />
-              <input
-                type="number"
-                id="raspberry-pi-port"
-                placeholder="포트"
-                value="8765"
-                min="1"
-                max="65535"
-                style="
+                " />
+            <input type="number" id="raspberry-pi-port" placeholder="포트" value="8765" min="1" max="65535" style="
                   width: 80px;
                   background-color: var(--bg-medium);
                   color: var(--text-primary);
@@ -290,65 +259,46 @@
                   padding: 5px;
                   border-radius: 3px;
                   font-size: 0.9em;
-                "
-              />
-            </div>
+                " />
           </div>
-          <div class="setting-item">
-            <label>연결 상태:</label>
-            <div
-              style="
+        </div>
+        <div class="setting-item">
+          <label>연결 상태:</label>
+          <div style="
                 display: flex;
                 align-items: center;
                 gap: 10px;
                 flex-grow: 1;
-              "
-            >
-              <span
-                id="pi-connection-status"
-                style="
+              ">
+            <span id="pi-connection-status" style="
                   padding: 5px 10px;
                   border-radius: 3px;
                   font-size: 0.9em;
                   background-color: var(--bg-medium);
-                "
-                >연결 안 됨</span
-              >
-              <button
-                class="control-btn"
-                id="connect-pi-btn"
-                style="flex-shrink: 0"
-              >
-                연결
-              </button>
-              <button
-                class="control-btn"
-                id="disconnect-pi-btn"
-                style="flex-shrink: 0; display: none"
-              >
-                연결 해제
-              </button>
-            </div>
+                ">연결 안 됨</span>
+            <button class="control-btn" id="connect-pi-btn" style="flex-shrink: 0">
+              연결
+            </button>
+            <button class="control-btn" id="disconnect-pi-btn" style="flex-shrink: 0; display: none">
+              연결 해제
+            </button>
           </div>
-        </fieldset>
+        </div>
+      </fieldset>
 
-        <fieldset>
-          <legend>출력 (저장)</legend>
-          <div class="setting-item">
-            <label for="file-format">파일 형식:</label>
-            <select id="file-format">
-              <option value="webm">WebM (권장)</option>
-              <option value="mp4">MP4 (변환 필요)</option>
-            </select>
-          </div>
-          <div class="setting-item">
-            <label>저장 위치:</label>
-            <div style="display: flex; gap: 5px; flex-grow: 1">
-              <input
-                type="text"
-                id="save-path-display"
-                readonly
-                style="
+      <fieldset>
+        <legend>출력 (저장)</legend>
+        <div class="setting-item">
+          <label for="file-format">파일 형식:</label>
+          <select id="file-format">
+            <option value="webm">WebM (권장)</option>
+            <option value="mp4">MP4 (변환 필요)</option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label>저장 위치:</label>
+          <div style="display: flex; gap: 5px; flex-grow: 1">
+            <input type="text" id="save-path-display" readonly style="
                   flex-grow: 1;
                   background-color: var(--bg-medium);
                   color: var(--text-primary);
@@ -356,134 +306,116 @@
                   padding: 5px;
                   border-radius: 3px;
                   font-size: 0.9em;
-                "
-              />
-              <button
-                class="control-btn"
-                id="set-save-path"
-                style="flex-shrink: 0"
-              >
-                선택...
-              </button>
-            </div>
+                " />
+            <button class="control-btn" id="set-save-path" style="flex-shrink: 0">
+              선택...
+            </button>
           </div>
-        </fieldset>
-
-        <div class="modal-buttons">
-          <button class="control-btn" id="close-settings">닫기</button>
         </div>
+      </fieldset>
+
+      <div class="modal-buttons">
+        <button class="control-btn" id="close-settings">닫기</button>
       </div>
     </div>
+  </div>
 
-    <div class="modal-overlay" id="error-modal" style="display: none">
-      <div class="modal-content" style="max-width: 500px">
-        <h2 style="color: var(--color-danger); margin-bottom: 15px">
-          오류 발생
-        </h2>
-        <div
-          id="error-message"
-          style="
+  <div class="modal-overlay" id="error-modal" style="display: none">
+    <div class="modal-content" style="max-width: 500px">
+      <h2 style="color: var(--color-danger); margin-bottom: 15px">
+        오류 발생
+      </h2>
+      <div id="error-message" style="
             margin-bottom: 20px;
             line-height: 1.6;
             color: var(--text-primary);
-          "
-        >
-          <!-- 에러 메시지가 여기에 표시됩니다 -->
-        </div>
-        <div
-          class="modal-buttons"
-          style="display: flex; gap: 10px; justify-content: flex-end"
-        >
-          <button
-            class="control-btn"
-            id="error-retry-btn"
-            style="display: none"
-          >
-            다시 시도
-          </button>
-          <button
-            class="control-btn"
-            id="error-settings-btn"
-            style="display: none"
-          >
-            설정 열기
-          </button>
-          <button class="control-btn" id="error-close-btn">닫기</button>
-        </div>
+          ">
+        <!-- 에러 메시지가 여기에 표시됩니다 -->
+      </div>
+      <div class="modal-buttons" style="display: flex; gap: 10px; justify-content: flex-end">
+        <button class="control-btn" id="error-retry-btn" style="display: none">
+          다시 시도
+        </button>
+        <button class="control-btn" id="error-settings-btn" style="display: none">
+          설정 열기
+        </button>
+        <button class="control-btn" id="error-close-btn">닫기</button>
       </div>
     </div>
+  </div>
 
-    <div class="modal-overlay" id="background-replace-modal">
-      <div class="modal-content">
-        <h2>배경 교체</h2>
+  <div class="modal-overlay" id="background-replace-modal">
+    <div class="modal-content">
+      <h2>배경 교체</h2>
 
-        <fieldset>
-          <legend>배경 타입</legend>
-          <div class="setting-item">
-            <label>
-              <input type="radio" name="background-type" value="none" checked />
-              배경 없음 (투명)
-            </label>
-          </div>
-          <div class="setting-item">
-            <label>
-              <input type="radio" name="background-type" value="image" />
-              이미지
-            </label>
-          </div>
-          <div class="setting-item">
-            <label>
-              <input type="radio" name="background-type" value="video" />
-              비디오
-            </label>
-          </div>
-          <div class="setting-item">
-            <label>
-              <input type="radio" name="background-type" value="color" />
-              단색
-            </label>
-          </div>
-        </fieldset>
-
-        <fieldset id="background-image-option" style="display: none">
-          <legend>이미지 선택</legend>
-          <div class="setting-item">
-            <input type="file" id="background-image-file" accept="image/*" />
-          </div>
-        </fieldset>
-
-        <fieldset id="background-video-option" style="display: none">
-          <legend>비디오 선택</legend>
-          <div class="setting-item">
-            <input type="file" id="background-video-file" accept="video/*" />
-          </div>
-        </fieldset>
-
-        <fieldset id="background-color-option" style="display: none">
-          <legend>색상 선택</legend>
-          <div class="setting-item">
-            <label for="background-color-picker">색상:</label>
-            <input type="color" id="background-color-picker" value="#000000" />
-          </div>
-        </fieldset>
-
-        <div class="modal-buttons">
-          <button class="control-btn" id="background-replace-apply">
-            적용
-          </button>
-          <button class="control-btn" id="background-replace-close">
-            닫기
-          </button>
+      <fieldset>
+        <legend>배경 타입</legend>
+        <div class="setting-item">
+          <label>
+            <input type="radio" name="background-type" value="none" checked />
+            배경 없음 (투명)
+          </label>
         </div>
+        <div class="setting-item">
+          <label>
+            <input type="radio" name="background-type" value="image" />
+            이미지
+          </label>
+        </div>
+        <div class="setting-item">
+          <label>
+            <input type="radio" name="background-type" value="video" />
+            비디오
+          </label>
+        </div>
+        <div class="setting-item">
+          <label>
+            <input type="radio" name="background-type" value="color" />
+            단색
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset id="background-image-option" style="display: none">
+        <legend>이미지 선택</legend>
+        <div class="setting-item">
+          <input type="file" id="background-image-file" accept="image/*" />
+        </div>
+      </fieldset>
+
+      <fieldset id="background-video-option" style="display: none">
+        <legend>비디오 선택</legend>
+        <div class="setting-item">
+          <input type="file" id="background-video-file" accept="video/*" />
+        </div>
+      </fieldset>
+
+      <fieldset id="background-color-option" style="display: none">
+        <legend>색상 선택</legend>
+        <div class="setting-item">
+          <label for="background-color-picker">색상:</label>
+          <input type="color" id="background-color-picker" value="#000000" />
+        </div>
+      </fieldset>
+
+      <div class="modal-buttons">
+        <button class="control-btn" id="background-replace-apply">
+          적용
+        </button>
+        <button class="control-btn" id="background-replace-close">
+          닫기
+        </button>
       </div>
     </div>
+  </div>
 
-    <script src="./node_modules/onnxruntime-web/dist/ort.all.min.js"></script>
-    <script type="module" src="./renderer/main-renderer.js"></script>
-    <script>
-      document.addEventListener("DOMContentLoaded", () => {
-        // 렌더러 로직은 renderer/main-renderer.js (ES Module)로 분리되었습니다.
-      });
-    </script>
-  </body>
+  <script src="./node_modules/onnxruntime-web/dist/ort.all.min.js"></script>
+  <script type="module" src="./renderer/main-renderer.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // 렌더러 로직은 renderer/main-renderer.js (ES Module)로 분리되었습니다.
+    });
+  </script>
+</body>
+
 </html>

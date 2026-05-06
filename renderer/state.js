@@ -49,6 +49,7 @@ export const state = {
   bgColor: null,               // 배경 제거 후 적용할 단색 (hex)
 
   // 객체 추적
+  objectTrackingEnabled: false,
   autoTrackingEnabled: false,
   yoloModel: null,
   trackingCanvas: null,
@@ -56,10 +57,10 @@ export const state = {
   detectedObjects: [],
   trackingAnimationFrame: null,
   lastMotorCommand: { pan: 0, tilt: 0 },
-  pendingCorrection: { pan: 0, tilt: 0 },  // RPi 보정 완료 응답 수신 전까지 누적되는 보정값
 
   // 배경 제거 대상 인물 선택
   targetPersonIndex: 0,
+  targetPersonId: null, // 추적 대상의 고유 ID
   detectedPeopleCount: 0,
 };
 
