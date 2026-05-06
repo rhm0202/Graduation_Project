@@ -6,8 +6,8 @@ module.exports = {
   packagerConfig: {
     asar: true,
     prune: true,
-    name: "Spotlight_Cam_V3.1.0",
-    executableName: "Spotlight_Cam_V3.1.0",
+    name: "Spotlight_Cam_v1.0.0",
+    executableName: "Spotlight_Cam_v1.0.0",
     ignore: [
       /^\/docs/,
       /^\/website/,
@@ -25,8 +25,8 @@ module.exports = {
     {
       name: "@electron-forge/maker-squirrel",
       config: {
-        name: "Spotlight_Cam_V3.1.0",
-        setupExe: "Spotlight_Cam-Setup.exe",
+        name: "Spotlight_Cam_v1.0.0",
+        setupExe: "Spotlight_Cam-Setup_v1.0.0.exe",
         setupIcon: "./assets/icon.ico",
         // loadingGif: './assets/loading.gif', // 선택사항
       },

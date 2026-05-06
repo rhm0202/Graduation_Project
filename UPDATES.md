@@ -17,8 +17,8 @@ Spotlight Cam은 자동 업데이트 기능을 지원합니다. 사용자는 앱
 ```json
 {
   "version": "1.0.1",
-  "releaseDate": "2024-01-15",
-  "downloadUrl": "https://github.com/rhm0202/Graduation_Project/releases/download/v1.0.1/VideoTracker-Setup-1.0.1.exe",
+  "releaseDate": "2026-05-06",
+  "downloadUrl": "https://media.githubusercontent.com/media/rhm0202/Graduation_Project/main/website/downloads/Spotlight_Cam-Setup_v1.0.1.exe",
   "releaseNotes": "버그 수정 및 성능 개선\n- 라즈베리파이 연결 안정성 향상\n- UI 개선\n- 새로운 기능 추가"
 }
 ```
@@ -33,10 +33,10 @@ Spotlight Cam은 자동 업데이트 기능을 지원합니다. 사용자는 앱
 `main.js` 파일에서 업데이트 서버 URL을 설정합니다:
 
 ```javascript
-const UPDATE_SERVER_URL = 'https://raw.githubusercontent.com/wer134/application/main/updates/latest.json';
+const UPDATE_SERVER_URL = 'https://raw.githubusercontent.com/rhm0202/Graduation_Project/main/updates/latest.json';
 ```
 
-**현재 설정된 저장소**: [wer134/application](https://github.com/wer134/application)
+**현재 설정된 저장소**: [rhm0202/Graduation_Project](https://github.com/rhm0202/Graduation_Project)
 
 #### 4단계: 새 버전 배포
 1. `package.json`의 버전 번호를 업데이트합니다 (예: "1.0.0" → "1.0.1")
@@ -145,9 +145,9 @@ application/
 ```json
 {
   "version": "1.0.1",
-  "releaseDate": "2024-01-15",
-  "downloadUrl": "https://github.com/wer134/application/releases/download/v1.0.1/VideoTracker-Setup-1.0.1.exe",
-  "releaseNotes": "주요 변경사항:\n- 라즈베리파이 WebSocket 연동 기능 추가\n- UI 개선\n- 버그 수정"
+  "releaseDate": "2026-05-06",
+  "downloadUrl": "https://media.githubusercontent.com/media/rhm0202/Graduation_Project/main/website/downloads/Spotlight_Cam-Setup_v1.0.1.exe",
+  "releaseNotes": "주요 변경사항:\n- 버그 수정 및 성능 개선\n- UI 개선"
 }
 ```
 
@@ -158,7 +158,7 @@ application/
 4. 태그: `v1.0.1` (버전과 일치)
 5. 제목: `Spotlight Cam v1.0.1`
 6. 릴리스 노트 작성
-7. 빌드된 `VideoTracker-Setup-1.0.1.exe` 파일 업로드
+7. 빌드된 `Spotlight_Cam-Setup_v1.0.1.exe` 파일 업로드
 8. **Publish release** 클릭
 
 이제 사용자들이 자동으로 업데이트를 받을 수 있습니다!
@@ -246,15 +246,15 @@ application/
 
 ---
 
-### 구현 우선순위
+### 구현 우선순위 (v1.0.1 기준)
 
-1. **Phase 1: 해상도/프레임레이트 설정** (우선순위: 높음)
-   - 사용자 요청 기능
+1. **Phase 1: 해상도/프레임레이트 설정 실제 적용** (우선순위: 높음)
+   - 현재 UI는 있으나 constraints에 미반영
    - 구현 난이도: 중간
    - 예상 소요 시간: 3시간
 
 2. **Phase 2: 에러 처리 개선** (우선순위: 높음)
-   - 사용자 경험 개선
+   - 사용자 경험 개선 (에러 유형별 안내)
    - 구현 난이도: 중간
    - 예상 소요 시간: 6시간
 
@@ -267,17 +267,23 @@ application/
 
 ## 버전별 기능 추가 계획
 
-### v2.1.2 (예정)
-- 해상도/프레임레이트 설정 기능
-- 에러 처리 개선
-- 설정 저장/불러오기 개선
+### v1.0.0 (현재 릴리스 - 2026-05-06)
+- OBS 스타일 Sources 패널 (웹캠/화면/창/RPi 소스, 레이어 컴포지팅)
+- 실시간 AI 배경 제거 (ONNX/SegFormer)
+- 배경 교체 기능 (이미지/동영상/단색)
+- 라즈베리파이 WebSocket 연동 (spotlight_core.py)
+- 팬/틸트 모터 자동 추적 모드
+- 자동 업데이트 기능
+- 이벤트 리스너 최적화 (이벤트 위임 패턴)
+- Audio Mixer 볼륨 미터 수정
+- UI 레이아웃 개선 (리사이즈 바, 패널 비율 조정)
 
-### v2.1.3 (예정)
-- 배경 제거 기본 구현
-- 배경 교체 기능
-- 소스 변형 기능
+### v1.0.1 (예정)
+- 해상도/프레임레이트 설정 실제 적용 (현재 UI만 존재)
+- 에러 처리 개선 (에러 유형별 사용자 안내 메시지)
+- WebSocket 자동 재연결 (최대 3회)
 
-### v2.1.4 (예정)
-- 라즈베리파이 WebSocket 연동 완성
-- YOLO 객체 추적 통합
-- 자동 추적 모드
+### v1.1.0 (예정)
+- YOLO 모델 완전 통합 (현재 시뮬레이션 상태)
+- 스트리밍 기능 (RTMP 등)
+- 다국어 지원
