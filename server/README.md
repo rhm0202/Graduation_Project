@@ -39,10 +39,7 @@ Raspberry Pi와 Electron 앱 사이에서 영상 스트리밍 및 모터 제어 
 
 ## 실행
 
-```bash
-cd server
-python spotlight_core.py
-```
+Electron 앱에서 **라즈베리파이 연결 버튼**을 누르면 자동으로 실행된다.
 
 ### 사전 조건
 
