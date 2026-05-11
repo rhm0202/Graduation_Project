@@ -16,10 +16,13 @@ Raspberry Pi와 Electron 앱 사이에서 영상 스트리밍 및 모터 제어 
 | Electron (`ws://0.0.0.0:8765`) | 양방향 | 영상 프레임 송신 / 추적 명령 수신 |
 
 **흐름:**
-```
-Electron ──object_detected──▶ spotlight_core ──servo_angle──▶ RPi
-RPi ──JPEG frame──▶ spotlight_core ──JPEG frame──▶ Electron
-```
+
+| 단계 | 송신 | 내용 | 수신 |
+|---|---|---|---|
+| 1 | RPi | JPEG 프레임 (binary) | spotlight_core |
+| 2 | spotlight_core | JPEG 프레임 (binary) | Electron |
+| 3 | Electron | object_detected (YOLO 좌표) | spotlight_core |
+| 4 | spotlight_core | servo_angle (pan/tilt 각도) | RPi |
 
 ---
 
