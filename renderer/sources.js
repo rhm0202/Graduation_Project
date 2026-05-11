@@ -316,6 +316,17 @@ export function toggleBgRemovalForSelectedSource() {
   state.backgroundRemovalEnabled = !state.backgroundRemovalEnabled;
   src.bgRemoval = state.backgroundRemovalEnabled;
 
+  if (!state.backgroundRemovalEnabled) {
+    state.targetPersonIds = [];
+    renderObjectList(globalTracker.tracks);
+  } else {
+    if (state.targetPersonIds.length === 0 && globalTracker.tracks.length > 0) {
+      const sorted = [...globalTracker.tracks].sort((a, b) => a.box.x1 - b.box.x1);
+      state.targetPersonIds.push(sorted[0].id);
+    }
+    renderObjectList(globalTracker.tracks);
+  }
+
   // AI 루프 관리: 둘 중 하나라도 켜져 있으면 루프 유지
   const needAi = src.bgRemoval || src.objectTracking;
   if (needAi && !src.bgAnimFrame) {
@@ -561,14 +572,9 @@ async function _aiLoop(src) {
       // UI 표시 및 인덱스 매칭을 위해 현재 프레임 기준 X좌표 순(왼쪽부터)으로 정렬
       people.sort((a, b) => a.box.x1 - b.box.x1);
 
-      // Object Panel 목록 갱신 (트래커 ID 집합 또는 소실 상태가 바뀔 때)
-      const _snap = globalTracker.tracks.map(t => `${t.id}:${t.missingFrames > 0 ? 1 : 0}`).join(',');
-      if (_snap !== _trackSnapshot) {
-        _trackSnapshot = _snap;
-        renderObjectList(globalTracker.tracks);
-      }
-
       // 3. 타겟 추적 로직 (ID 기반)
+      if (!state.targetPersonIds) state.targetPersonIds = [];
+
       if (people.length > 0) {
         if (state.targetPersonId === undefined || state.targetPersonId === null) {
           state.targetPersonId = people[0].id;
@@ -576,7 +582,11 @@ async function _aiLoop(src) {
       } else {
         // 화면에 아무도 없으면 타겟 ID 초기화
         state.targetPersonId = null;
+        state.targetPersonIds = [];
       }
+
+      // 죽은 트랙 정리
+      state.targetPersonIds = state.targetPersonIds.filter(id => globalTracker.isTrackAlive(id));
 
       let bestScore = -Infinity;
       let bestAnc = -1;
@@ -596,15 +606,25 @@ async function _aiLoop(src) {
           bestAnc = people[0].anc;
           bestBox = people[0].box;
           state.targetPersonId = people[0].id;
+          if (!state.targetPersonIds.includes(people[0].id)) {
+            state.targetPersonIds.push(people[0].id);
+          }
         }
         // 트래커가 아직 해당 ID를 기억 중(일시 소실)이면 이 프레임은 생략
       }
 
       const bestProb = bestScore;
 
+      // Object Panel 목록 갱신 (트래커 상태나 선택 상태가 바뀔 때)
+      const _snap = globalTracker.tracks.map(t => `${t.id}:${t.missingFrames > 0 ? 1 : 0}`).join(',') + `|bg:${state.targetPersonIds.join(',')}|tr:${state.targetPersonId}`;
+      if (_snap !== _trackSnapshot) {
+        _trackSnapshot = _snap;
+        renderObjectList(globalTracker.tracks);
+      }
+
       if (window._deepDiagDone) window._deepDiagDone = false;
 
-      // 확률이 50% 이상이고 유효한 사람이 감지되었을 때만 처리
+      // 확률이 50% 이상이고 유효한 추적 대상이 감지되었을 때만 처리
       if (bestProb > 0.5 && bestAnc >= 0) {
         // 객체추적이 켜져 있으면 좌표 전송
         if (state.autoTrackingEnabled) {
@@ -612,48 +632,71 @@ async function _aiLoop(src) {
           const obj_y = ((bestBox.y1 + bestBox.y2) / 2) * (h / 640);
           sendObjectCoords(obj_x, obj_y);
         }
+      }
 
-        // 배경 제거가 켜져 있을 때만 마스크 적용
-        if (src.bgRemoval) {
-          const bestCoeffs = new Float32Array(32);
-          for (let c = 0; c < 32; c++) {
-            bestCoeffs[c] = output0[bestAnc * NUM_CHANNELS + COEFF_START + c];
-          }
+      // 배경 제거가 켜져 있을 때 다중 객체 마스크 적용
+      if (src.bgRemoval) {
+        const bgTargets = people.filter(p => state.targetPersonIds.includes(p.id) && p.score > 0.5);
 
-          const mask160 = new Float32Array(160 * 160);
-          for (let p = 0; p < 160 * 160; p++) {
-            let sum = 0;
+        if (bgTargets.length > 0) {
+          const combinedMask = new Float32Array(160 * 160);
+
+          for (const target of bgTargets) {
+            const coeffs = new Float32Array(32);
             for (let c = 0; c < 32; c++) {
-              sum += bestCoeffs[c] * protos[c * 160 * 160 + p];
+              coeffs[c] = output0[target.anc * NUM_CHANNELS + COEFF_START + c];
             }
-            mask160[p] = 1 / (1 + Math.exp(-sum)); // sigmoid
-          }
 
-          // 박스 좌표를 160x160 마스크 스케일로 변환
-          const bx1 = Math.floor(bestBox.x1 * (160 / 640));
-          const by1 = Math.floor(bestBox.y1 * (160 / 640));
-          const bx2 = Math.ceil(bestBox.x2 * (160 / 640));
-          const by2 = Math.ceil(bestBox.y2 * (160 / 640));
+            for (let p = 0; p < 160 * 160; p++) {
+              let sum = 0;
+              for (let c = 0; c < 32; c++) {
+                sum += coeffs[c] * protos[c * 160 * 160 + p];
+              }
+              const prob = 1 / (1 + Math.exp(-sum)); // sigmoid
+              if (prob > combinedMask[p]) {
+                combinedMask[p] = prob;
+              }
+            }
+          }
 
           const imgW = imageData.width;
           const imgH = imageData.height;
+
+          // 각 대상별 바운딩 박스를 160 해상도로 변환하여 배열에 저장
+          const boxes160 = bgTargets.map(target => {
+            return {
+              x1: Math.floor(target.box.x1 * (160 / 640)),
+              y1: Math.floor(target.box.y1 * (160 / 640)),
+              x2: Math.ceil(target.box.x2 * (160 / 640)),
+              y2: Math.ceil(target.box.y2 * (160 / 640))
+            };
+          });
 
           for (let y = 0; y < imgH; y++) {
             for (let x = 0; x < imgW; x++) {
               const mx = Math.floor((x / imgW) * 160);
               const my = Math.floor((y / imgH) * 160);
 
-              if (mx < bx1 || mx > bx2 || my < by1 || my > by2 || mask160[my * 160 + mx] < 0.75) {
+              // 픽셀이 어떤 박스 안에라도 포함되는지 확인
+              let inAnyBox = false;
+              for (const box of boxes160) {
+                if (mx >= box.x1 && mx <= box.x2 && my >= box.y1 && my <= box.y2) {
+                  inAnyBox = true;
+                  break;
+                }
+              }
+
+              if (!inAnyBox || combinedMask[my * 160 + mx] < 0.75) {
                 imageData.data[(y * imgW + x) * 4 + 3] = 0;
               }
             }
           }
-        }
-      } else if (src.bgRemoval) {
-        // 배경 제거 ON인데 사람 미감지 시 전체 투명
-        const total = imageData.width * imageData.height;
-        for (let i = 0; i < total; i++) {
-          imageData.data[i * 4 + 3] = 0;
+        } else {
+          // 배경 제거 ON인데 사람 미감지 시 전체 투명
+          const total = imageData.width * imageData.height;
+          for (let i = 0; i < total; i++) {
+            imageData.data[i * 4 + 3] = 0;
+          }
         }
       }
 
@@ -754,24 +797,69 @@ function renderObjectList(tracks) {
 
   sorted.forEach((track, idx) => {
     const missing = track.missingFrames > 0;
-    const isSelected = track.id === state.targetPersonId;
+    
+    if (!state.targetPersonIds) state.targetPersonIds = [];
+    const isBgSelected = state.targetPersonIds.includes(track.id);
+    const isTracked = track.id === state.targetPersonId;
 
     const li = document.createElement("li");
-    li.className = "object-item" + (isSelected ? " selected" : "");
-    li.textContent = `사람 ${idx + 1}` + (missing ? " (사라짐)" : "");
+    li.className = "object-item" + (isBgSelected ? " selected" : "");
+    li.style.display = "flex";
+    li.style.justifyContent = "space-between";
+    li.style.alignItems = "center";
 
     if (missing) {
       li.style.opacity = "0.45";
       li.style.fontStyle = "italic";
     }
 
-    li.addEventListener("click", () => {
-      state.targetPersonId = track.id; // 클릭 즉시 ID 고정 (다음 프레임 대기 불필요)
-      list.querySelectorAll(".object-item").forEach(el => {
-        el.classList.remove("selected");
-      });
-      li.classList.add("selected");
+    li.addEventListener("click", (e) => {
+      if (e.target.tagName.toLowerCase() === 'input') return;
+
+      const idIdx = state.targetPersonIds.indexOf(track.id);
+      if (idIdx > -1) {
+        state.targetPersonIds.splice(idIdx, 1);
+        li.classList.remove("selected");
+      } else {
+        state.targetPersonIds.push(track.id);
+        li.classList.add("selected");
+      }
     });
+
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = `사람 ${idx + 1}` + (missing ? " (사라짐)" : "");
+
+    const trackLabel = document.createElement("label");
+    trackLabel.style.display = "flex";
+    trackLabel.style.alignItems = "center";
+    trackLabel.style.gap = "4px";
+    trackLabel.style.cursor = "pointer";
+    trackLabel.title = "이 객체 추적";
+
+    const trackRadio = document.createElement("input");
+    trackRadio.type = "radio";
+    trackRadio.name = "track_target";
+    trackRadio.checked = isTracked;
+    trackRadio.style.cursor = "pointer";
+    trackRadio.addEventListener("change", () => {
+      if (trackRadio.checked) {
+        state.targetPersonId = track.id;
+        if (!state.targetPersonIds.includes(track.id)) {
+           state.targetPersonIds.push(track.id);
+           li.classList.add("selected");
+        }
+      }
+    });
+
+    const trackText = document.createElement("span");
+    trackText.textContent = "추적";
+    trackText.style.fontSize = "11px";
+
+    trackLabel.appendChild(trackRadio);
+    trackLabel.appendChild(trackText);
+
+    li.appendChild(labelSpan);
+    li.appendChild(trackLabel);
 
     list.appendChild(li);
   });
