@@ -44,8 +44,23 @@ setupGpuStatusListeners();
     // 배경 제거 토글
     document.getElementById('toggle-background-removal')?.addEventListener('click', toggleBackgroundRemoval);
 
-    // 전/후 비교 토글
-    document.getElementById('toggle-comparison')?.addEventListener('click', toggleComparison);
+    // 전/후 비교 토글 + 사이드바 자동 접힘
+    let _sidebarManual = false;
+    document.getElementById('toggle-comparison')?.addEventListener('click', () => {
+      toggleComparison();
+      const sidebar = document.getElementById('sidebar');
+      if (!sidebar) return;
+      if (state.comparisonMode && !_sidebarManual) {
+        sidebar.classList.add('collapsed');
+      } else if (!state.comparisonMode) {
+        sidebar.classList.remove('collapsed');
+        _sidebarManual = false;
+      }
+    });
+    document.getElementById('sidebar-tab')?.addEventListener('click', () => {
+      document.getElementById('sidebar')?.classList.remove('collapsed');
+      _sidebarManual = true;
+    });
 
     // 자동 추적 토글
     document.getElementById('toggle-auto-tracking')?.addEventListener('click', toggleAutoTracking);

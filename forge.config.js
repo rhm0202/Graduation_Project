@@ -4,7 +4,9 @@ const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 module.exports = {
   outDir: "out",
   packagerConfig: {
-    asar: true,
+    asar: {
+      unpack: '**/server/**',
+    },
     prune: true,
     name: "Spotlight_Cam_V3.1.0",
     executableName: "Spotlight_Cam_V3.1.0",

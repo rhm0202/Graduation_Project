@@ -148,7 +148,18 @@ export function updateVideoDisplay() {
         originalVideo.srcObject = stream;
       }
     }
-    if (processedVideo) processedVideo.srcObject = stream;
+    if (processedVideo) {
+      // bgCanvas(카메라 해상도)가 있으면 직접 사용해 masterCanvas 이중 레터박싱 방지
+      if (selected?.bgCanvas?.width > 0) {
+        if (selected._bgCaptureCanvas !== selected.bgCanvas) {
+          selected._bgCaptureCanvas = selected.bgCanvas;
+          selected._bgCaptureStream = selected.bgCanvas.captureStream(60);
+        }
+        processedVideo.srcObject = selected._bgCaptureStream;
+      } else {
+        processedVideo.srcObject = selected?.stream ?? stream;
+      }
+    }
   } else {
     comparisonContainer?.classList.remove("active");
     if (videoFeed) {
