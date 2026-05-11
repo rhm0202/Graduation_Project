@@ -10,13 +10,14 @@ const path = require("path");
 const fs = require("fs");
 const https = require("https");
 const http = require("http");
-const { exec } = require("child_process");
+const { exec, spawn } = require("child_process");
 
 //webGPU 가속 활성화
 app.commandLine.appendSwitch("enable-unsafe-webgpu");
 app.commandLine.appendSwitch("enable-features", "Vulkan");
 
 let writableStream = null;
+let spotlightProcess = null;
 let savePath = "C:\\VideoRecoding";
 
 // 업데이트 서버 URL (GitHub Releases 또는 자체 서버)
@@ -59,7 +60,33 @@ function startGpuMonitoring(win) {
   }, 2000);
 }
 
+function startSpotlightCore() {
+  const serverDir = app.isPackaged
+    ? path.join(process.resourcesPath, "app.asar.unpacked", "server")
+    : path.join(__dirname, "server");
+  const scriptPath = path.join(serverDir, "spotlight_core.py");
+  spotlightProcess = spawn("py", [scriptPath], {
+    cwd: serverDir,
+    stdio: "inherit",
+  });
+  spotlightProcess.on("error", (err) => {
+    console.error("[Spotlight] 실행 실패:", err.message);
+  });
+  spotlightProcess.on("exit", (code) => {
+    console.log(`[Spotlight] 종료 (code: ${code})`);
+    spotlightProcess = null;
+  });
+}
+
+function stopSpotlightCore() {
+  if (spotlightProcess) {
+    spotlightProcess.kill();
+    spotlightProcess = null;
+  }
+}
+
 app.whenReady().then(async () => {
+  startSpotlightCore();
   createWindow();
   const win = BrowserWindow.getAllWindows()[0];
   startGpuMonitoring(win);
@@ -88,6 +115,10 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  stopSpotlightCore();
 });
 /**
  * 녹화 시작 IPC 핸들러

@@ -52,6 +52,9 @@ def get_logger(name: str) -> logging.Logger:
     file_handler.setFormatter(formatter)
 
     console_handler = logging.StreamHandler()
+    console_handler.stream = open(
+        console_handler.stream.fileno(), 'w', encoding='utf-8', closefd=False
+    )
     console_handler.setFormatter(formatter)
 
     logger.addHandler(file_handler)

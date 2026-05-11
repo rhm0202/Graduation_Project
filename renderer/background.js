@@ -37,6 +37,10 @@ export async function loadModel() {
       document.body.appendChild(bar);
     }
     bar.innerHTML = `✅ AI Ready | In: ${inputs} | Out: ${outputs}`;
+    const pill = document.getElementById('ai-status-pill');
+    const pillText = document.getElementById('ai-pill-text');
+    if (pillText) pillText.textContent = 'AI Ready';
+    if (pill) pill.classList.remove('loading');
   } catch (error) {
     console.error("AI 모델 로드 실패:", error);
     alert(`AI 불러오기 실패:\n${error.message}`);

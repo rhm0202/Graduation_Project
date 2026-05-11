@@ -34,7 +34,7 @@ export function setupMediaRecorder() {
 
   state.mediaRecorder.onstart = () => {
     if (isElectron) window.electronAPI.send('start-recording');
-    if (startBtn) { startBtn.textContent = 'Stop Recording'; startBtn.classList.add('recording'); }
+    if (startBtn) { startBtn.textContent = '■ STOP'; startBtn.classList.add('recording'); }
     state.isRecording = true;
     state.recStartTime = Date.now();
     recStatus?.classList.add('recording');
@@ -43,7 +43,7 @@ export function setupMediaRecorder() {
 
   state.mediaRecorder.onstop = () => {
     if (isElectron) window.electronAPI.send('stop-recording');
-    if (startBtn) { startBtn.textContent = 'Start Recording'; startBtn.classList.remove('recording'); }
+    if (startBtn) { startBtn.textContent = '● REC'; startBtn.classList.remove('recording'); }
     state.isRecording = false;
     clearInterval(state.recTimer);
     if (recStatus) { recStatus.classList.remove('recording'); recStatus.textContent = 'REC: 00:00:00'; }

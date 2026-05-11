@@ -1,9 +1,8 @@
-import json
+﻿import json
 import asyncio
 import websockets
 from modules.logger import get_logger
 from modules.pid_controller import MotorPIDManager
-from modules import yolo_bridge
 from modules.config import (
     RPI_WS_URL, WS_PORT, FRAME_WIDTH, FRAME_HEIGHT,
     PID_KP, PID_KI, PID_KD, PID_OUTPUT_LIMIT, EMA_ALPHA,
@@ -39,7 +38,7 @@ async def send_to_pi(data_dict):
 # 객체 추적 보정 로직
 # ==========================================
 async def process_object_detected(obj_x: float, obj_y: float):
-    """YOLO 측에서 객체를 감지했을 때 yolo_bridge를 통해 호출된다.
+    """Electron에서 object_detected 메시지 수신 시 호출된다.
 
     1. MotorPIDManager로 PID 연산 + EMA 평활화 수행
     2. 산출된 절대 서보 각도(pan_angle, tilt_angle)를 RPi에 전송
@@ -225,8 +224,6 @@ async def main():
         output_limit=PID_OUTPUT_LIMIT,
         ema_alpha=EMA_ALPHA,
     )
-    yolo_bridge.register(process_object_detected, asyncio.get_event_loop())
-
     receiver_task = asyncio.create_task(receive_from_pi())
     server_task = asyncio.create_task(start_desktop_server())
     await asyncio.gather(receiver_task, server_task)
@@ -237,3 +234,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("서버 종료")
+

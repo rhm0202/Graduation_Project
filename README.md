@@ -29,7 +29,7 @@ Spotlight Cam은 크로마키의 물리적 제약을 해결하기 위해 개발�
 - 수동 제어 모드 지원
 
 ### 🎬 실시간 배경 제거
-- ONNX Runtime + SegFormer 모델(`segformer_person_mask.onnx`)로 실시간 배경 제거
+- ONNX Runtime + YOLO26-seg 모델(`YOLO26-seg.onnx`)로 실시간 배경 제거
 - **소스별 독립 처리**: 각 소스가 자체 배경 제거 루프(`_bgLoop`)를 실행
 - 배경 교체 옵션: 이미지 / 동영상 / 단색
 - 전/후 비교 모드 지원
@@ -71,7 +71,7 @@ Spotlight Cam은 크로마키의 물리적 제약을 해결하기 위해 개발�
                  │ WebSocket (JPEG 프레임)
                  ↓
 ┌──────────────────────────────────────────┐
-│   spotlight_core.py (localhost:8765)      │
+│   spotlight_core.py (localhost:8000)      │
 │   ├── RPi ↔ Electron 메시지 중계         │
 │   └── 모터 제어 명령 전달                │
 └────────────────┬─────────────────────────┘
@@ -93,7 +93,7 @@ Spotlight Cam은 크로마키의 물리적 제약을 해결하기 위해 개발�
 │                                           │
 │  [AI 처리]                                │
 │   ONNX Runtime (WebGPU/WebGL/WASM)       │
-│   SegFormer → 사람 마스크 생성            │
+│   YOLO26-seg → 사람 마스크 생성            │
 └──────────────────────────────────────────┘
 ```
 
@@ -114,7 +114,7 @@ Spotlight Cam은 크로마키의 물리적 제약을 해결하기 위해 개발�
 
 ### 네트워크
 - spotlight_core.py가 실행 중인 호스트와 연결
-- WebSocket 포트 8765 개방
+- WebSocket 포트 8000 개방
 
 ---
 
@@ -123,7 +123,7 @@ Spotlight Cam은 크로마키의 물리적 제약을 해결하기 위해 개발�
 ### 데스크탑 앱 설치
 
 #### 설치 파일로 설치
-1. `VideoTracker-Setup.exe` 파일을 다운로드
+1. `Spotlight_Cam-Setup_v1.0.0.exe` 파일을 다운로드
 2. 설치 파일을 실행
 3. 설치 마법사의 안내를 따릅니다
 4. 설치 완료 후 바탕화면 또는 시작 메뉴에서 실행
@@ -162,7 +162,7 @@ npm run package
 ## 사용 방법
 
 ### 라즈베리파이 연결
-1. `spotlight_core.py`가 실행 중인지 확인 (`ws://localhost:8765`)
+1. `spotlight_core.py`가 실행 중인지 확인 (`ws://localhost:8000`)
 2. 앱 실행 후 **Settings** 모달에서 **연결** 버튼 클릭
 3. 연결 상태 확인 (상태 표시줄에 "연결됨" 표시)
 4. 연결 성공 시 Sources 패널에 RPi 카메라 소스가 자동으로 추가됨
@@ -181,7 +181,7 @@ npm run package
 1. 소스를 하나 이상 추가합니다
 2. **Controls** 패널에서 **Start Recording** 버튼 클릭
 3. 녹화 중지하려면 **Stop Recording** 버튼 클릭
-4. 녹화 파일은 설정한 저장 위치에 저장됩니다 (기본: `C:\VideoRecoding`)
+4. 녹화 파일은 설정한 저장 위치에 저장됩니다 (기본: `C:\VideoRecording`)
 
 ### 배경 제거
 1. Sources 패널에서 웹캠 또는 RPi 카메라 소스 선택
@@ -228,12 +228,12 @@ npm run package
 
 ### 개발 빌드
 ```bash
-npm run package
+npm start
 ```
 
 ### 배포용 빌드 (인스톨러 포함)
 ```bash
-npm run make
+npm run package
 ```
 
 빌드된 파일은 `out/make/squirrel.windows/x64/` 폴더에 생성됩니다.
@@ -282,8 +282,8 @@ npm run make
 | 배경 교체 기능 | | | ✅ | | | |
 | 자동 추적 모드 | | | | ✅ | | |
 | OBS Sources 패널 (다중 소스/컴포지팅) | | | | | ✅ | |
-| 테스트 및 성능 검증 | | | | | | |
-| 보고서 작성 | | | | | | |
+| 테스트 및 성능 검증 | | | | | | 🔄 |
+| 보고서 작성 | | | | | | 🔄 |
 
 ---
 
@@ -300,15 +300,15 @@ ISC
 
 ## 버전
 
-3.1.0
+1.0.0
 
 ---
 
 ## 문제 해결
 
 ### 라즈베리파이 연결 실패
-1. `spotlight_core.py`가 실행 중인지 확인 (`ws://localhost:8765`)
-2. 방화벽 설정 확인 (포트 8765)
+1. `spotlight_core.py`가 실행 중인지 확인 (`ws://localhost:8000`)
+2. 방화벽 설정 확인 (포트 8000)
 3. 네트워크 연결 상태 확인
 
 ### 카메라/마이크가 인식되지 않는 경우
@@ -344,9 +344,7 @@ ISC
 - [x] 자동 추적 모드
 - [x] OBS Sources 패널 (웹캠/화면/창/RPi, 레이어 컴포지팅)
 - [x] 자동 업데이트
-- [ ] YOLO 모델 완전 통합 (현재 시뮬레이션)
-- [ ] 스트리밍 기능 (RTMP 등)
-- [ ] 다국어 지원
+- [x] YOLO 모델 완전 통합 (현재 시뮬레이션)
 
 ---
 
@@ -362,8 +360,8 @@ ISC
    ```json
    {
      "version": "1.0.1",
-     "releaseDate": "2024-01-15",
-     "downloadUrl": "https://github.com/yourusername/spotlight-cam/releases/download/v1.0.1/VideoTracker-Setup-1.0.1.exe",
+     "releaseDate": "2026-05-06",
+     "downloadUrl": "https://media.githubusercontent.com/media/rhm0202/Graduation_Project/main/website/downloads/Spotlight_Cam-Setup_v1.0.1.exe",
      "releaseNotes": "버그 수정 및 성능 개선"
    }
    ```
@@ -373,7 +371,8 @@ ISC
    - GitHub Releases에 새 버전 업로드
    - `updates/latest.json` 파일 업데이트
 
-4. **현재 설정된 저장소**: [wer134/application](https://github.com/wer134/application)
+4. **현재 설정된 저장소**: [rhm0202/Graduation_Project](https://github.com/rhm0202/Graduation_Project)
+5. **현재 관리중인 노션**: [노션 링크](https://www.notion.so/Project-Hub-2eff017f3c8080caba0cdb1e919f17a5?source=copy_link)
 
 ---
 

@@ -1,79 +1,67 @@
-/* === 색상 변수 정의 (Spotlight Cam 전용 색상 스킴) === */
+/* ═══════════════════════════════════════════════════════════
+   색상 토큰
+   ═══════════════════════════════════════════════════════════ */
 :root {
-  /* 배경 색상 - 더 깊고 모던한 톤 */
-  --bg-darkest: #0a0e14; /* 최상위 배경 (거의 검정) */
-  --bg-dark: #141920; /* 패널 배경 */
-  --bg-medium: #1e2530; /* 헤더/툴바 배경 */
-  --bg-light: #252d3a; /* 호버/활성 상태 */
+  --bg-app:       #111113;
+  --bg-sidebar:   #151517;
+  --bg-preview:   #0a0a0b;
+  --bg-dark:      #151517;
+  --bg-medium:    #1e1e21;
+  --bg-light:     #222226;
+  --bg-darkest:   #111113;
 
-  /* 테두리 및 구분선 */
-  --border-color: #2a3441; /* 기본 구분선 */
-  --border-light: #3a4451; /* 강조 구분선 */
+  --border-default: rgba(255,255,255,0.08);
+  --border-subtle:  rgba(255,255,255,0.06);
+  --border-color:   rgba(255,255,255,0.08);
+  --border-light:   rgba(255,255,255,0.12);
 
-  /* 텍스트 색상 */
-  --text-primary: #e8eaed; /* 주요 텍스트 */
-  --text-secondary: #9aa0a6; /* 보조 텍스트 */
-  --text-muted: #6b7280; /* 비활성 텍스트 */
+  --text-primary:   rgba(255,255,255,0.9);
+  --text-secondary: rgba(255,255,255,0.5);
+  --text-muted:     rgba(255,255,255,0.28);
 
-  /* 액센트 색상 - Spotlight Cam 브랜드 컬러 */
-  --color-primary: #6366f1; /* 주요 액센트 (인디고) */
-  --color-primary-hover: #818cf8; /* 호버 상태 */
-  --color-success: #10b981; /* 성공/녹화 상태 */
-  --color-danger: #ef4444; /* 위험/중지 상태 */
-  --color-warning: #f59e0b; /* 경고 */
-  --color-info: #3b82f6; /* 정보 */
-  --color-blue: #5b5a5bc0; /* 파란색 (버튼 등) */
-  --color-green: #10b981; /* 녹색 (볼륨 미터 등) */
-  --color-red: #ef4444; /* 빨간색 (녹화 상태 등) */
-  --color-highlight: #5b5a5bc0; /* 강조 색상 (프로그램 비디오 등) */
+  --teal:        #5DCAA5;
+  --teal-bg:     rgba(29,158,117,0.12);
+  --teal-border: rgba(29,158,117,0.3);
 
-  /* 특수 색상 */
-  --color-recording: #ef4444; /* 녹화 중 표시 */
-  --color-tracking: #10b981; /* 추적 활성화 */
-  --color-ai-active: #8b5cf6; /* AI 처리 중 */
+  --coral:        #F0997B;
+  --coral-bg:     rgba(216,90,48,0.12);
+  --coral-border: rgba(216,90,48,0.3);
+
+  --purple:        #7F77DD;
+  --purple-bg:     rgba(83,74,183,0.15);
+  --purple-border: rgba(83,74,183,0.3);
+
+  /* 하위 호환 */
+  --color-primary:       #7F77DD;
+  --color-primary-hover: #9b94e8;
+  --color-success:       #5DCAA5;
+  --color-danger:        #ef4444;
+  --color-warning:       #f59e0b;
+  --color-info:          #3b82f6;
+  --color-green:         #5DCAA5;
+  --color-red:           #ef4444;
+  --color-blue:          rgba(91,90,91,0.75);
+  --color-recording:     #ef4444;
+  --color-tracking:      #5DCAA5;
+  --color-ai-active:     #7F77DD;
+  --color-highlight:     rgba(91,90,91,0.75);
+
+  --z-resize-bar:  10;
+  --z-menu:       100;
+  --z-modal:     1000;
+  --z-modal-menu: 1001;
 }
 
-/* 라즈베리파이 연결 상태 표시 스타일 */
-#pi-status-indicator {
-  animation: pulse-status 2s infinite;
-}
-@keyframes pulse-status {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-#pi-status-indicator.connected {
-  background-color: var(--color-success) !important;
-  animation: none;
-}
-#pi-status-indicator.disconnected {
-  background-color: var(--color-danger) !important;
-}
+/* ═══════════════════════════════════════════════════════════
+   기본 레이아웃
+   ═══════════════════════════════════════════════════════════ */
+* { box-sizing: border-box; }
 
-/**
- * 전체 페이지 스타일
- * Spotlight Cam 애플리케이션의 기본 레이아웃 설정
- */
 body {
-  background: linear-gradient(135deg, var(--bg-darkest) 0%, #0f1419 100%);
+  background: var(--bg-app);
   color: var(--text-primary);
-  font-family:
-    "Inter",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    "Open Sans",
-    "Helvetica Neue",
-    sans-serif;
-  font-size: 14px;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
   margin: 0;
   padding: 0;
   width: 100vw;
@@ -82,303 +70,242 @@ body {
   display: flex;
 }
 
-/**
- * 메인 애플리케이션 윈도우 컨테이너
- * 전체 UI의 최상위 래퍼
- */
 .spotlight-window {
   width: 100%;
   height: 100%;
-  background-color: var(--bg-darkest);
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
   display: flex;
   flex-direction: column;
-  position: relative;
+  background: var(--bg-app);
 }
 
-/**
- * 상단 메뉴바
- * File, Edit, View 등의 메인 메뉴가 위치하는 영역
- */
-.app-menubar {
-  background: linear-gradient(180deg, var(--bg-medium) 0%, var(--bg-dark) 100%);
-  padding: 8px 16px;
-  font-size: 0.9em;
-  border-bottom: 1px solid var(--border-color);
+/* ═══════════════════════════════════════════════════════════
+   TopBar
+   ═══════════════════════════════════════════════════════════ */
+.topbar {
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--bg-app);
+  border-bottom: 0.5px solid rgba(255,255,255,0.08);
   user-select: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* AI 상태 pill */
+.ai-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--teal-bg);
+  border: 1px solid var(--teal-border);
+  font-size: 11px;
+  color: var(--teal);
+  white-space: nowrap;
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+.ai-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.ai-pill.loading {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.1);
+  color: var(--text-muted);
+}
+.ai-pill.loading .ai-dot {
+  background: var(--text-muted);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* 메뉴바 (topbar 안) */
+.topbar-menus {
+  display: flex;
+  align-items: center;
 }
 .menu-item {
   position: relative;
-  display: inline-block;
-  margin-right: 15px;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
   cursor: pointer;
+}
+.menu-item > span {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+.menu-item > span:hover,
+.menu-item.active > span {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-primary);
 }
 .dropdown-menu {
-  display: none; /* 평소엔 숨김 */
+  display: none;
   position: absolute;
-  top: calc(100% - 1px); /* 메뉴 아이템과 약간 겹치게 하여 간격 제거 */
+  top: calc(100% + 4px);
   left: 0;
-  background-color: var(--bg-dark);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 5px 0;
+  background: var(--bg-medium);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 4px 0;
   min-width: 180px;
-  z-index: 1001; /* 모달보다 위에 */
+  z-index: var(--z-modal-menu);
   list-style: none;
-  margin: 0; /* 간격 제거 */
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  margin: 0;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 .dropdown-menu li {
-  padding: 8px 12px;
+  padding: 7px 12px;
   cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
   white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
 }
 .dropdown-menu li:hover {
-  background: linear-gradient(
-    90deg,
-    var(--color-primary) 0%,
-    var(--color-primary-hover) 100%
-  );
-  color: white;
+  background: rgba(255,255,255,0.07);
+  color: var(--text-primary);
 }
-/* 클릭 방식으로 드롭다운 메뉴 표시 */
-.menu-item.active .dropdown-menu {
-  display: block;
+.dropdown-menu hr {
+  border: none;
+  border-top: 0.5px solid var(--border-subtle);
+  margin: 3px 0;
 }
+.menu-item.active .dropdown-menu { display: block; }
 
-/**
- * 메인 콘텐츠 영역
- * 비디오 프리뷰와 하단 패널들이 위치하는 영역
- */
-.main-content {
-  flex-grow: 1;
+/* TopBar 우측 아이콘 버튼 */
+.topbar-right {
   display: flex;
-  flex-direction: column;
-  padding: 12px;
-  gap: 12px;
-  overflow: hidden;
-  background: var(--bg-darkest);
-}
-
-/**
- * 비디오 프리뷰 영역
- * 라즈베리파이 카메라 스트림 또는 로컬 비디오를 표시하는 메인 화면
- */
-.preview-area {
-  flex-grow: 1;
-  background: linear-gradient(135deg, #000000 0%, #0a0a0a 100%);
-  border: 2px solid var(--border-color);
-  border-radius: 8px;
-  display: flex;
-  justify-content: center;
   align-items: center;
-  overflow: hidden;
-  position: relative;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
-  min-height: 200px;
+  gap: 2px;
 }
-
-/* 리사이즈 바 - 하단 패널 상단 경계 */
-.resize-bar {
-  height: 4px;
-  background: var(--border-color);
-  cursor: ns-resize;
-  position: relative;
-  flex-shrink: 0;
-  transition: background-color 0.2s;
-  z-index: 10;
-}
-
-.resize-bar:hover {
-  background: var(--color-primary);
-  height: 6px;
-}
-
-.resize-bar::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 40px;
-  height: 2px;
-  background: var(--text-secondary);
-  border-radius: 2px;
-}
-
-.resize-bar:hover::before {
-  background: var(--text-primary);
-}
-#studio-mode-container {
-  display: grid;
-  width: 100%;
-  height: 100%;
-}
-/* 카메라 피드를 위한 비디오 태그 스타일 */
-#main-video-feed {
-  width: 100%;
-  height: 100%;
-  background-color: #000;
-  object-fit: contain; /* 비율 유지하며 채우기 */
-}
-
-/* 3-2. 하단 독 컨테이너 */
-.docks-container.docks-hidden {
-  display: none;
-}
-
-.resize-bar.docks-hidden {
-  display: none;
-}
-
-.docks-container {
-  display: flex;
-  gap: 10px;
-  flex-grow: 0;
-  flex-shrink: 0;
-  min-height: 150px;
-}
-
-/**
- * 독 패널 기본 스타일
- * Scenes, Sources, Audio Mixer 등 모든 패널의 공통 스타일
- */
-.dock-panel {
-  background: linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-medium) 100%);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.dock-header {
-  background-color: var(--bg-medium);
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-.dock-header h3 {
-  margin: 0;
-  font-size: 0.9em;
-  font-weight: 500;
-}
-.dock-content {
-  flex-grow: 1;
-  padding: 10px;
-  overflow-y: auto; /* 내용 많아지면 스크롤 */
-}
-.dock-toolbar {
-  background-color: var(--bg-medium);
-  padding: 5px;
-  display: flex;
+.topbar-icon-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 5px;
-  border-top: 1px solid var(--border-color);
-}
-.dock-toolbar button {
   background: none;
   border: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+.topbar-icon-btn:hover {
+  background: rgba(255,255,255,0.08);
   color: var(--text-primary);
-  font-size: 1.1em;
-  cursor: pointer;
-  width: 25px;
-  padding: 4px;
-  border-radius: 3px;
-  transition: background-color 0.2s;
 }
-.dock-toolbar button:hover {
-  background-color: var(--bg-light);
-}
-.dock-toolbar button:active {
-  background-color: var(--color-primary);
+.topbar-exit-btn:hover {
+  background: rgba(239,68,68,0.15);
+  color: #ef4444;
 }
 
-/* --- 개별 독 패널 크기 조정 (Flexbox) --- */
-#audio-mixer-panel {
-  flex-basis: 25%;
-}
-#controls-panel {
-  flex-basis: 20%;
-}
-#recordings-panel {
-  flex-basis: 15%;
-}
-#sources-panel {
-  flex-basis: 25%;
-}
-#object-panel {
-  flex-basis: 15%;
-}
-
-#object-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.object-item {
+/* ═══════════════════════════════════════════════════════════
+   Main (가로 배치: PreviewArea + Sidebar)
+   ═══════════════════════════════════════════════════════════ */
+.main-content {
+  flex: 1;
   display: flex;
-  align-items: center;
-  padding: 6px 10px;
-  cursor: pointer;
-  border-bottom: 1px solid var(--border-color);
-  font-size: 0.88em;
-  user-select: none;
-  transition: background-color 0.15s;
-}
-.object-item:hover {
-  background-color: var(--bg-light);
-}
-.object-item.selected {
-  background-color: var(--color-primary);
-  color: #fff;
-}
-.object-item-empty {
-  cursor: default;
-  color: var(--text-muted);
-  font-style: italic;
-}
-.object-item-empty:hover {
-  background-color: transparent;
+  flex-direction: row;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
 }
 
-/* 처리 전/후 비교 컨테이너 */
-#comparison-container {
-  display: none;
+/* ─── Preview Area ─────────────────────────────────────── */
+.preview-area {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-preview);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+}
+
+#main-video-feed {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
+  object-fit: contain;
+  background: #000;
+}
+
+/* 비교 컨테이너 */
+#comparison-container {
+  position: absolute;
+  inset: 0;
+  display: none;
 }
 #comparison-container.active {
-  display: grid;
+  display: flex;
 }
 .comparison-video-wrapper {
-  border: 2px solid var(--border-color);
+  flex: 1;
   position: relative;
   overflow: hidden;
+  min-width: 0;
 }
-.comparison-video-wrapper.processed {
-  border-color: var(--color-primary);
+/* 두 영역 사이 구분선 — 포함 너비에 영향 없도록 ::after로 처리 */
+.comparison-video-wrapper.processed::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(255,255,255,0.15);
+  z-index: 2;
+  pointer-events: none;
 }
 .comparison-label {
   position: absolute;
-  top: 5px;
-  left: 5px;
-  background: var(--bg-dark);
-  padding: 3px 8px;
-  border-radius: 3px;
-  font-size: 0.8em;
-  z-index: 10;
+  top: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   color: var(--text-primary);
+  z-index: 2;
 }
 .comparison-label.processed-label {
-  background: var(--color-primary);
-  color: white;
+  background: var(--teal-bg);
+  border: 1px solid var(--teal-border);
+  color: var(--teal);
 }
 #comparison-container video {
   width: 100%;
@@ -386,315 +313,282 @@ body {
   object-fit: contain;
 }
 
-/* --- 4. 하단 상태바 --- */
-.status-bar {
-  background-color: var(--bg-medium);
-  padding: 6px 12px;
-  font-size: 0.85em;
-  color: var(--text-secondary);
-  border-top: 1px solid var(--border-color);
+/* ─── Sidebar ──────────────────────────────────────────── */
+.sidebar {
+  width: 196px;
+  min-width: 196px;
+  flex-shrink: 0;
+  background: var(--bg-sidebar);
+  border-left: 0.5px solid var(--border-default);
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 0.3s ease, min-width 0.3s ease, opacity 0.2s ease;
+  opacity: 1;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
+}
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12);
+  border-radius: 2px;
+}
+.sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 사이드바 탭 버튼 (접혔을 때 표시) */
+.sidebar-tab {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 48px;
+  background: var(--bg-sidebar);
+  border: 0.5px solid var(--border-default);
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-resize-bar);
+  transition: color 0.15s;
+  padding: 0;
+}
+.sidebar-tab:hover { color: var(--text-primary); }
+.sidebar.collapsed ~ .sidebar-tab { display: flex; }
+
+/* ─── Sidebar Sections ─────────────────────────────────── */
+.sb-section {
+  border-bottom: 0.5px solid var(--border-subtle);
   flex-shrink: 0;
 }
-.status-left span {
-  margin-right: 20px;
-}
-.status-left span#rec-status.recording {
-  color: var(--color-red);
-  font-weight: bold;
+
+.sb-section-hd {
+  padding: 8px 10px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
 }
 
-/* --- 패널 내부 상세 스타일 --- */
-
-/* 장면(Scenes) */
-.dock-content ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.dock-content li {
-  padding: 5px 8px;
-  border-radius: 3px;
-}
-.dock-content li.active {
-  background: linear-gradient(
-    90deg,
-    var(--color-primary) 0%,
-    var(--color-primary-hover) 100%
-  );
-  color: white;
-  font-weight: 500;
+.sb-section-body {
+  padding: 5px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
-/* 오디오 믹서(Audio Mixer) */
-.audio-track {
-  margin-bottom: 15px;
-}
-.track-header {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 10px;
-  font-size: 0.9em;
-  margin-bottom: 5px;
-}
-.icon-button {
+/* 섹션 헤더 추가 버튼 */
+.sb-hd-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
   cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+.sb-hd-btn:hover { color: var(--text-primary); }
+
+/* ─── Sidebar Control Buttons ──────────────────────────── */
+.sb-ctrl-btn {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   color: var(--text-secondary);
-}
-.icon-button:hover {
-  color: var(--text-primary);
-}
-.mute-btn {
-  transition: opacity 0.2s;
-}
-.mute-btn:not([data-muted="true"]) {
-  opacity: 0.5; /* 음소거가 아닐 때 반투명 */
-}
-
-.volume-meter {
-  background-color: #1e2124;
-  height: 12px;
-  border-radius: 3px;
-  overflow: hidden;
-  border: 1px solid #111;
-}
-.meter-fill {
-  background-color: var(--color-green);
-  height: 100%;
-  width: 0%; /* JS로 제어하기 위해 0으로 시작 */
-  transition: width 0.05s linear; /* 부드럽게 움직이도록 */
-}
-.track-controls {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 10px;
-  margin-top: 5px;
-}
-input[type="range"] {
-  width: 100%;
-  margin: 0;
-}
-
-/* 장면 전환(Transitions) */
-.dock-content select {
-  width: 100%;
-  background-color: var(--bg-medium);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  padding: 5px;
-  border-radius: 3px;
-}
-.transition-details {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 10px;
-  align-items: center;
-  margin-top: 10px;
-}
-
-/* 제어(Controls) */
-.dock-content .control-btn {
-  display: block;
-  width: 100%;
-  background-color: var(--color-blue);
-  border: 1px solid #555;
-  color: var(--text-primary);
-  padding: 8px;
-  border-radius: 4px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
   text-align: center;
-  margin-bottom: 8px;
   cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.dock-content .control-btn:hover {
-  background-color: #5a5e66;
+.sb-ctrl-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-primary);
 }
-/* 녹화 중일 때 버튼 스타일 */
-.dock-content .control-btn.recording {
-  background: linear-gradient(135deg, var(--color-recording) 0%, #dc2626 100%);
-  border-color: #fca5a5;
-  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+
+/* 활성 상태 (teal) */
+.sb-ctrl-btn.recording {
+  background: var(--teal-bg);
+  border-color: var(--teal-border);
+  color: var(--teal);
+}
+
+/* Start Recording 버튼 활성 상태 (coral) */
+#start-recording-btn.recording {
+  background: var(--coral-bg);
+  border-color: var(--coral-border);
+  color: var(--coral);
   animation: pulse-recording 2s infinite;
 }
 @keyframes pulse-recording {
-  0%,
-  100% {
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
-  }
-}
-.dock-content .control-btn.recording:hover {
-  background: linear-gradient(135deg, #dc2626 0%, var(--color-recording) 100%);
+  0%, 100% { box-shadow: 0 0 0 0 rgba(216,90,48,0.3); }
+  50%       { box-shadow: 0 0 8px 2px rgba(216,90,48,0.25); }
 }
 
-/* --- 5. 설정 모달 스타일 --- */
-.modal-overlay {
-  position: fixed; /* 화면 전체 덮기 */
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: none; /* 평소엔 숨김 */
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
+/* coral 강조 버튼 (Start Recording 기본) */
+.sb-ctrl-coral {
+  background: var(--coral-bg);
+  border-color: var(--coral-border);
+  color: var(--coral);
+}
+.sb-ctrl-coral:hover {
+  background: rgba(216,90,48,0.2);
 }
 
-/* JavaScript로 이 클래스를 추가/제거하여 모달을 켜고 끕니다 */
-.modal-overlay.visible {
-  display: flex;
+/* 서브 스타일 버튼 */
+.sb-ctrl-sub {
+  background: transparent;
+  border-color: rgba(255,255,255,0.06);
+  color: var(--text-muted);
 }
-
-.modal-content {
-  background-color: var(--bg-dark);
-  padding: 20px;
-  border-radius: 8px;
-  width: 600px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
-}
-.modal-content h2 {
-  margin-top: 0;
-}
-.modal-content fieldset {
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  margin-bottom: 15px;
-}
-.modal-content legend {
-  padding: 0 5px;
+.sb-ctrl-sub:hover {
+  background: rgba(255,255,255,0.05);
   color: var(--text-secondary);
 }
-.setting-item {
+
+/* 아이콘 버튼 (↻) */
+.sb-ctrl-row {
+  display: flex;
+  gap: 5px;
+}
+.sb-ctrl-icon {
+  width: auto;
+  flex: 0 0 30px;
+  padding: 6px 4px;
+}
+
+/* ─── Audio Mixer ──────────────────────────────────────── */
+.audio-track {
+  margin-bottom: 6px;
+}
+.sb-track-hd {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
 }
-.setting-item label {
-  flex-basis: 120px;
+.db-display {
+  color: var(--text-muted);
+  font-size: 10px;
 }
-.setting-item select,
-.setting-item .control-btn,
-.setting-item input[type="number"] {
-  /* input[type="number"] 추가 */
-  flex-grow: 1;
-  background-color: var(--bg-medium);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  padding: 5px;
-  border-radius: 3px;
+.volume-meter {
+  background: rgba(255,255,255,0.07);
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
 }
-.setting-item .control-btn {
-  background-color: var(--color-blue);
+.meter-fill {
+  background: var(--teal);
+  height: 100%;
+  width: 0%;
+  transition: width 0.05s linear;
+}
+.sb-track-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+.icon-button,
+.mute-btn {
   cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: color 0.15s;
+  user-select: none;
 }
-/* (CSS 숫자 입력 필드의 스피너 버튼 스타일링 - Webkit/Firefox) */
-.setting-item input[type="number"]::-webkit-inner-spin-button,
-.setting-item input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
+.icon-button:hover,
+.mute-btn:hover { color: var(--text-primary); }
+.volume-slider {
+  flex: 1;
+  height: 3px;
+  accent-color: var(--teal);
+  cursor: pointer;
   margin: 0;
 }
-.setting-item input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: none;
-}
+input[type="range"] { width: 100%; margin: 0; }
 
-.modal-buttons {
-  text-align: right;
-  margin-top: 20px;
-}
-.modal-buttons .control-btn {
-  background-color: var(--color-primary);
-  color: white;
-  border: 1px solid var(--color-primary-hover);
-  cursor: pointer;
-  font-weight: 500;
-  transition:
-    background-color 0.2s,
-    transform 0.1s;
-}
-.modal-buttons .control-btn:hover {
-  background-color: var(--color-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
-}
-.modal-buttons .control-btn:active {
-  transform: translateY(0);
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Sources 패널
-   ═══════════════════════════════════════════════════════════ */
-
-#sources-panel .dock-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
+/* ─── Sources ──────────────────────────────────────────── */
 #sources-list {
   list-style: none;
   margin: 0;
-  padding: 0;
-  min-height: 40px;
+  padding: 4px 6px;
+  min-height: 20px;
 }
-
 .source-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 5px 7px;
+  margin-bottom: 3px;
   cursor: pointer;
-  border-bottom: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--purple-bg);
+  border: 1px solid var(--purple-border);
   user-select: none;
-  transition: background-color 0.15s;
+  font-size: 11px;
+  transition: background 0.15s;
 }
-.source-item:hover {
-  background-color: var(--bg-light);
-}
-.source-item.selected {
-  background-color: var(--color-primary);
-  color: #fff;
-}
-.source-item.dragging {
-  opacity: 0.4;
-}
-.source-item.drag-over {
-  border-top: 2px solid var(--color-primary);
-}
+.source-item:hover    { background: rgba(83,74,183,0.25); }
+.source-item.selected { background: rgba(83,74,183,0.35); }
+.source-item.dragging  { opacity: 0.35; }
+.source-item.drag-over { border-top: 2px solid var(--purple); }
 
 .src-drag {
   cursor: grab;
   color: var(--text-muted);
-  font-size: 1.1em;
+  font-size: 1em;
   flex-shrink: 0;
+  line-height: 1;
 }
+.src-drag:active { cursor: grabbing; }
 .src-eye {
   cursor: pointer;
   flex-shrink: 0;
-  font-size: 0.95em;
+  font-size: 1em;
+  line-height: 1;
 }
 .src-label {
   flex: 1;
-  font-size: 0.88em;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  color: var(--text-secondary);
 }
 .src-ai-badge {
   display: inline-block;
-  margin-left: 5px;
+  margin-left: 4px;
   padding: 1px 4px;
-  background-color: var(--color-ai-active);
-  color: #fff;
+  background: var(--purple-bg);
+  border: 1px solid var(--purple-border);
+  color: var(--purple);
   border-radius: 3px;
-  font-size: 0.75em;
+  font-size: 9px;
   vertical-align: middle;
+  line-height: 1.4;
 }
 .src-del {
   background: none;
@@ -702,41 +596,180 @@ input[type="range"] {
   color: var(--text-muted);
   cursor: pointer;
   padding: 0 2px;
-  font-size: 0.85em;
+  font-size: 1em;
   flex-shrink: 0;
   line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
 }
-.src-del:hover {
-  color: var(--color-danger);
+.source-item:hover .src-del { opacity: 1; }
+.src-del:hover { color: var(--color-danger); }
+
+/* ─── Object Panel ─────────────────────────────────────── */
+#object-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#object-list:empty::before {
+  content: "객체 없음";
+  display: block;
+  padding: 6px 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+.object-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 8px;
+  cursor: pointer;
+  border-bottom: 0.5px solid var(--border-subtle);
+  font-size: 11px;
+  user-select: none;
+  transition: background 0.15s;
+  border-radius: 3px;
+}
+.object-item:hover    { background: rgba(255,255,255,0.05); }
+.object-item.selected { background: var(--purple-bg); color: var(--purple); }
+.object-item-empty {
+  cursor: default;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.object-item-empty:hover { background: transparent; }
+
+/* ─── Dock-content list (기타 호환용) ─────────────────── */
+.dock-content ul { list-style: none; padding: 0; margin: 0; }
+.dock-content li { padding: 4px 6px; border-radius: 3px; font-size: 11px; }
+.dock-content li.active {
+  background: var(--purple-bg);
+  color: var(--purple);
+  font-weight: 500;
 }
 
-/* 소스 추가 드롭다운 메뉴 */
+/* ═══════════════════════════════════════════════════════════
+   BottomBar
+   ═══════════════════════════════════════════════════════════ */
+.bottombar {
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--bg-app);
+  border-top: 0.5px solid rgba(255,255,255,0.07);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.status-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* 녹화 버튼 */
+.rec-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--coral-border);
+  background: var(--coral-bg);
+  color: var(--coral);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.rec-btn:hover {
+  background: rgba(216,90,48,0.2);
+}
+.rec-btn.recording {
+  background: rgba(239,68,68,0.18);
+  border-color: rgba(239,68,68,0.4);
+  color: #ef4444;
+  animation: pulse-recording 2s infinite;
+}
+
+.status-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255,255,255,0.1);
+  flex-shrink: 0;
+}
+
+#rec-status.recording {
+  color: var(--color-red);
+  font-weight: 600;
+}
+
+/* 라즈베리파이 상태 */
+#pi-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+#pi-status-indicator {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  flex-shrink: 0;
+  animation: pulse-status 2s infinite;
+}
+@keyframes pulse-status {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+#pi-status-indicator.connected {
+  background: var(--color-success) !important;
+  animation: none;
+}
+#pi-status-indicator.disconnected {
+  background: var(--color-danger) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   소스 선택 메뉴
+   ═══════════════════════════════════════════════════════════ */
 #add-source-menu {
   position: fixed;
-  background-color: var(--bg-medium);
+  background: var(--bg-medium);
   border: 1px solid var(--border-light);
-  border-radius: 4px;
-  z-index: 9999;
+  border-radius: 6px;
+  z-index: var(--z-menu);
   min-width: 160px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+  padding: 3px 0;
 }
 #add-source-menu [data-add-source] {
-  padding: 8px 14px;
-  font-size: 0.88em;
+  padding: 7px 12px;
+  font-size: 12px;
   cursor: pointer;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
 }
 #add-source-menu [data-add-source]:hover {
-  background-color: var(--bg-light);
+  background: rgba(255,255,255,0.07);
+  color: var(--text-primary);
 }
 
 /* 소스 선택 피커 모달 */
 .src-picker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
-  max-height: 360px;
+  max-height: 380px;
   overflow-y: auto;
   padding: 4px;
 }
@@ -749,17 +782,17 @@ input[type="range"] {
   border-radius: 6px;
   cursor: pointer;
   text-align: center;
-  transition:
-    background-color 0.15s,
-    border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 .src-picker-item:hover {
-  background-color: var(--bg-light);
+  background: var(--bg-light);
   border-color: var(--color-primary);
+  transform: translateY(-2px);
 }
+.src-picker-item:active { transform: translateY(0); }
 .src-picker-item img {
   width: 100%;
-  height: 80px;
+  height: 84px;
   object-fit: cover;
   border-radius: 3px;
   margin-bottom: 6px;
@@ -775,13 +808,116 @@ input[type="range"] {
 }
 .src-picker-ph {
   width: 100%;
-  height: 80px;
+  height: 84px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--bg-darkest);
+  background: var(--bg-darkest);
   border-radius: 3px;
-  font-size: 1.5em;
+  font-size: 1.6em;
   color: var(--text-muted);
   margin-bottom: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   모달
+   ═══════════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.72);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: var(--z-modal);
+}
+.modal-overlay.visible { display: flex; }
+
+.modal-content {
+  background: var(--bg-dark);
+  padding: 20px;
+  border-radius: 10px;
+  width: 600px;
+  max-width: 90vw;
+  border: 1px solid var(--border-default);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+.modal-content h2 { margin-top: 0; font-size: 15px; }
+
+.modal-content fieldset {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+}
+.modal-content legend {
+  padding: 0 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+.setting-item label { flex-basis: 120px; font-size: 12px; color: var(--text-secondary); }
+.setting-item select,
+.setting-item input[type="number"] {
+  flex-grow: 1;
+  background: var(--bg-medium);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.setting-item input[type="number"]::-webkit-inner-spin-button,
+.setting-item input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.setting-item input[type="number"] { -moz-appearance: textfield; appearance: none; }
+
+.control-btn {
+  background: var(--bg-light);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.control-btn:hover { background: rgba(255,255,255,0.1); }
+
+.modal-buttons {
+  text-align: right;
+  margin-top: 16px;
+}
+.modal-buttons .control-btn {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary-hover);
+  font-weight: 500;
+  transition: background 0.15s, transform 0.1s;
+}
+.modal-buttons .control-btn:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+}
+.modal-buttons .control-btn:active { transform: translateY(0); }
+
+/* ─── 비디오 설정 select ─────────────────────────────── */
+.dock-content select {
+  width: 100%;
+  background: var(--bg-medium);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 5px;
+  border-radius: 4px;
+  font-size: 12px;
 }
