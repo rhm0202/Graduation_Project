@@ -61,9 +61,12 @@ function startGpuMonitoring(win) {
 }
 
 function startSpotlightCore() {
-  const scriptPath = path.join(__dirname, "server", "spotlight_core.py");
-  spotlightProcess = spawn("python", [scriptPath], {
-    cwd: path.join(__dirname, "server"),
+  const serverDir = app.isPackaged
+    ? path.join(process.resourcesPath, "app.asar.unpacked", "server")
+    : path.join(__dirname, "server");
+  const scriptPath = path.join(serverDir, "spotlight_core.py");
+  spotlightProcess = spawn("py", [scriptPath], {
+    cwd: serverDir,
     stdio: "inherit",
   });
   spotlightProcess.on("error", (err) => {

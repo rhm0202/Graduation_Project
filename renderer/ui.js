@@ -117,10 +117,7 @@ export function setupAppMenus() {
   );
 
   document.getElementById("menu-toggle-docks")?.addEventListener("click", () => {
-    const docks = document.getElementById("docks-container");
-    const resizeBar = document.getElementById("docks-resize-bar");
-    const hidden = docks?.classList.toggle("docks-hidden");
-    resizeBar?.classList.toggle("docks-hidden", hidden);
+    document.getElementById("sidebar")?.classList.toggle("collapsed");
   });
 
   document
@@ -145,6 +142,12 @@ export function setupAppMenus() {
   document.getElementById("menu-settings")?.addEventListener("click", () => {
     document.getElementById("open-settings")?.click();
   });
+
+  document.getElementById("topbar-settings-btn")?.addEventListener("click", () => {
+    document.getElementById("open-settings")?.click();
+  });
+
+  document.getElementById("topbar-exit-btn")?.addEventListener("click", exitFunc);
 
   document
     .getElementById("menu-check-updates")
