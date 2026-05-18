@@ -792,8 +792,8 @@ function renderObjectList(tracks) {
     return;
   }
 
-  // X좌표 기준 정렬 (안정적인 표시 순서 유지)
-  const sorted = [...tracks].sort((a, b) => a.box.x1 - b.box.x1);
+  // ID 기준 정렬 (UI 목록 순서 고정)
+  const sorted = [...tracks].sort((a, b) => a.id - b.id);
 
   sorted.forEach((track, idx) => {
     const missing = track.missingFrames > 0;
@@ -827,7 +827,7 @@ function renderObjectList(tracks) {
     });
 
     const labelSpan = document.createElement("span");
-    labelSpan.textContent = `사람 ${idx + 1}` + (missing ? " (사라짐)" : "");
+    labelSpan.textContent = `사람 ${track.id}` + (missing ? " (사라짐)" : "");
 
     const trackLabel = document.createElement("label");
     trackLabel.style.display = "flex";
