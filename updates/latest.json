@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
   "releaseDate": "2026-05-26",
-  "downloadUrl": "https://media.githubusercontent.com/media/rhm0202/Graduation_Project/main/website/downloads/Spotlight_Cam_v1.0.0-win32-x64.zip",
+  "downloadUrl": "https://github.com/rhm0202/Graduation_Project/releases/download/v1.0.0/Spotlight_Cam_v1.0.0-win32-x64.zip",
   "releaseNotes": "v1.0.0a · 2026-05-06 · 첫 정식 릴리즈\n\n> 기존의 기능이 어느정도 구현 완료된 1.0 버전 앱입니다.\n\n### 주요 기능 요약\n\n- YOLO 기반 실시간 사람 감지 및 자동 추적\n- HybridTracker (IoU + RGB 색상 매칭) 기반 다중 인원 ID 추적\n- PID 제어 + EMA 평활화를 통한 Pan/Tilt 서보 정밀 제어\n- Raspberry Pi 카메라 실시간 영상 스트리밍\n- AI 배경 제거 / 배경 교체 (이미지·영상·단색)\n- OBS 스타일 다중 소스 지원 (웹캠, 화면, 창, RPi 카메라)\n- 영상 녹화 (WebM/VP9)"
 }
