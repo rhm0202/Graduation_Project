@@ -6,8 +6,8 @@ const ROOT = path.join(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "out");
 const DOWNLOADS_DIR = path.join(ROOT, "website", "downloads");
 const LATEST_JSON = path.join(ROOT, "updates", "latest.json");
-const LFS_BASE =
-  "https://media.githubusercontent.com/media/rhm0202/Graduation_Project/main";
+const RELEASES_BASE =
+  "https://github.com/rhm0202/Graduation_Project/releases/download";
 
 function getVersion() {
   const pkg = JSON.parse(
@@ -121,7 +121,7 @@ function run() {
     ...existing,
     version,
     releaseDate: today,
-    downloadUrl: `${LFS_BASE}/website/downloads/${zipName}`,
+    downloadUrl: `${RELEASES_BASE}/v${version}/${zipName}`,
     ...(releaseNotes && { releaseNotes }),
   };
 

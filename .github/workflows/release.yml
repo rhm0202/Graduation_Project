@@ -33,9 +33,17 @@ jobs:
       - name: Create zip and update latest.json
         run: node scripts/update-release.js
 
-      - name: Commit and push to develop
+      - name: Upload zip to GitHub Release
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $zipPath = Get-ChildItem "website/downloads/*.zip" | Select-Object -First 1 -ExpandProperty FullName
+          gh release upload "v$version" "$zipPath" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit and push latest.json to develop
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add website/downloads/ updates/latest.json
-          git diff --staged --quiet && echo "변경 없음, 건너뜀" || (git commit -m "chore: update download zip for ${{ github.event.release.tag_name }}" && git push origin HEAD:develop)
+          git add updates/latest.json
+          git diff --staged --quiet && echo "변경 없음, 건너뜀" || (git commit -m "chore: update latest.json for ${{ github.event.release.tag_name }}" && git push origin HEAD:develop)
