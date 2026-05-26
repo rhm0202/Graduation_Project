@@ -1,2 +1,2 @@
-website/downloads/*.exe filter=lfs diff=lfs merge=lfs -text
-website/downloads/*.zip filter=lfs diff=lfs merge=lfs -text
+docs/downloads/*.exe filter=lfs diff=lfs merge=lfs -text
+docs/downloads/*.zip filter=lfs diff=lfs merge=lfs -text

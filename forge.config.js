@@ -12,7 +12,7 @@ module.exports = {
     executableName: "Spotlight_Cam_v1.0.0",
     ignore: [
       /^\/docs/,
-      /^\/website/,
+      /^\/docs/,
       /^\/updates/,
       /^\/out/,
       /^\/\.git/,
