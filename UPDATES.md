@@ -303,6 +303,35 @@ application/
 
 ---
 
+## v1.1.1 · 2026-05-18 · 객체 목록 UI 수정
+
+### Patch
+
+- **[PC]** 객체 목록 UI 정렬 순서 수정 — X좌표 순서 → 부여된 ID 순서로 변경
+
+---
+
+## v1.1.0 · 2026-05-11 · 다중 객체 세그멘테이션 및 UI 개편
+
+### Minor
+
+- **[PC]** **다중 객체 세그멘테이션** 도입 — 복수의 사람을 동시에 분리·마스킹 처리 (`sources.js` 대폭 개선)
+- **[PC]** Python 서버 자동 실행 — Electron 앱 시작 시 `spotlight_core.py` 자동 구동 (`startSpotlightCore` / `stopSpotlightCore`)
+- **[PC]** **UI 전면 개편** — `index.html`, `styles.css`, 렌더러 전반 레이아웃 및 스타일 재설계
+
+### Refactor
+
+- **[PC]** `yolo_bridge.py` → `legacy/` 이동 후 원본 삭제 — Electron 직접 수신 전환으로 데드코드 정리
+- **[PC]** `servo_drive.py` 삭제 — 미사용 서보 단독 구동 스크립트 제거
+- **[PC]** `test_yolo_bridge.py` 삭제 — legacy 이동으로 테스트 불필요
+
+### Docs
+
+- **[PC]** `server/` 폴더 README 추가 — 미들웨어 구조·모듈 역할·실행법 기록
+- **[PC]** `legacy/` 폴더 README 추가 — 구버전 모듈 교체 이유 및 대체 모듈 기록
+
+---
+
 ## v1.0.0a · 2026-05-06 · 첫 정식 릴리즈
 
 > 기존의 기능이 어느정도 구현 완료된 1.0 버전 앱입니다.
