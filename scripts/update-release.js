@@ -4,7 +4,7 @@ const { execSync } = require("child_process");
 
 const ROOT = path.join(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "out");
-const DOWNLOADS_DIR = path.join(ROOT, "website", "downloads");
+const DOWNLOADS_DIR = path.join(ROOT, "docs", "downloads");
 const LATEST_JSON = path.join(ROOT, "updates", "latest.json");
 const RELEASES_BASE =
   "https://github.com/rhm0202/Graduation_Project/releases/download";

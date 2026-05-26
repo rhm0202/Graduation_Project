@@ -36,7 +36,7 @@ jobs:
       - name: Upload zip to GitHub Release
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version
-          $zipPath = Get-ChildItem "website/downloads/*.zip" | Select-Object -First 1 -ExpandProperty FullName
+          $zipPath = Get-ChildItem "docs/downloads/*.zip" | Select-Object -First 1 -ExpandProperty FullName
           gh release upload "v$version" "$zipPath" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

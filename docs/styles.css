@@ -1,7 +1,6 @@
 /*
- * ⚠️  이 파일은 website/styles.css의 배포 복사본입니다.
- *    수정 시 website/styles.css를 먼저 편집하고 이 파일에 동기화하세요.
- *    (docs/ = GitHub Pages 배포용, website/ = 소스)
+ * 소스 파일 — 수정은 여기서 하고 docs/styles.css에 동기화하세요.
+ * 동기화 명령: copy website\styles.css docs\styles.css
  */
 
 * {
