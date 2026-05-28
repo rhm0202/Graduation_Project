@@ -1,0 +1,49 @@
+name: Release Build
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package app
+        run: npx electron-forge package
+
+      - name: Create zip and update latest.json
+        run: node scripts/update-release.js
+
+      - name: Upload zip to GitHub Release
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $zipPath = Get-ChildItem "docs/downloads/*.zip" | Select-Object -First 1 -ExpandProperty FullName
+          gh release upload "v$version" "$zipPath" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit and push latest.json to develop
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates/latest.json
+          git diff --staged --quiet && echo "변경 없음, 건너뜀" || (git commit -m "chore: update latest.json for ${{ github.event.release.tag_name }}" && git push origin HEAD:develop)

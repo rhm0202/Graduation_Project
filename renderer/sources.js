@@ -39,7 +39,7 @@ export function initMasterCanvas() {
   canvas.height = CANVAS_H;
   state.masterCanvas = canvas;
   state.masterCtx = canvas.getContext("2d");
-  state.masterStream = canvas.captureStream(30);
+  state.masterStream = canvas.captureStream(60);
   state.displayStream = state.masterStream; // recording.js 호환
 
   const videoFeed = document.getElementById("main-video-feed");
@@ -385,6 +385,19 @@ function _startAiLoop(src) {
     src.bgCanvas = document.createElement("canvas");
     src.bgCtx = src.bgCanvas.getContext("2d", { willReadFrequently: true });
   }
+  // 재사용할 임시 캔버스 미리 생성 (매 프레임 생성 방지)
+  if (!src._tmpCanvas) {
+    src._tmpCanvas = document.createElement("canvas");
+    src._tmpCtx = src._tmpCanvas.getContext("2d");
+  }
+  if (!src._fgCanvas) {
+    src._fgCanvas = document.createElement("canvas");
+    src._fgCtx = src._fgCanvas.getContext("2d");
+  }
+  // 재사용할 텐서 배열 생성 (CPU 병목/GC 누수 방지)
+  if (!src._tensorData) {
+    src._tensorData = new Float32Array(3 * 640 * 640);
+  }
   _aiLoop(src);
 }
 
@@ -397,6 +410,11 @@ function _stopAiLoop(src) {
   src.bgCtx = null;
   src.hiddenCanvas = null;
   src.hiddenCtx = null;
+  src._tmpCanvas = null;
+  src._tmpCtx = null;
+  src._fgCanvas = null;
+  src._fgCtx = null;
+  src._tensorData = null;
 }
 
 /**
@@ -508,17 +526,24 @@ async function _aiLoop(src) {
     try {
       state.sessionBusy = true;
       const MODEL_SIZE = 640;
-      const tmp = document.createElement("canvas");
-      tmp.width = MODEL_SIZE;
-      tmp.height = MODEL_SIZE;
-      tmp.getContext("2d").drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
-      const tmpData = tmp.getContext("2d").getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
+      // 캔버스 재사용 (매 프레임 생성 방지)
+      const tmp = src._tmpCanvas;
+      const tmpCtx = src._tmpCtx;
+      if (tmp.width !== MODEL_SIZE) tmp.width = MODEL_SIZE;
+      if (tmp.height !== MODEL_SIZE) tmp.height = MODEL_SIZE;
+      tmpCtx.drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
+      const tmpData = tmpCtx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
 
-      const tensorData = new Float32Array(3 * MODEL_SIZE * MODEL_SIZE);
-      for (let i = 0; i < MODEL_SIZE * MODEL_SIZE; i++) {
-        tensorData[i] = tmpData.data[i * 4] / 255;
-        tensorData[MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 1] / 255;
-        tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] = tmpData.data[i * 4 + 2] / 255;
+      const tensorData = src._tensorData;
+      const INV_255 = 0.003921568627451;
+      const totalPixels = MODEL_SIZE * MODEL_SIZE;
+      const data = tmpData.data;
+      
+      // 단일 루프 및 곱셈 연산으로 CPU 병목 제거
+      for (let i = 0, p = 0; i < totalPixels; i++, p += 4) {
+        tensorData[i] = data[p] * INV_255;
+        tensorData[totalPixels + i] = data[p + 1] * INV_255;
+        tensorData[2 * totalPixels + i] = data[p + 2] * INV_255;
       }
 
       const inputTensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE,]);
@@ -743,10 +768,12 @@ async function _aiLoop(src) {
           src.bgCtx.fillRect(0, 0, w, h);
         }
       }
-      const fgCv = document.createElement("canvas");
-      fgCv.width = w;
-      fgCv.height = h;
-      fgCv.getContext("2d").putImageData(frame, 0, 0);
+      // 캔버스 재사용 (매 프레임 생성 방지)
+      const fgCv = src._fgCanvas;
+      const fgCtx = src._fgCtx;
+      if (fgCv.width !== w) fgCv.width = w;
+      if (fgCv.height !== h) fgCv.height = h;
+      fgCtx.putImageData(frame, 0, 0);
       // ── blur+contrast 메타볼 이펙트 ─────────────────────────────────
       // 전경 합성 직전 미세 블러로 엣지 픽셀을 번지게 한 뒤
       // contrast로 다시 당겨줌으로써 잔여 계단 패턴을 추가로 억제합니다.

@@ -18,29 +18,6 @@ export async function loadModel() {
     const outputs = state.session.outputNames.join(", ");
     console.log(`AI 모델 로드 완료. 입력: [${inputs}] / 출력: [${outputs}]`);
 
-    let bar = document.getElementById("ai-debug-bar");
-    if (!bar) {
-      bar = document.createElement("div");
-      bar.id = "ai-debug-bar";
-      Object.assign(bar.style, {
-        position: "fixed",
-        top: "10px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        backgroundColor: "rgba(0,0,0,0.7)",
-        color: "#fff",
-        padding: "10px 20px",
-        borderRadius: "5px",
-        zIndex: "9999",
-        fontFamily: "monospace",
-      });
-      document.body.appendChild(bar);
-    }
-    bar.innerHTML = `✅ AI Ready | In: ${inputs} | Out: ${outputs}`;
-    const pill = document.getElementById('ai-status-pill');
-    const pillText = document.getElementById('ai-pill-text');
-    if (pillText) pillText.textContent = 'AI Ready';
-    if (pill) pill.classList.remove('loading');
   } catch (error) {
     console.error("AI 모델 로드 실패:", error);
     alert(`AI 불러오기 실패:\n${error.message}`);
