@@ -697,12 +697,32 @@ async function _aiLoop(src) {
             };
           });
 
+          // ── 이중선형 보간 헬퍼: 160×160 마스크를 연속 좌표로 샘플링 ──
+          // Math.floor(최단입점) 대신 4개 인접 셀의 가중평균을 사용하여
+          // 160→원본 해상도 업스케일 시 발생하는 블록 계단현상을 제거합니다.
+          const bilinearSample = (mask, px, py) => {
+            const gx = (px / imgW) * 160;
+            const gy = (py / imgH) * 160;
+            const x0 = Math.floor(gx);
+            const y0 = Math.floor(gy);
+            const x1 = Math.min(x0 + 1, 159);
+            const y1 = Math.min(y0 + 1, 159);
+            const fx = gx - x0;
+            const fy = gy - y0;
+            return (1 - fx) * (1 - fy) * mask[y0 * 160 + x0]
+                 +       fx  * (1 - fy) * mask[y0 * 160 + x1]
+                 + (1 - fx) *       fy  * mask[y1 * 160 + x0]
+                 +       fx  *       fy  * mask[y1 * 160 + x1];
+          };
+
           for (let y = 0; y < imgH; y++) {
             for (let x = 0; x < imgW; x++) {
+              // 이중선형 보간으로 마스크 확률값 획득
+              const prob = bilinearSample(combinedMask, x, y);
+
+              // 박스 내 여부는 보간된 좌표 기준으로 판정
               const mx = Math.floor((x / imgW) * 160);
               const my = Math.floor((y / imgH) * 160);
-
-              // 픽셀이 어떤 박스 안에라도 포함되는지 확인
               let inAnyBox = false;
               for (const box of boxes160) {
                 if (mx >= box.x1 && mx <= box.x2 && my >= box.y1 && my <= box.y2) {
@@ -711,8 +731,16 @@ async function _aiLoop(src) {
                 }
               }
 
-              if (!inAnyBox || combinedMask[my * 160 + mx] < 0.75) {
+              // ── 소프트 알파 페더링 ──────────────────────────────────────
+              // 0.75 하드 이진화 대신 0.40~0.65 구간을 부드럽게 페이드하여
+              // 엣지에 자연스러운 반투명 전환(페더링)을 적용합니다.
+              if (!inAnyBox) {
                 imageData.data[(y * imgW + x) * 4 + 3] = 0;
+              } else {
+                const FADE_LO = 0.40;  // 이 확률 이하면 완전 투명
+                const FADE_HI = 0.65;  // 이 확률 이상이면 완전 불투명
+                const alpha = Math.max(0, Math.min(1, (prob - FADE_LO) / (FADE_HI - FADE_LO)));
+                imageData.data[(y * imgW + x) * 4 + 3] = Math.round(alpha * 255);
               }
             }
           }
@@ -746,7 +774,14 @@ async function _aiLoop(src) {
       if (fgCv.width !== w) fgCv.width = w;
       if (fgCv.height !== h) fgCv.height = h;
       fgCtx.putImageData(frame, 0, 0);
+      // ── blur+contrast 메타볼 이펙트 ─────────────────────────────────
+      // 전경 합성 직전 미세 블러로 엣지 픽셀을 번지게 한 뒤
+      // contrast로 다시 당겨줌으로써 잔여 계단 패턴을 추가로 억제합니다.
+      if (src.bgRemoval) {
+        src.bgCtx.filter = "blur(1px) contrast(1.3)";
+      }
       src.bgCtx.drawImage(fgCv, 0, 0);
+      src.bgCtx.filter = "none";
 
       // 바운딩박스, 데드존, 중심점 디버그 그리기
       if (src.objectTracking) {
