@@ -2,7 +2,7 @@
 async function loadUpdateInfo() {
   try {
     const response = await fetch(
-      "https://raw.githubusercontent.com/rhm0202/Graduation_Project/develop/updates/latest.json",
+      "https://raw.githubusercontent.com/rhm0202/Graduation_Project/main/updates/latest.json",
     );
     if (!response.ok) throw new Error("업데이트 정보를 가져올 수 없습니다.");
 
