@@ -5,11 +5,11 @@ module.exports = {
   outDir: "out",
   packagerConfig: {
     asar: {
-      unpack: '**/server/**',
+      unpack: "**/server/**",
     },
     prune: true,
-    name: "Spotlight_Cam_v1.0.0",
-    executableName: "Spotlight_Cam_v1.0.0",
+    name: "Spotlight_Cam_v2.0.0",
+    executableName: "Spotlight_Cam_v2.0.0",
     ignore: [
       /^\/docs/,
       /^\/docs/,
@@ -27,8 +27,8 @@ module.exports = {
     {
       name: "@electron-forge/maker-squirrel",
       config: {
-        name: "Spotlight_Cam_v1.0.0",
-        setupExe: "Spotlight_Cam-Setup_v1.0.0.exe",
+        name: "Spotlight_Cam_v2.0.0",
+        setupExe: "Spotlight_Cam-Setup_v2.0.0.exe",
         setupIcon: "./assets/icon.ico",
         // loadingGif: './assets/loading.gif', // 선택사항
       },
