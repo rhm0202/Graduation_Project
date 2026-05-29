@@ -171,6 +171,9 @@ export function updateVideoDisplay() {
   document.dispatchEvent(new CustomEvent("displayStreamChanged"));
 }
 
+// bgCanvas가 처음 준비됐을 때 비교 모드 processed 패널 재연결
+document.addEventListener("bgCanvasReady", () => updateVideoDisplay());
+
 /**
  * 미디어 장치 접근 오류를 처리합니다.
  */

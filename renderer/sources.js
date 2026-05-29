@@ -383,6 +383,9 @@ function _updateObjectTrackingBtn() {
 function _startAiLoop(src) {
   if (!src.bgCanvas) {
     src.bgCanvas = document.createElement("canvas");
+    // 브라우저 기본값(300×150) 대신 0으로 초기화해야 wasEmpty 검사가 올바르게 동작함
+    src.bgCanvas.width = 0;
+    src.bgCanvas.height = 0;
     src.bgCtx = src.bgCanvas.getContext("2d", { willReadFrequently: true });
   }
   // 재사용할 임시 캔버스 미리 생성 (매 프레임 생성 방지)
@@ -508,6 +511,10 @@ async function _aiLoop(src) {
   if (src.bgCanvas.width !== w || src.bgCanvas.height !== h) {
     src.bgCanvas.width = w;
     src.bgCanvas.height = h;
+    // 비교 모드에서 bgCanvas 크기가 확정될 때 processed 패널을 재연결
+    if (state.comparisonMode) {
+      document.dispatchEvent(new CustomEvent("bgCanvasReady"));
+    }
   }
 
   // 출력 캔버스에 직접 그리면 AI 처리 시간 동안 원본 프레임이 1프레임 노출됩니다.

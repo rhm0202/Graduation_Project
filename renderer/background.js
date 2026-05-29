@@ -30,6 +30,11 @@ export async function loadModel() {
  */
 export function toggleBackgroundRemoval() {
   toggleBgRemovalForSelectedSource();
+  // 비교 모드에서 processedVideo가 bgCanvas 스트림을 캐싱하므로,
+  // 배경 제거 ON/OFF 시 즉시 갱신해야 후 화면이 정확히 동기화됨
+  if (state.comparisonMode) {
+    updateVideoDisplay();
+  }
 }
 
 /**
