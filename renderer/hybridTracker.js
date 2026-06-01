@@ -97,7 +97,7 @@ export class HybridTracker {
   constructor() {
     this.tracks = []; // 추적 중인 객체 배열: { id, box, color, missingFrames, score, anc }
     this.nextId = 0;
-    this.maxMissingFrames = 30; // 몇 프레임 동안 객체를 놓쳐도 ID를 유지할지 결정
+    this.maxMissingFrames = 120; // 몇 프레임 동안 객체를 놓쳐도 ID를 유지할지 결정
   }
 
   /**

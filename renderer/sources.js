@@ -626,9 +626,9 @@ async function _aiLoop(src) {
           state.targetPersonId = people[0].id;
         }
       } else {
-        // 화면에 아무도 없으면 타겟 ID 초기화
+        // 화면에 아무도 없어도 선택은 유지 (트랙 생존 필터에서 처리)
+        // targetPersonIds 는 isTrackAlive 필터(아래)가 정리하므로 여기서 초기화하지 않음
         state.targetPersonId = null;
-        state.targetPersonIds = [];
       }
 
       // 죽은 트랙 정리
