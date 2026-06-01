@@ -18,7 +18,7 @@ import { sendObjectCoords } from "./rpi.js";
 import { HybridTracker } from "./hybridTracker.js";
 
 const globalTracker = new HybridTracker();
-let _trackSnapshot = '';
+let _trackSnapshot = "";
 
 // ─────────────────────────────────────────────────────────
 // 마스터 캔버스
@@ -321,7 +321,9 @@ export function toggleBgRemovalForSelectedSource() {
     renderObjectList(globalTracker.tracks);
   } else {
     if (state.targetPersonIds.length === 0 && globalTracker.tracks.length > 0) {
-      const sorted = [...globalTracker.tracks].sort((a, b) => a.box.x1 - b.box.x1);
+      const sorted = [...globalTracker.tracks].sort(
+        (a, b) => a.box.x1 - b.box.x1,
+      );
       state.targetPersonIds.push(sorted[0].id);
     }
     renderObjectList(globalTracker.tracks);
@@ -433,8 +435,8 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
   const fontSize = Math.max(13, Math.round(w * 0.02));
 
   // PID 데드존 시각화 (pid_controller.py: x_dead_zone=200@1280px, y_dead_zone=100@720px)
-  const dzHalfW = 200 * w / 1280;
-  const dzHalfH = 100 * h / 720;
+  const dzHalfW = (200 * w) / 1280;
+  const dzHalfH = (100 * h) / 720;
   ctx.save();
   ctx.strokeStyle = "rgba(255, 220, 0, 0.9)";
   ctx.lineWidth = 2;
@@ -458,7 +460,9 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
 
     const isTarget = person.id === targetPersonId;
     const boxColor = isTarget ? "#00ff44" : "#ff9500";
-    const labelBg = isTarget ? "rgba(0, 150, 40, 0.85)" : "rgba(180, 90, 0, 0.85)";
+    const labelBg = isTarget
+      ? "rgba(0, 150, 40, 0.85)"
+      : "rgba(180, 90, 0, 0.85)";
 
     ctx.save();
 
@@ -521,7 +525,9 @@ async function _aiLoop(src) {
   // 임시 캔버스에 그려서 처리 성공 시에만 출력 캔버스에 반영합니다.
   if (!src.hiddenCanvas) {
     src.hiddenCanvas = document.createElement("canvas");
-    src.hiddenCtx = src.hiddenCanvas.getContext("2d", { willReadFrequently: true, });
+    src.hiddenCtx = src.hiddenCanvas.getContext("2d", {
+      willReadFrequently: true,
+    });
   }
   if (src.hiddenCanvas.width !== w || src.hiddenCanvas.height !== h) {
     src.hiddenCanvas.width = w;
@@ -545,7 +551,7 @@ async function _aiLoop(src) {
       const INV_255 = 0.003921568627451;
       const totalPixels = MODEL_SIZE * MODEL_SIZE;
       const data = tmpData.data;
-      
+
       // 단일 루프 및 곱셈 연산으로 CPU 병목 제거
       for (let i = 0, p = 0; i < totalPixels; i++, p += 4) {
         tensorData[i] = data[p] * INV_255;
@@ -553,7 +559,12 @@ async function _aiLoop(src) {
         tensorData[2 * totalPixels + i] = data[p + 2] * INV_255;
       }
 
-      const inputTensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE,]);
+      const inputTensor = new ort.Tensor("float32", tensorData, [
+        1,
+        3,
+        MODEL_SIZE,
+        MODEL_SIZE,
+      ]);
       const feeds = { [state.session.inputNames[0]]: inputTensor };
       const results = await state.session.run(feeds);
 
@@ -608,7 +619,10 @@ async function _aiLoop(src) {
       if (!state.targetPersonIds) state.targetPersonIds = [];
 
       if (people.length > 0) {
-        if (state.targetPersonId === undefined || state.targetPersonId === null) {
+        if (
+          state.targetPersonId === undefined ||
+          state.targetPersonId === null
+        ) {
           state.targetPersonId = people[0].id;
         }
       } else {
@@ -618,14 +632,16 @@ async function _aiLoop(src) {
       }
 
       // 죽은 트랙 정리
-      state.targetPersonIds = state.targetPersonIds.filter(id => globalTracker.isTrackAlive(id));
+      state.targetPersonIds = state.targetPersonIds.filter((id) =>
+        globalTracker.isTrackAlive(id),
+      );
 
       let bestScore = -Infinity;
       let bestAnc = -1;
       let bestBox = null;
 
       // 고정된 targetPersonId와 일치하는 사람 찾기 (순서가 뒤바뀌어도 ID를 따라감)
-      const targetPerson = people.find(p => p.id === state.targetPersonId);
+      const targetPerson = people.find((p) => p.id === state.targetPersonId);
 
       if (targetPerson) {
         bestScore = targetPerson.score;
@@ -648,7 +664,11 @@ async function _aiLoop(src) {
       const bestProb = bestScore;
 
       // Object Panel 목록 갱신 (트래커 상태나 선택 상태가 바뀔 때)
-      const _snap = globalTracker.tracks.map(t => `${t.id}:${t.missingFrames > 0 ? 1 : 0}`).join(',') + `|bg:${state.targetPersonIds.join(',')}|tr:${state.targetPersonId}`;
+      const _snap =
+        globalTracker.tracks
+          .map((t) => `${t.id}:${t.missingFrames > 0 ? 1 : 0}`)
+          .join(",") +
+        `|bg:${state.targetPersonIds.join(",")}|tr:${state.targetPersonId}`;
       if (_snap !== _trackSnapshot) {
         _trackSnapshot = _snap;
         renderObjectList(globalTracker.tracks);
@@ -661,14 +681,16 @@ async function _aiLoop(src) {
         // 객체추적이 켜져 있으면 좌표 전송
         if (state.autoTrackingEnabled) {
           const obj_x = ((bestBox.x1 + bestBox.x2) / 2) * (w / 640);
-          const obj_y = ((bestBox.y1 + bestBox.y2) / 2) * (h / 640);
+          const obj_y = ((bestBox.y1 + bestBox.y2) / 2) * (h / 640) - 100;
           sendObjectCoords(obj_x, obj_y);
         }
       }
 
       // 배경 제거가 켜져 있을 때 다중 객체 마스크 적용
       if (src.bgRemoval) {
-        const bgTargets = people.filter(p => state.targetPersonIds.includes(p.id) && p.score > 0.5);
+        const bgTargets = people.filter(
+          (p) => state.targetPersonIds.includes(p.id) && p.score > 0.5,
+        );
 
         if (bgTargets.length > 0) {
           const combinedMask = new Float32Array(160 * 160);
@@ -695,12 +717,12 @@ async function _aiLoop(src) {
           const imgH = imageData.height;
 
           // 각 대상별 바운딩 박스를 160 해상도로 변환하여 배열에 저장
-          const boxes160 = bgTargets.map(target => {
+          const boxes160 = bgTargets.map((target) => {
             return {
               x1: Math.floor(target.box.x1 * (160 / 640)),
               y1: Math.floor(target.box.y1 * (160 / 640)),
               x2: Math.ceil(target.box.x2 * (160 / 640)),
-              y2: Math.ceil(target.box.y2 * (160 / 640))
+              y2: Math.ceil(target.box.y2 * (160 / 640)),
             };
           });
 
@@ -716,10 +738,12 @@ async function _aiLoop(src) {
             const y1 = Math.min(y0 + 1, 159);
             const fx = gx - x0;
             const fy = gy - y0;
-            return (1 - fx) * (1 - fy) * mask[y0 * 160 + x0]
-                 +       fx  * (1 - fy) * mask[y0 * 160 + x1]
-                 + (1 - fx) *       fy  * mask[y1 * 160 + x0]
-                 +       fx  *       fy  * mask[y1 * 160 + x1];
+            return (
+              (1 - fx) * (1 - fy) * mask[y0 * 160 + x0] +
+              fx * (1 - fy) * mask[y0 * 160 + x1] +
+              (1 - fx) * fy * mask[y1 * 160 + x0] +
+              fx * fy * mask[y1 * 160 + x1]
+            );
           };
 
           for (let y = 0; y < imgH; y++) {
@@ -732,7 +756,12 @@ async function _aiLoop(src) {
               const my = Math.floor((y / imgH) * 160);
               let inAnyBox = false;
               for (const box of boxes160) {
-                if (mx >= box.x1 && mx <= box.x2 && my >= box.y1 && my <= box.y2) {
+                if (
+                  mx >= box.x1 &&
+                  mx <= box.x2 &&
+                  my >= box.y1 &&
+                  my <= box.y2
+                ) {
                   inAnyBox = true;
                   break;
                 }
@@ -744,10 +773,15 @@ async function _aiLoop(src) {
               if (!inAnyBox) {
                 imageData.data[(y * imgW + x) * 4 + 3] = 0;
               } else {
-                const FADE_LO = 0.40;  // 이 확률 이하면 완전 투명
-                const FADE_HI = 0.65;  // 이 확률 이상이면 완전 불투명
-                const alpha = Math.max(0, Math.min(1, (prob - FADE_LO) / (FADE_HI - FADE_LO)));
-                imageData.data[(y * imgW + x) * 4 + 3] = Math.round(alpha * 255);
+                const FADE_LO = 0.4; // 이 확률 이하면 완전 투명
+                const FADE_HI = 0.65; // 이 확률 이상이면 완전 불투명
+                const alpha = Math.max(
+                  0,
+                  Math.min(1, (prob - FADE_LO) / (FADE_HI - FADE_LO)),
+                );
+                imageData.data[(y * imgW + x) * 4 + 3] = Math.round(
+                  alpha * 255,
+                );
               }
             }
           }
@@ -832,7 +866,7 @@ function _createVideoEl(stream) {
   v.autoplay = true;
   v.muted = true;
   v.playsInline = true;
-  v.play().catch(() => { });
+  v.play().catch(() => {});
   return v;
 }
 
@@ -866,7 +900,7 @@ function renderObjectList(tracks) {
 
   sorted.forEach((track, idx) => {
     const missing = track.missingFrames > 0;
-    
+
     if (!state.targetPersonIds) state.targetPersonIds = [];
     const isBgSelected = state.targetPersonIds.includes(track.id);
     const isTracked = track.id === state.targetPersonId;
@@ -883,7 +917,7 @@ function renderObjectList(tracks) {
     }
 
     li.addEventListener("click", (e) => {
-      if (e.target.tagName.toLowerCase() === 'input') return;
+      if (e.target.tagName.toLowerCase() === "input") return;
 
       const idIdx = state.targetPersonIds.indexOf(track.id);
       if (idIdx > -1) {
@@ -914,8 +948,8 @@ function renderObjectList(tracks) {
       if (trackRadio.checked) {
         state.targetPersonId = track.id;
         if (!state.targetPersonIds.includes(track.id)) {
-           state.targetPersonIds.push(track.id);
-           li.classList.add("selected");
+          state.targetPersonIds.push(track.id);
+          li.classList.add("selected");
         }
       }
     });
