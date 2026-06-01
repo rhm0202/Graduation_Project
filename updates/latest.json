@@ -2,5 +2,5 @@
   "version": "2.0.0",
   "releaseDate": "2026-06-01",
   "downloadUrl": "https://github.com/rhm0202/Graduation_Project/releases/download/v2.0.0/Spotlight_Cam_v2.0.0-win32-x64.zip",
-  "releaseNotes": "v2.0.0 · 2026-06-01 · UI 전면 개편 및 성능 최적화\n\n### Major\n\n- **[PC]** UI 전면 개편 — 레이아웃 및 스타일 전반 재설계\n\n### Patch\n\n- **[PC]** 배경 소스 오류 수정 — 배경 소스 로드 실패 시 크래시 해결\n- **[PC]** 성능 최적화 — 캔버스 단일 인스턴스 재사용, AI 입력 텐서 배열 재사용, 정규화 연산 최적화, 최대 프레임 60fps 고정\n- **[PC]** GPU 사용률 수집 PowerShell 스크립트 최적화\n- **[PC]** AI 로드 중 문구 제거"
+  "releaseNotes": "v2.0.0 · 2026-06-01 · UI 전면 개편 및 성능 최적화\n\n### Major\n\n- **[PC]** UI 전면 개편 — 레이아웃 및 스타일 전반 재설계\n\n### Patch\n\n- **[PC]** 배경 소스 오류 수정 — 배경 소스 로드 실패 시 크래시 해결\n- **[PC]** 성능 최적화 — 캔버스 단일 인스턴스 재사용, AI 입력 텐서 배열 재사용, 정규화 연산 최적화 (`/255` → `×0.00392`), 최대 프레임 60fps 고정\n- **[PC]** GPU 사용률 수집 PowerShell 스크립트 최적화\n- **[PC]** AI 로드 중 문구 제거"
 }
