@@ -10,13 +10,14 @@ const path = require("path");
 const fs = require("fs");
 const https = require("https");
 const http = require("http");
-const { exec } = require("child_process");
+const { exec, spawn } = require("child_process");
 
 //webGPU 가속 활성화
 app.commandLine.appendSwitch("enable-unsafe-webgpu");
 app.commandLine.appendSwitch("enable-features", "Vulkan");
 
 let writableStream = null;
+let spotlightProcess = null;
 let savePath = "C:\\VideoRecoding";
 
 // 업데이트 서버 URL (GitHub Releases 또는 자체 서버)
@@ -49,17 +50,51 @@ let selectedGpuName = null;
 function startGpuMonitoring(win) {
   const cmd = `powershell -NoProfile -Command "try { $s = (Get-Counter '\\GPU Engine(*engtype_3D)\\Utilization Percentage' -ErrorAction Stop).CounterSamples | Where-Object { $_.CookedValue -gt 0 }; if ($s) { [math]::Round(($s | Measure-Object CookedValue -Sum).Sum, 1) } else { 0 } } catch { 0 }"`;
 
-  setInterval(() => {
-    exec(cmd, { timeout: 4000 }, (err, stdout) => {
-      if (!err && !win.isDestroyed()) {
-        const usage = Math.min(parseFloat(stdout.trim()) || 0, 100);
-        win.webContents.send("gpu-usage", usage);
-      }
-    });
-  }, 2000);
+  // setInterval 대신 직렬 실행: 이전 PowerShell이 끝난 후 다음 실행
+  // 이전 방식은 PowerShell 프로세스가 중첩되어 Windows 셸 자원 고갈 유발
+  let gpuMonitorTimer = null;
+  function scheduleNext() {
+    gpuMonitorTimer = setTimeout(() => {
+      if (win.isDestroyed()) return;
+      exec(cmd, { timeout: 4000 }, (err, stdout) => {
+        if (!err && !win.isDestroyed()) {
+          const usage = Math.min(parseFloat(stdout.trim()) || 0, 100);
+          win.webContents.send("gpu-usage", usage);
+        }
+        scheduleNext(); // 완료 후 다음 스케줄
+      });
+    }, 3000); // 3초 간격 (여유 추가)
+  }
+  scheduleNext();
+}
+
+function startSpotlightCore() {
+  const serverDir = app.isPackaged
+    ? path.join(process.resourcesPath, "app.asar.unpacked", "server")
+    : path.join(__dirname, "server");
+  const scriptPath = path.join(serverDir, "spotlight_core.py");
+  spotlightProcess = spawn("py", [scriptPath], {
+    cwd: serverDir,
+    stdio: "inherit",
+  });
+  spotlightProcess.on("error", (err) => {
+    console.error("[Spotlight] 실행 실패:", err.message);
+  });
+  spotlightProcess.on("exit", (code) => {
+    console.log(`[Spotlight] 종료 (code: ${code})`);
+    spotlightProcess = null;
+  });
+}
+
+function stopSpotlightCore() {
+  if (spotlightProcess) {
+    spotlightProcess.kill();
+    spotlightProcess = null;
+  }
 }
 
 app.whenReady().then(async () => {
+  startSpotlightCore();
   createWindow();
   const win = BrowserWindow.getAllWindows()[0];
   startGpuMonitoring(win);
@@ -88,6 +123,10 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  stopSpotlightCore();
 });
 /**
  * 녹화 시작 IPC 핸들러

@@ -228,12 +228,12 @@ npm run package
 
 ### 개발 빌드
 ```bash
-npm run package
+npm start
 ```
 
 ### 배포용 빌드 (인스톨러 포함)
 ```bash
-npm run make
+npm run package
 ```
 
 빌드된 파일은 `out/make/squirrel.windows/x64/` 폴더에 생성됩니다.
@@ -344,9 +344,7 @@ ISC
 - [x] 자동 추적 모드
 - [x] OBS Sources 패널 (웹캠/화면/창/RPi, 레이어 컴포지팅)
 - [x] 자동 업데이트
-- [ ] YOLO 모델 완전 통합 (현재 시뮬레이션)
-- [ ] 스트리밍 기능 (RTMP 등)
-- [ ] 다국어 지원
+- [x] YOLO 모델 완전 통합 (현재 시뮬레이션)
 
 ---
 
@@ -374,6 +372,7 @@ ISC
    - `updates/latest.json` 파일 업데이트
 
 4. **현재 설정된 저장소**: [rhm0202/Graduation_Project](https://github.com/rhm0202/Graduation_Project)
+5. **현재 관리중인 노션**: [노션 링크](https://www.notion.so/Project-Hub-2eff017f3c8080caba0cdb1e919f17a5?source=copy_link)
 
 ---
 

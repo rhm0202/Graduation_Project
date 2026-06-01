@@ -141,14 +141,25 @@ export function updateVideoDisplay() {
       } else if (selected?.videoEl instanceof HTMLCanvasElement) {
         // RPi 소스는 stream 없이 캔버스에 직접 그리므로 captureStream으로 원본 표시
         if (!selected._displayStream) {
-          selected._displayStream = selected.videoEl.captureStream(30);
+          selected._displayStream = selected.videoEl.captureStream(60);
         }
         originalVideo.srcObject = selected._displayStream;
       } else {
         originalVideo.srcObject = stream;
       }
     }
-    if (processedVideo) processedVideo.srcObject = stream;
+    if (processedVideo) {
+      // bgCanvas(카메라 해상도)가 있으면 직접 사용해 masterCanvas 이중 레터박싱 방지
+      if (selected?.bgCanvas?.width > 0) {
+        if (selected._bgCaptureCanvas !== selected.bgCanvas) {
+          selected._bgCaptureCanvas = selected.bgCanvas;
+          selected._bgCaptureStream = selected.bgCanvas.captureStream(60);
+        }
+        processedVideo.srcObject = selected._bgCaptureStream;
+      } else {
+        processedVideo.srcObject = selected?.stream ?? stream;
+      }
+    }
   } else {
     comparisonContainer?.classList.remove("active");
     if (videoFeed) {
@@ -159,6 +170,9 @@ export function updateVideoDisplay() {
 
   document.dispatchEvent(new CustomEvent("displayStreamChanged"));
 }
+
+// bgCanvas가 처음 준비됐을 때 비교 모드 processed 패널 재연결
+document.addEventListener("bgCanvasReady", () => updateVideoDisplay());
 
 /**
  * 미디어 장치 접근 오류를 처리합니다.
