@@ -20,9 +20,11 @@ export function setupMediaRecorder() {
 
   try {
     state.mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9,opus' });
+    console.log('[Recording] MediaRecorder 초기화 성공 (VP9 코덱)');
   } catch {
-    console.warn('VP9 미지원 — 기본 코덱 사용');
+    console.warn('[Recording] VP9 미지원 — 기본 코덱 사용');
     state.mediaRecorder = new MediaRecorder(stream);
+    console.log('[Recording] MediaRecorder 초기화 성공 (기본 코덱)');
   }
 
   state.mediaRecorder.ondataavailable = async e => {
@@ -33,6 +35,7 @@ export function setupMediaRecorder() {
   };
 
   state.mediaRecorder.onstart = () => {
+    console.log('[Recording] 녹화가 시작되었습니다.');
     if (isElectron) window.electronAPI.send('start-recording');
     if (startBtn) { startBtn.textContent = '■ STOP'; startBtn.classList.add('recording'); }
     state.isRecording = true;
@@ -42,6 +45,7 @@ export function setupMediaRecorder() {
   };
 
   state.mediaRecorder.onstop = () => {
+    console.log('[Recording] 녹화가 중지되었습니다.');
     if (isElectron) window.electronAPI.send('stop-recording');
     if (startBtn) { startBtn.textContent = '● REC'; startBtn.classList.remove('recording'); }
     state.isRecording = false;
@@ -68,8 +72,21 @@ function _updateTimer() {
 export function setupRecordingControls() {
   const btn = document.getElementById('start-recording-btn');
   btn?.addEventListener('click', () => {
-    if (!state.mediaRecorder) { console.error('MediaRecorder 미초기화'); return; }
-    if (state.isRecording) state.mediaRecorder.stop();
-    else state.mediaRecorder.start(1000);
+    if (!state.mediaRecorder) {
+      console.log('[Recording] MediaRecorder 미초기화 상태 감지, 초기화 시도...');
+      setupMediaRecorder();
+      if (!state.mediaRecorder) {
+        console.error('[Recording] MediaRecorder 초기화 실패 (스트림 없음)');
+        return;
+      }
+    }
+
+    if (state.isRecording) {
+      console.log('[Recording] 녹화 중지 요청');
+      state.mediaRecorder.stop();
+    } else {
+      console.log('[Recording] 녹화 시작 요청 (1000ms 청크)');
+      state.mediaRecorder.start(1000);
+    }
   });
 }

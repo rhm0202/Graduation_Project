@@ -6,6 +6,7 @@ from modules.pid_controller import MotorPIDManager
 from modules.config import (
     RPI_WS_URL, WS_PORT, FRAME_WIDTH, FRAME_HEIGHT,
     PID_KP, PID_KI, PID_KD, PID_OUTPUT_LIMIT, EMA_ALPHA,
+    X_DEAD_ZONE, Y_DEAD_ZONE,
 )
 
 # ==========================================
@@ -183,6 +184,8 @@ async def main():
         pid_kd=PID_KD,
         output_limit=PID_OUTPUT_LIMIT,
         ema_alpha=EMA_ALPHA,
+        x_dead_zone=X_DEAD_ZONE,
+        y_dead_zone=Y_DEAD_ZONE,
     )
     pi_task     = asyncio.create_task(connect_to_pi())
     server_task = asyncio.create_task(start_desktop_server())

@@ -46,7 +46,9 @@ export const state = {
   selectedSourceId: null,      // 현재 선택된 소스 ID (배경 제거 등 조작 대상)
   masterCanvas: null,          // 컴포지팅 출력 캔버스
   masterCtx: null,             // 마스터 캔버스 2D 컨텍스트
-  masterStream: null,          // masterCanvas.captureStream() → 화면 표시 + 녹화 소스
+  masterStream: null,          // masterCanvas.captureStream() → 녹화 전용
+  previewCanvas: null,         // 화면 표시 전용 캔버스 (captureStream 없음)
+  previewCtx: null,            // 미리보기 캔버스 2D 컨텍스트
   bgColor: null,               // 배경 제거 후 적용할 단색 (hex)
 
   // 객체 추적

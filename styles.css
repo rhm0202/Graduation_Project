@@ -254,12 +254,11 @@ body {
   position: relative;
 }
 
-#main-video-feed {
+#main-preview-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
   background: #000;
 }
 
