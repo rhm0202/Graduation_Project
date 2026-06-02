@@ -15,9 +15,9 @@ export function saveSettings() {
       audioSource: document.getElementById('audio-source')?.value || '',
       videoResolution: document.getElementById('video-resolution')?.value || 'auto',
       videoFramerate: document.getElementById('video-framerate')?.value || 'auto',
-      // [구버전] RPi 직접 연결 시 IP/Port 저장 — spotlight_core.py 방식에서는 localhost 고정이므로 불필요
-      // raspberryPiIp: document.getElementById('raspberry-pi-ip')?.value || '',
-      // raspberryPiPort: document.getElementById('raspberry-pi-port')?.value || '8765',
+      raspberryPiIp:   document.getElementById('raspberry-pi-ip')?.value   || '192.168.137.114',
+      raspberryPiPort: document.getElementById('raspberry-pi-port')?.value  || '8000',
+      mediamtxStream:  document.getElementById('mediamtx-stream')?.value   || 'cam',
       fileFormat: document.getElementById('file-format')?.value || 'webm',
       savePath: document.getElementById('save-path-display')?.value || 'C:\\VideoRecoding',
       timestamp: Date.now(),
@@ -43,17 +43,18 @@ export function loadSettings() {
     const audioSelect = document.getElementById('audio-source');
     const resolutionSelect = document.getElementById('video-resolution');
     const framerateSelect = document.getElementById('video-framerate');
-    // [구버전] RPi 직접 연결 시 IP/Port 복원 — spotlight_core.py 방식에서는 불필요
-    // const piIpInput = document.getElementById('raspberry-pi-ip');
-    // const piPortInput = document.getElementById('raspberry-pi-port');
+    const piIpInput = document.getElementById('raspberry-pi-ip');
+    const piPortInput = document.getElementById('raspberry-pi-port');
+    const mediamtxStreamInput = document.getElementById('mediamtx-stream');
     const fileFormatSelect = document.getElementById('file-format');
 
     if (settings.videoSource && videoSelect) videoSelect.value = settings.videoSource;
     if (settings.audioSource && audioSelect) audioSelect.value = settings.audioSource;
     if (settings.videoResolution && resolutionSelect) resolutionSelect.value = settings.videoResolution;
     if (settings.videoFramerate && framerateSelect) framerateSelect.value = settings.videoFramerate;
-    // [구버전] if (settings.raspberryPiIp && piIpInput) piIpInput.value = settings.raspberryPiIp;
-    // [구버전] if (settings.raspberryPiPort && piPortInput) piPortInput.value = settings.raspberryPiPort;
+    if (settings.raspberryPiIp   && piIpInput)           piIpInput.value = settings.raspberryPiIp;
+    if (settings.raspberryPiPort && piPortInput)          piPortInput.value = settings.raspberryPiPort;
+    if (settings.mediamtxStream  && mediamtxStreamInput)  mediamtxStreamInput.value = settings.mediamtxStream;
     if (settings.fileFormat && fileFormatSelect) fileFormatSelect.value = settings.fileFormat;
 
     return settings;
@@ -148,15 +149,13 @@ export function setupSettingsModal() {
     }
   });
 
-  // [구버전] IP/Port 변경 시 자동 저장 — spotlight_core.py 방식에서는 불필요
-  // if (piIpInput) {
-  //   piIpInput.addEventListener('change', saveSettings);
-  //   piIpInput.addEventListener('blur', saveSettings);
-  // }
-  // if (piPortInput) {
-  //   piPortInput.addEventListener('change', saveSettings);
-  //   piPortInput.addEventListener('blur', saveSettings);
-  // }
+  // [구버전] IP/Port 변경 시 자동 저장 — spotlight_core.py 방식에서는 불필요했으나 WHEP 방식에서는 필요
+  const piIpInputEl   = document.getElementById('raspberry-pi-ip');
+  const piPortInputEl = document.getElementById('raspberry-pi-port');
+  const mediamtxStreamEl = document.getElementById('mediamtx-stream');
+  if (piIpInputEl)      piIpInputEl.addEventListener('change', saveSettings);
+  if (piPortInputEl)    piPortInputEl.addEventListener('change', saveSettings);
+  if (mediamtxStreamEl) mediamtxStreamEl.addEventListener('change', saveSettings);
   if (fileFormatSelect) {
     fileFormatSelect.addEventListener('change', saveSettings);
   }

@@ -4,10 +4,13 @@ config.py
 spotlight_core 및 관련 모듈에서 공유하는 설정 상수.
 """
 
-RPI_WS_URL   = "ws://192.168.137.114:8000"  # RPi WebSocket 주소 (Wi-Fi)
+RPI_WS_URL   = "ws://192.168.137.114:8765"  # RPi WebSocket 주소 (Wi-Fi)
 WS_PORT      = 8765                         # Electron 앱과 통신할 포트
-FRAME_WIDTH  = 1280                         # 카메라 해상도
-FRAME_HEIGHT = 720
+FRAME_WIDTH  = 1920                         # 카메라 해상도 (1080p)
+FRAME_HEIGHT = 1080
+
+X_DEAD_ZONE  = 300                          # 팬 데드존 (200@1280 → 300@1920 비례 스케일)
+Y_DEAD_ZONE  = 150                          # 틸트 데드존 (100@720 → 150@1080 비례 스케일)
 
 # ─── PID 모터 제어 파라미터 ───────────────────────────────
 PID_KP           = 0.25    # 비례 게인

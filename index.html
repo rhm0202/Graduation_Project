@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:;" />
+    content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' ws: http:;" />
   <title>Spotlight Cam - AI 객체 추적 및 배경 제거</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -69,7 +69,7 @@
             <video id="processed-video" autoplay muted playsinline></video>
           </div>
         </div>
-        <video id="main-video-feed" autoplay muted playsinline></video>
+        <canvas id="main-preview-canvas"></canvas>
       </section>
 
       <!-- Sidebar -->
@@ -227,13 +227,17 @@
       </fieldset>
 
       <fieldset>
-        <legend>라즈베리파이 연결</legend>
+        <legend>라즈베리파이 연결 (MediaMTX WebRTC)</legend>
         <div class="setting-item">
-          <label for="raspberry-pi-ip">라즈베리파이 IP 주소:</label>
+          <label for="raspberry-pi-ip">RPi IP 주소:</label>
           <div style="display:flex;gap:5px;flex-grow:1">
-            <input type="text" id="raspberry-pi-ip" placeholder="예: 192.168.1.100" style="flex-grow:1;background-color:var(--bg-medium);color:var(--text-primary);border:1px solid var(--border-color);padding:5px;border-radius:3px;font-size:0.9em;" />
-            <input type="number" id="raspberry-pi-port" placeholder="포트" value="8765" min="1" max="65535" style="width:80px;background-color:var(--bg-medium);color:var(--text-primary);border:1px solid var(--border-color);padding:5px;border-radius:3px;font-size:0.9em;" />
+            <input type="text" id="raspberry-pi-ip" placeholder="예: 192.168.137.114" style="flex-grow:1;background-color:var(--bg-medium);color:var(--text-primary);border:1px solid var(--border-color);padding:5px;border-radius:3px;font-size:0.9em;" />
+            <input type="number" id="raspberry-pi-port" placeholder="포트" value="8000" min="1" max="65535" style="width:80px;background-color:var(--bg-medium);color:var(--text-primary);border:1px solid var(--border-color);padding:5px;border-radius:3px;font-size:0.9em;" />
           </div>
+        </div>
+        <div class="setting-item">
+          <label for="mediamtx-stream">스트림 경로:</label>
+          <input type="text" id="mediamtx-stream" placeholder="예: cam" value="cam" style="flex-grow:1;background-color:var(--bg-medium);color:var(--text-primary);border:1px solid var(--border-color);padding:5px;border-radius:3px;font-size:0.9em;" />
         </div>
         <div class="setting-item">
           <label>연결 상태:</label>

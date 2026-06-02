@@ -7,8 +7,8 @@
  *        ▼
  *  [Master Canvas (rAF 컴포지터)]  ← captureStream(30)
  *        │
- *        ├─▶ <video id="main-video-feed">
- *        └─▶ MediaRecorder
+ *        ├─▶ <canvas id="main-preview-canvas">  (drawImage 복사, captureStream 없음)
+ *        └─▶ MediaRecorder  (captureStream 전용)
  *
  * state.sources[0] = 최상단 레이어 (마지막에 그려짐)
  * state.sources[last] = 최하단 레이어 (처음에 그려짐)
@@ -42,8 +42,11 @@ export function initMasterCanvas() {
   state.masterStream = canvas.captureStream(60);
   state.displayStream = state.masterStream; // recording.js 호환
 
-  const videoFeed = document.getElementById("main-video-feed");
-  if (videoFeed) videoFeed.srcObject = state.masterStream;
+  const previewCanvas = document.getElementById("main-preview-canvas");
+  if (previewCanvas) {
+    state.previewCanvas = previewCanvas;
+    state.previewCtx = previewCanvas.getContext("2d");
+  }
 
   _startCompositing();
 }
@@ -75,7 +78,10 @@ function _compositeFrame() {
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
   const src = state.sources.find((s) => s.id === state.selectedSourceId);
-  if (!src || !src.visible) return;
+  if (!src || !src.visible) {
+    _updatePreviewCanvas();
+    return;
+  }
 
   // bgCanvas는 AI 루프가 돌 때(배경 제거 또는 객체 추적) 사용됨
   const aiActive = src.bgRemoval || src.objectTracking;
@@ -83,9 +89,33 @@ function _compositeFrame() {
     _drawLetterboxed(ctx, src.bgCanvas, CANVAS_W, CANVAS_H);
   } else {
     const vid = src.videoEl;
-    if (!vid || vid.readyState < 2) return;
+    if (!vid || vid.readyState < 2) {
+      _updatePreviewCanvas();
+      return;
+    }
     _drawLetterboxed(ctx, vid, CANVAS_W, CANVAS_H);
   }
+
+  _updatePreviewCanvas();
+}
+
+function _updatePreviewCanvas() {
+  const canvas = state.previewCanvas;
+  if (!canvas || state.comparisonMode || !state.masterCanvas) return;
+
+  const dw = canvas.clientWidth;
+  const dh = canvas.clientHeight;
+  if (dw === 0 || dh === 0) return;
+
+  if (canvas.width !== dw || canvas.height !== dh) {
+    canvas.width = dw;
+    canvas.height = dh;
+  }
+
+  const ctx = state.previewCtx;
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, dw, dh);
+  _drawLetterboxed(ctx, state.masterCanvas, dw, dh);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -212,16 +242,17 @@ export async function addWindowSource(sourceId, label) {
 }
 
 /**
- * RPi 소스를 추가합니다. state.trackingCanvas가 있어야 합니다.
+ * RPi 소스를 추가합니다. state.piVideoStream(HTMLVideoElement)이 있어야 합니다.
  */
 export function addRpiSource() {
-  if (!state.trackingCanvas) return null;
+  if (!state.piVideoStream) return null;
   if (state.sources.find((s) => s.type === "rpi")) return null; // 중복 방지
 
   const src = _makeSource({
     type: "rpi",
     label: "RPi 카메라",
-    videoEl: state.trackingCanvas,
+    videoEl: state.piVideoStream,                  // HTMLVideoElement (WebRTC)
+    stream: state.piVideoStream.srcObject,        // MediaStream (비교 모드용)
   });
   state.sources.unshift(src); // 최상단 레이어
   if (!state.selectedSourceId) {
@@ -285,11 +316,6 @@ function _previewSelectedSource() {
     if (originalVideo) {
       if (src?.stream) {
         originalVideo.srcObject = src.stream;
-      } else if (src?.videoEl instanceof HTMLCanvasElement) {
-        if (!src._displayStream) {
-          src._displayStream = src.videoEl.captureStream(60);
-        }
-        originalVideo.srcObject = src._displayStream;
       } else {
         originalVideo.srcObject = state.masterStream;
       }
@@ -297,9 +323,6 @@ function _previewSelectedSource() {
     return;
   }
 
-  const videoFeed = document.getElementById("main-video-feed");
-  if (!videoFeed) return;
-  videoFeed.srcObject = state.masterStream;
 }
 
 /**
@@ -434,9 +457,9 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
   const sy = h / 640;
   const fontSize = Math.max(13, Math.round(w * 0.02));
 
-  // PID 데드존 시각화 (pid_controller.py: x_dead_zone=200@1280px, y_dead_zone=100@720px)
-  const dzHalfW = (200 * w) / 1280;
-  const dzHalfH = (100 * h) / 720;
+  // PID 데드존 시각화 (config.py: X_DEAD_ZONE=300@1920px, Y_DEAD_ZONE=150@1080px)
+  const dzHalfW = (300 * w) / 1920;
+  const dzHalfH = (150 * h) / 1080;
   ctx.save();
   ctx.strokeStyle = "rgba(255, 220, 0, 0.9)";
   ctx.lineWidth = 2;
@@ -456,7 +479,7 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
     const bw = (x2 - x1) * sx;
     const bh = (y2 - y1) * sy;
     const cx = ((x1 + x2) / 2) * sx;
-    const cy = ((y1 + y2) / 2) * sy;
+    const cy = (y1 + (y2 - y1) * 0.2) * sy;
 
     const isTarget = person.id === targetPersonId;
     const boxColor = isTarget ? "#00ff44" : "#ff9500";
@@ -681,7 +704,7 @@ async function _aiLoop(src) {
         // 객체추적이 켜져 있으면 좌표 전송
         if (state.autoTrackingEnabled) {
           const obj_x = ((bestBox.x1 + bestBox.x2) / 2) * (w / 640);
-          const obj_y = ((bestBox.y1 + bestBox.y2) / 2) * (h / 640) - 100;
+          const obj_y = (bestBox.y1 + (bestBox.y2 - bestBox.y1) * 0.2) * (h / 640);
           sendObjectCoords(obj_x, obj_y);
         }
       }
@@ -866,7 +889,7 @@ function _createVideoEl(stream) {
   v.autoplay = true;
   v.muted = true;
   v.playsInline = true;
-  v.play().catch(() => {});
+  v.play().catch(() => { });
   return v;
 }
 
@@ -1104,7 +1127,7 @@ async function _handleAddType(type) {
         alert("먼저 RPi를 연결하세요. (설정 모달 → 연결)");
         return;
       }
-      if (!state.trackingCanvas) {
+      if (!state.piVideoStream) {
         alert("RPi 영상 수신 대기 중입니다. 잠시 후 다시 시도하세요.");
         return;
       }

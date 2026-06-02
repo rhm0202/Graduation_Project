@@ -95,16 +95,16 @@ export async function startStream(videoDeviceId, audioDeviceId) {
   const src = await addWebcamSource(videoDeviceId, null);
 
   if (src) {
-    if (startRecordingBtn) startRecordingBtn.disabled = false;
     const videoTrack = src.stream?.getVideoTracks()[0];
     const audioTrack = src.stream?.getAudioTracks()[0];
     if (videoTrack && videoSelect)
       videoSelect.value = videoTrack.getSettings().deviceId || "";
     if (audioTrack && audioSelect)
       audioSelect.value = audioTrack.getSettings().deviceId || "";
-  } else {
-    if (startRecordingBtn) startRecordingBtn.disabled = true;
   }
+
+  // 마스터 스트림이 있다면 녹화는 항상 가능해야 하므로 버튼 활성화 유지
+  if (startRecordingBtn) startRecordingBtn.disabled = false;
 }
 
 /**
@@ -123,30 +123,21 @@ export function updateVideoDisplay() {
   if (!stream) return;
   state.displayStream = stream;
 
-  const videoFeed = document.getElementById("main-video-feed");
+  const previewCanvas = document.getElementById("main-preview-canvas");
   const comparisonContainer = document.getElementById("comparison-container");
 
   if (state.comparisonMode && comparisonContainer) {
     comparisonContainer.classList.add("active");
-    if (videoFeed) videoFeed.style.display = "none";
-    // 비교 모드: 원본(선택 소스 raw) vs 처리 후(masterStream)
+    if (previewCanvas) previewCanvas.style.display = "none";
+
+    // 비교 모드: 원본(선택 소스 raw) vs 처리 후(bgCanvas 또는 masterStream)
     const selected = state.sources?.find(
       (s) => s.id === state.selectedSourceId,
     );
     const originalVideo = document.getElementById("original-video");
     const processedVideo = document.getElementById("processed-video");
     if (originalVideo) {
-      if (selected?.stream) {
-        originalVideo.srcObject = selected.stream;
-      } else if (selected?.videoEl instanceof HTMLCanvasElement) {
-        // RPi 소스는 stream 없이 캔버스에 직접 그리므로 captureStream으로 원본 표시
-        if (!selected._displayStream) {
-          selected._displayStream = selected.videoEl.captureStream(60);
-        }
-        originalVideo.srcObject = selected._displayStream;
-      } else {
-        originalVideo.srcObject = stream;
-      }
+      originalVideo.srcObject = selected?.stream ?? stream;
     }
     if (processedVideo) {
       // bgCanvas(카메라 해상도)가 있으면 직접 사용해 masterCanvas 이중 레터박싱 방지
@@ -162,10 +153,8 @@ export function updateVideoDisplay() {
     }
   } else {
     comparisonContainer?.classList.remove("active");
-    if (videoFeed) {
-      videoFeed.style.display = "block";
-      videoFeed.srcObject = stream;
-    }
+    if (previewCanvas) previewCanvas.style.display = "block";
+    // 미리보기는 _updatePreviewCanvas() rAF 루프가 masterCanvas를 drawImage로 복사
   }
 
   document.dispatchEvent(new CustomEvent("displayStreamChanged"));
@@ -278,9 +267,9 @@ export function setupMediaControls() {
 
 // ─── 이전 버전 호환 (sources.js 없이 media.js만 쓰던 코드용) ───
 /** @deprecated sources.js의 addCameraOption 사용 */
-export function addCameraOption() {}
+export function addCameraOption() { }
 /** @deprecated sources.js의 removeCameraOption 사용 */
-export function removeCameraOption() {}
+export function removeCameraOption() { }
 /** @deprecated media.js의 populateCameraSelect/setupCameraSelect는 sources.js 패널로 대체됨 */
-export function populateCameraSelect() {}
-export function setupCameraSelect() {}
+export function populateCameraSelect() { }
+export function setupCameraSelect() { }
