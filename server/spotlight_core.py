@@ -1,4 +1,4 @@
-﻿import json
+import json
 import asyncio
 import websockets
 from modules.logger import get_logger
@@ -16,14 +16,11 @@ logger = get_logger("spotlight_core")
 # ==========================================
 # 전역 변수 (main()에서 초기화)
 # ==========================================
-output_frame = None  # RPi에서 수신한 최신 프레임
-lock: asyncio.Lock = None  # output_frame 동시 접근 방지
 pi_outbound_queue: asyncio.Queue = None  # PC → RPi 전송 대기열
-pi_to_desktop_queue: asyncio.Queue = None  # RPi → Electron 메시지 전달 대기열
-tracking_state = "off"  # 추적 기능 활성화 상태 (Electron 앱에서 설정)
-_correction_in_progress = False  # 보정 중 중복 요청 방지 플래그
+tracking_state = "off"                   # 추적 기능 활성화 상태 (Electron 앱에서 설정)
+_correction_in_progress = False          # 보정 중 중복 요청 방지 플래그
 
-pid_manager: MotorPIDManager = None  # PID 기반 모터 제어 매니저
+pid_manager: MotorPIDManager = None      # PID 기반 모터 제어 매니저
 
 
 # ==========================================
@@ -75,7 +72,7 @@ async def process_object_detected(obj_x: float, obj_y: float):
 
 
 # ==========================================
-# 1. RPi 통신
+# 1. RPi 통신 (서보 제어 명령 전송 전용)
 # ==========================================
 async def pi_sender_task(websocket):
     """전송 대기열(pi_outbound_queue)에서 꺼내 RPi로 전송하는 루프."""
@@ -88,41 +85,33 @@ async def pi_sender_task(websocket):
             logger.error(f"RPi 전송 실패: {e}")
 
 
-async def receive_from_pi():
-    """RPi에 접속해 영상을 수신하고, 제어 명령을 역방향으로 송신하는 메인 루프.
+async def connect_to_pi():
+    """RPi에 접속해 제어 명령을 송신하는 메인 루프.
+    영상 수신은 MediaMTX WebRTC(WHEP)로 전환되어 이 함수에서 담당하지 않음.
     연결이 끊기면 3초 후 자동 재접속.
     """
-    global output_frame
-    frame_count = 0
-
     while True:
         try:
             logger.info(f"RPi({RPI_WS_URL}) 연결 시도 중...")
             async with websockets.connect(RPI_WS_URL, ping_interval=None) as websocket:
                 logger.info("RPi 연결 성공")
-                frame_count = 0
 
                 sender = asyncio.create_task(pi_sender_task(websocket))
 
                 try:
+                    # RPi에서 오는 메시지(서보 상태 등)만 처리 — 영상 프레임 없음
                     async for message in websocket:
                         if isinstance(message, bytes):
-                            # 프레임 저장
-                            async with lock:
-                                output_frame = message
-                            frame_count += 1
-                            if frame_count % 100 == 0:
-                                logger.debug(f"RPi 프레임 수신: {frame_count}장")
+                            # 이전 방식의 영상 프레임은 무시
+                            pass
                         else:
-                            # RPi → Electron 메시지 처리
                             try:
                                 data = json.loads(message)
-                                await pi_to_desktop_queue.put(data)
-                                logger.debug(f"RPi → Desktop 중계: {data}")
+                                logger.debug(f"RPi → Core 수신: {data}")
                             except json.JSONDecodeError:
                                 pass
                 finally:
-                    logger.warning(f"RPi 연결 끊김 (수신 프레임: {frame_count}장)")
+                    logger.warning("RPi 연결 끊김")
                     sender.cancel()
                     while not pi_outbound_queue.empty():
                         pi_outbound_queue.get_nowait()
@@ -135,36 +124,10 @@ async def receive_from_pi():
 # ==========================================
 # 2. Electron 앱 통신
 # ==========================================
-async def desktop_sender_task(websocket):
-    """새 프레임이 있을 때만 Electron 앱으로 전송 (60fps 폴링).
-    RPi에서 오는 제어 응답(motor_corrected 등)도 함께 전달한다.
-    """
-    last_frame = None
-    try:
-        while True:
-            # RPi → Electron 메시지 전달 (큐에 쌓인 것 모두 소진)
-            while not pi_to_desktop_queue.empty():
-                data = pi_to_desktop_queue.get_nowait()
-                await websocket.send(json.dumps(data))
-
-            # 비디오 프레임 전송
-            async with lock:
-                current_frame = output_frame
-
-            if current_frame is not None and current_frame is not last_frame:
-                await websocket.send(current_frame)
-                last_frame = current_frame
-
-            await asyncio.sleep(0.016)  # 60fps
-    except websockets.exceptions.ConnectionClosed:
-        pass
-
-
 async def ws_handler(websocket):
-    """Electron 앱 접속 시 호출. 영상 송신과 제어 수신을 동시 처리."""
+    """Electron 앱 접속 시 호출. 제어 명령 수신 처리."""
     global tracking_state
     logger.info("Desktop App 연결됨")
-    sender = asyncio.create_task(desktop_sender_task(websocket))
 
     try:
         async for message in websocket:
@@ -195,7 +158,6 @@ async def ws_handler(websocket):
         pass
     finally:
         logger.info("Desktop App 연결 해제됨")
-        sender.cancel()
 
 
 async def start_desktop_server():
@@ -209,12 +171,10 @@ async def start_desktop_server():
 # 진입점
 # ==========================================
 async def main():
-    global lock, pi_outbound_queue, pi_to_desktop_queue
+    global pi_outbound_queue
     global pid_manager
 
-    lock = asyncio.Lock()
     pi_outbound_queue = asyncio.Queue()
-    pi_to_desktop_queue = asyncio.Queue()
     pid_manager = MotorPIDManager(
         frame_width=FRAME_WIDTH,
         frame_height=FRAME_HEIGHT,
@@ -224,9 +184,9 @@ async def main():
         output_limit=PID_OUTPUT_LIMIT,
         ema_alpha=EMA_ALPHA,
     )
-    receiver_task = asyncio.create_task(receive_from_pi())
+    pi_task     = asyncio.create_task(connect_to_pi())
     server_task = asyncio.create_task(start_desktop_server())
-    await asyncio.gather(receiver_task, server_task)
+    await asyncio.gather(pi_task, server_task)
 
 
 if __name__ == "__main__":
@@ -234,4 +194,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("서버 종료")
-
