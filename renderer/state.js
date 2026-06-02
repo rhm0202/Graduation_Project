@@ -33,7 +33,8 @@ export const state = {
   piConnected: false,
   piReconnectAttempts: 0,
   piReconnectTimer: null,
-  piVideoStream: null,
+  piVideoStream: null,       // WebRTC 수신 <video> element
+  rtcPeerConnection: null,   // RTCPeerConnection 인스턴스 (WHEP)
 
   // 활성 스트림 (레거시 — masterStream으로 대체됨, 일부 호환용 유지)
   activeStream: null,
