@@ -1,4 +1,5 @@
 import json
+import time
 import asyncio
 import websockets
 from modules.logger import get_logger
@@ -7,6 +8,7 @@ from modules.config import (
     RPI_WS_URL, WS_PORT, FRAME_WIDTH, FRAME_HEIGHT,
     PID_KP, PID_KI, PID_KD, PID_OUTPUT_LIMIT, EMA_ALPHA,
     X_DEAD_ZONE, Y_DEAD_ZONE,
+    MAX_JUMP_PX, MIN_SEND_INTERVAL,
 )
 
 # ==========================================
@@ -19,7 +21,9 @@ logger = get_logger("spotlight_core")
 # ==========================================
 pi_outbound_queue: asyncio.Queue = None  # PC → RPi 전송 대기열
 tracking_state = "off"                   # 추적 기능 활성화 상태 (Electron 앱에서 설정)
-_correction_in_progress = False          # 보정 중 중복 요청 방지 플래그
+_last_send_time: float = 0.0             # 레이트 리미터: 마지막 전송 시각
+_prev_obj_x: float | None = None         # 점프 필터: 이전 프레임 객체 x 좌표
+_prev_obj_y: float | None = None         # 점프 필터: 이전 프레임 객체 y 좌표
 
 pid_manager: MotorPIDManager = None      # PID 기반 모터 제어 매니저
 
@@ -38,38 +42,61 @@ async def send_to_pi(data_dict):
 async def process_object_detected(obj_x: float, obj_y: float):
     """Electron에서 object_detected 메시지 수신 시 호출된다.
 
-    1. MotorPIDManager로 PID 연산 + EMA 평활화 수행
-    2. 산출된 절대 서보 각도(pan_angle, tilt_angle)를 RPi에 전송
-    3. RPi는 수신한 각도를 PCA9685 PWM으로 즉시 반영 (응답 대기 없음)
+    1. 레이트 리미터: MIN_SEND_INTERVAL 미충족 시 무시 (전송 과부하 방지)
+    2. 점프 필터: 이전 좌표 대비 MAX_JUMP_PX 초과 시 무시 + 큐 초기화
+    3. MotorPIDManager로 PID 연산 + EMA 평활화 수행
+    4. 산출된 절대 서보 각도(pan_angle, tilt_angle)를 RPi에 전송
 
     Args:
         obj_x: 감지된 객체 중심의 x 좌표 (픽셀)
         obj_y: 감지된 객체 중심의 y 좌표 (픽셀)
     """
-    global _correction_in_progress
+    global _last_send_time, _prev_obj_x, _prev_obj_y
 
     if tracking_state != "on":
         return
-    if _correction_in_progress:
+
+    # ── 레이트 리미터: 너무 잦은 전송 방지 ─────────────────
+    now = time.monotonic()
+    if now - _last_send_time < MIN_SEND_INTERVAL:
         return
 
-    _correction_in_progress = True
-    try:
-        # PID 연산 + EMA 평활화 → 절대 서보 각도 반환
-        pan_angle, tilt_angle = pid_manager.update(obj_x, obj_y)
+    # ── 점프 필터: 급격한 좌표 변화 (다른 객체 스위치 등) 무시 ──
+    if _prev_obj_x is not None:
+        dx = abs(obj_x - _prev_obj_x)
+        dy = abs(obj_y - _prev_obj_y)
+        if dx > MAX_JUMP_PX or dy > MAX_JUMP_PX:
+            logger.debug(
+                f"좌표 점프 감지 — prev({_prev_obj_x:.0f}, {_prev_obj_y:.0f}) "
+                f"→ cur({obj_x:.0f}, {obj_y:.0f}), Δ=({dx:.0f}, {dy:.0f})px → 무시 및 큐 초기화"
+            )
+            # 큐에 쌓인 오래된 명령 제거 (역방향 명령 누적 방지)
+            while not pi_outbound_queue.empty():
+                try:
+                    pi_outbound_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+            _prev_obj_x = obj_x
+            _prev_obj_y = obj_y
+            return
 
-        logger.debug(
-            f"PID 연산 — obj({obj_x:.1f}, {obj_y:.1f}) → servo(pan={pan_angle:.2f}°, tilt={tilt_angle:.2f}°)"
-        )
+    _prev_obj_x = obj_x
+    _prev_obj_y = obj_y
+    _last_send_time = now
 
-        # RPi에 절대 서보 각도 전송 (비동기 일방향, 응답 대기 없음)
-        await send_to_pi({
-            "type": "servo_angle",
-            "pan_angle": round(pan_angle, 2),
-            "tilt_angle": round(tilt_angle, 2),
-        })
-    finally:
-        _correction_in_progress = False
+    # ── PID 연산 + EMA 평활화 → 절대 서보 각도 반환 ──────────
+    pan_angle, tilt_angle = pid_manager.update(obj_x, obj_y)
+
+    logger.debug(
+        f"PID 연산 — obj({obj_x:.1f}, {obj_y:.1f}) → servo(pan={pan_angle:.2f}°, tilt={tilt_angle:.2f}°)"
+    )
+
+    # RPi에 절대 서보 각도 전송 (비동기 일방향, 응답 대기 없음)
+    await send_to_pi({
+        "type": "servo_angle",
+        "pan_angle": round(pan_angle, 2),
+        "tilt_angle": round(tilt_angle, 2),
+    })
 
 
 # ==========================================
@@ -151,7 +178,7 @@ async def ws_handler(websocket):
                 elif data.get("type") == "object_detected":
                     obj_x = float(data["obj_x"])
                     obj_y = float(data["obj_y"])
-                    asyncio.ensure_future(process_object_detected(obj_x, obj_y))
+                    await process_object_detected(obj_x, obj_y)
 
             except json.JSONDecodeError:
                 pass
