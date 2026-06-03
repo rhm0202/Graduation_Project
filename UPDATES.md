@@ -319,6 +319,7 @@ application/
 - **[PC]** 추적 안정화 파라미터 추가 — 좌표 급변 무시 임계값(`MAX_JUMP_PX` 400px), RPi 최대 전송 간격(`MIN_SEND_INTERVAL` 30fps 상한)
 - **[PC]** 데드존 1080p 비례 스케일 조정 — X 200 → 300, Y 100 → 150
 - **[PC]** `spotlight_core.py` 영상 송신 코드 제거 — WebRTC 전환으로 불필요한 프레임 큐·락·송신 루프 정리
+- **[PC]** 부드러운 추적을 위해 EMA_ALPHA = 0.18로 수정
 
 ---
 
