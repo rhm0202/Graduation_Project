@@ -443,6 +443,15 @@ function _stopAiLoop(src) {
   src._fgCanvas = null;
   src._fgCtx = null;
   src._tensorData = null;
+
+  // 배경 제거 + 객체 추적이 모두 꺼졌을 때 객체 번호 초기화
+  if (!src.bgRemoval && !src.objectTracking) {
+    globalTracker.reset();
+    state.targetPersonIds = [];
+    state.targetPersonId = null;
+    _trackSnapshot = "";
+    renderObjectList([]);
+  }
 }
 
 /**
@@ -618,7 +627,7 @@ async function _aiLoop(src) {
         const score = output0[a * NUM_CHANNELS + SCORE_CH];
         const classId = output0[a * NUM_CHANNELS + 5];
 
-        if (classId === 0 && score > 0.55) {
+        if (classId === 0 && score > 0.40) {
           detectedPeople.push({
             anc: a,
             score: score,
@@ -641,18 +650,11 @@ async function _aiLoop(src) {
       // 3. 타겟 추적 로직 (ID 기반)
       if (!state.targetPersonIds) state.targetPersonIds = [];
 
-      if (people.length > 0) {
-        if (
-          state.targetPersonId === undefined ||
-          state.targetPersonId === null
-        ) {
-          state.targetPersonId = people[0].id;
-        }
-      } else {
-        // 화면에 아무도 없어도 선택은 유지 (트랙 생존 필터에서 처리)
-        // targetPersonIds 는 isTrackAlive 필터(아래)가 정리하므로 여기서 초기화하지 않음
+      if (people.length === 0) {
+        // 화면에 아무도 없으면 선택 해제
         state.targetPersonId = null;
       }
+      // 사용자가 직접 라디오 버튼을 클릭하기 전까지 자동 선택하지 않음
 
       // 죽은 트랙 정리
       state.targetPersonIds = state.targetPersonIds.filter((id) =>
@@ -671,7 +673,8 @@ async function _aiLoop(src) {
         bestAnc = targetPerson.anc;
         bestBox = targetPerson.box;
       } else if (people.length > 0) {
-        if (!globalTracker.isTrackAlive(state.targetPersonId)) {
+        // targetPersonId가 null이면 사용자가 아직 선택하지 않은 상태 → 자동 선택 안 함
+        if (state.targetPersonId !== null && !globalTracker.isTrackAlive(state.targetPersonId)) {
           // 트래커가 완전히 삭제한 경우에만 fallback — 가장 왼쪽 사람으로 교체
           bestScore = people[0].score;
           bestAnc = people[0].anc;
