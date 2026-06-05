@@ -97,7 +97,7 @@ export class HybridTracker {
   constructor() {
     this.tracks = []; // 추적 중인 객체 배열: { id, box, color, missingFrames, score, anc }
     this.nextId = 0;
-    this.maxMissingFrames = 120; // 몇 프레임 동안 객체를 놓쳐도 ID를 유지할지 결정
+    this.maxMissingFrames = 90; // 몇 프레임 동안 객체를 놓쳐도 ID를 유지할지 결정
   }
 
   /**
@@ -184,5 +184,15 @@ export class HybridTracker {
 
   isTrackAlive(id) {
     return this.tracks.some(t => t.id === id);
+  }
+
+  /**
+   * 트래커를 완전히 초기화합니다.
+   * 배경 제거 + 객체 추적이 모두 꺼질 때 호출하여
+   * 다음 AI 활성화 시 객체 번호가 0부터 다시 시작되도록 합니다.
+   */
+  reset() {
+    this.tracks = [];
+    this.nextId = 0;
   }
 }

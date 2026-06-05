@@ -18,6 +18,11 @@ export async function loadModel() {
     const outputs = state.session.outputNames.join(", ");
     console.log(`AI 모델 로드 완료. 입력: [${inputs}] / 출력: [${outputs}]`);
 
+    const pill = document.getElementById('ai-status-pill');
+    const pillText = document.getElementById('ai-pill-text');
+    if (pillText) pillText.textContent = 'AI Ready';
+    if (pill) pill.classList.remove('loading');
+
   } catch (error) {
     console.error("AI 모델 로드 실패:", error);
     alert(`AI 불러오기 실패:\n${error.message}`);
