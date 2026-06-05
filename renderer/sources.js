@@ -374,6 +374,12 @@ export function toggleObjectTrackingForSelectedSource() {
   state.objectTrackingEnabled = state.autoTrackingEnabled;
   src.objectTracking = state.objectTrackingEnabled;
 
+  // 객체 추적을 켤 때 이전 선택 초기화 → 라디오 버튼 미선택 상태로 시작
+  if (src.objectTracking) {
+    state.targetPersonId = null;
+    state.targetPersonIds = [];
+  }
+
   // AI 루프 관리: 둘 중 하나라도 켜져 있으면 루프 유지
   const needAi = src.bgRemoval || src.objectTracking;
   if (needAi && !src.bgAnimFrame) {
@@ -661,6 +667,17 @@ async function _aiLoop(src) {
         globalTracker.isTrackAlive(id),
       );
 
+      // 추적 중이던 대상이 트래커에서 완전히 삭제된 경우 → 미선택 상태로 전환
+      if (
+        state.targetPersonId !== null &&
+        !globalTracker.isTrackAlive(state.targetPersonId)
+      ) {
+        state.targetPersonId = null;
+        state.targetPersonIds = state.targetPersonIds.filter(
+          (id) => globalTracker.isTrackAlive(id),
+        );
+      }
+
       let bestScore = -Infinity;
       let bestAnc = -1;
       let bestBox = null;
@@ -672,20 +689,9 @@ async function _aiLoop(src) {
         bestScore = targetPerson.score;
         bestAnc = targetPerson.anc;
         bestBox = targetPerson.box;
-      } else if (people.length > 0) {
-        // targetPersonId가 null이면 사용자가 아직 선택하지 않은 상태 → 자동 선택 안 함
-        if (state.targetPersonId !== null && !globalTracker.isTrackAlive(state.targetPersonId)) {
-          // 트래커가 완전히 삭제한 경우에만 fallback — 가장 왼쪽 사람으로 교체
-          bestScore = people[0].score;
-          bestAnc = people[0].anc;
-          bestBox = people[0].box;
-          state.targetPersonId = people[0].id;
-          if (!state.targetPersonIds.includes(people[0].id)) {
-            state.targetPersonIds.push(people[0].id);
-          }
-        }
-        // 트래커가 아직 해당 ID를 기억 중(일시 소실)이면 이 프레임은 생략
       }
+      // targetPersonId가 null이면 사용자가 아직 선택하지 않은 상태 → 자동 선택 안 함
+      // 트래커가 아직 해당 ID를 기억 중(일시 소실)이면 이 프레임은 생략
 
       const bestProb = bestScore;
 

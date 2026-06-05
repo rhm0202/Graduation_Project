@@ -1,6 +1,6 @@
 {
   "version": "2.1.0",
-  "releaseDate": "2026-06-04",
+  "releaseDate": "2026-06-05",
   "downloadUrl": "https://github.com/rhm0202/Graduation_Project/releases/download/v2.1.0/Spotlight_Cam_v2.1.0-win32-x64.zip",
   "releaseNotes": "v2.1.0 · 2026-06-02 · WebRTC 영상 수신 전환 및 추적 안정화\n\n### Minor\n\n- **[PC]** WebRTC(WHEP) 영상 수신 도입 — RPi 영상 전송을 기존 WebSocket 바이너리 방식에서 MediaMTX WebRTC로 전환 (`renderer/rpi.js` 대폭 개편)\n- **[PC]** 해상도 1920×1080(1080p)으로 상향 — 카메라 입력 및 PID 기준 해상도 변경\n\n### Patch\n\n- **[PC]** 녹화 버튼 수정 — MediaRecorder 미초기화 상태에서 버튼 클릭 시 자동 초기화 후 녹화 시작 (기존: 에러 후 종료)\n- **[PC]** 트래킹 안정화 — 재등장 객체 지속 선택, 소실 객체 유지 프레임 30 → 120으로 연장\n- **[PC/RPi]** WebSocket 포트 충돌 해결 — RPi WebSocket 포트 8000 → 8765로 변경\n- **[PC]** PID 파라미터 조정 — Kp 0.15 → 0.20, Ki 0.0005 → 0.0001, Kd 0.06 → 0.08, 출력 한계 5° → 15°, EMA 0.3 → 0.25\n- **[PC]** 추적 안정화 파라미터 추가 — 좌표 급변 무시 임계값(`MAX_JUMP_PX` 400px), RPi 최대 전송 간격(`MIN_SEND_INTERVAL` 30fps 상한)\n- **[PC]** 데드존 1080p 비례 스케일 조정 — X 200 → 300, Y 100 → 150\n- **[PC]** `spotlight_core.py` 영상 송신 코드 제거 — WebRTC 전환으로 불필요한 프레임 큐·락·송신 루프 정리"
 }
