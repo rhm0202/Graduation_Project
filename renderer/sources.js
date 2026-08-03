@@ -14,7 +14,7 @@
  * state.sources[last] = 최하단 레이어 (처음에 그려짐)
  */
 import { state, isElectron } from "./state.js";
-import { sendObjectCoords } from "./rpi.js";
+import { sendObjectCoords, sendTrackingState } from "./rpi.js";
 import { HybridTracker } from "./hybridTracker.js";
 
 const globalTracker = new HybridTracker();
@@ -291,6 +291,7 @@ export function toggleSourceVisibility(id) {
 
 export function selectSource(id) {
   // 소스 변경 시 AI 처리 강제 종료
+  const trackingWasEnabled = state.autoTrackingEnabled;
   const prev = state.sources.find((s) => s.id === state.selectedSourceId);
   if (prev && (prev.bgRemoval || prev.objectTracking)) {
     prev.bgRemoval = false;
@@ -300,6 +301,7 @@ export function selectSource(id) {
   state.backgroundRemovalEnabled = false;
   state.objectTrackingEnabled = false;
   state.autoTrackingEnabled = false;
+  if (trackingWasEnabled) sendTrackingState(false);
 
   state.selectedSourceId = id;
   renderSourcesList();
@@ -656,10 +658,6 @@ async function _aiLoop(src) {
       // 3. 타겟 추적 로직 (ID 기반)
       if (!state.targetPersonIds) state.targetPersonIds = [];
 
-      if (people.length === 0) {
-        // 화면에 아무도 없으면 선택 해제
-        state.targetPersonId = null;
-      }
       // 사용자가 직접 라디오 버튼을 클릭하기 전까지 자동 선택하지 않음
 
       // 죽은 트랙 정리
@@ -714,7 +712,12 @@ async function _aiLoop(src) {
         if (state.autoTrackingEnabled) {
           const obj_x = ((bestBox.x1 + bestBox.x2) / 2) * (w / 640);
           const obj_y = (bestBox.y1 + (bestBox.y2 - bestBox.y1) * 0.2) * (h / 640);
-          sendObjectCoords(obj_x, obj_y);
+          sendObjectCoords({
+            x: obj_x,
+            y: obj_y,
+            frameWidth: w,
+            frameHeight: h,
+          });
         }
       }
 
