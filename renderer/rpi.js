@@ -27,6 +27,8 @@ import { addRpiSource, removeSource } from './sources.js';
 // ═══════════════════════════════════════════════════════════
 
 const SPOTLIGHT_CORE_URL = 'ws://localhost:8765';
+const TRACKING_FRAME_WIDTH = 1920;
+const TRACKING_FRAME_HEIGHT = 1080;
 
 export function connectToSpotlightCore() {
   if (state.piWebSocket?.readyState === WebSocket.OPEN) return;
@@ -39,6 +41,7 @@ export function connectToSpotlightCore() {
       state.piReconnectAttempts = 0;
       updatePiConnectionStatus(true);
       state.piWebSocket.send(JSON.stringify({ type: 'servo_init' }));
+      sendTrackingState(state.autoTrackingEnabled);
 
       // 서보 제어 채널 연결 성공 후 WebRTC 영상 연결 시작
       const { ip, port, streamName } = _loadRpiSettings();
@@ -79,6 +82,7 @@ export function connectToSpotlightCore() {
 export function disconnectFromSpotlightCore() {
   // WebSocket 종료
   if (state.piWebSocket) {
+    sendTrackingState(false);
     state.piWebSocket.close(1000, '사용자 요청으로 연결 종료');
     state.piWebSocket = null;
   }
@@ -250,8 +254,10 @@ export function updatePiConnectionStatus(connected, message) {
   }
 }
 
-export function sendObjectCoords(obj_x, obj_y) {
+export function sendObjectCoords({ x, y, frameWidth, frameHeight }) {
   if (!state.piConnected || state.piWebSocket?.readyState !== WebSocket.OPEN) return;
+  const obj_x = x * (TRACKING_FRAME_WIDTH / frameWidth);
+  const obj_y = y * (TRACKING_FRAME_HEIGHT / frameHeight);
   state.piWebSocket.send(JSON.stringify({ type: 'object_detected', obj_x, obj_y }));
 }
 
