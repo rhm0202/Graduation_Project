@@ -21,7 +21,7 @@
   "author": {
     "name": "wer134"
   },
-  "license": "ISC",
+  "license": "AGPL-3.0-only",
   "description": "OBS Studio 스타일의 비디오 녹화 애플리케이션",
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",

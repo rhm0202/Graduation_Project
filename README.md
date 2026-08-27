@@ -289,7 +289,43 @@ npm run package
 
 ## 라이선스
 
-ISC
+**GNU Affero General Public License v3.0 (AGPL-3.0-only)**
+
+```
+Copyright (C) 2025-2026 Anywhere Studio
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+```
+
+전문은 [LICENSE](LICENSE)를 참조하십시오.
+
+### AGPL-3.0을 채택한 이유
+
+이 프로젝트는 배포 패키지에 Ultralytics YOLO26 세그멘테이션 모델을 포함합니다.
+Ultralytics는 **학습 코드뿐 아니라 그 코드가 생성한 모델 가중치에도 AGPL-3.0이
+적용된다**고 명시합니다. 따라서 해당 모델을 번들하여 배포하는 저작물은 전체를
+AGPL-3.0으로 공개하거나 Ultralytics Enterprise 라이선스를 취득해야 합니다.
+본 프로젝트는 전자를 택했습니다.
+
+### 제3자 구성 요소 고지
+
+| 구성 요소 | 라이선스 | 비고 |
+|---|---|---|
+| [Ultralytics YOLO26](https://github.com/ultralytics/yolo26) (`yolo26*-seg.onnx`) | AGPL-3.0 | 배포 패키지에 번들됨. 본 프로젝트가 AGPL-3.0인 직접적 근거 |
+
+각 npm 의존성의 라이선스는 해당 패키지의 `package.json` 및
+`node_modules/<패키지>/LICENSE`에 명시된 조건을 따릅니다.
 
 ## 개발팀
 
