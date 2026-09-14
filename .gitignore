@@ -8,4 +8,8 @@ build/
 logs/
 __pycache__/
 *.pyc
-AI_models/yolo26l-seg.onnx
+AI_models/
+
+# AI 협업 산출물 — 저장소에 올리지 않음
+docs/superpowers/specs/2026-08-23-ai-pipeline-and-tracking-upgrade-design.md
+docs/object-tracking-review-2026-09-14.md

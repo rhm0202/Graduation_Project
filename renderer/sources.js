@@ -444,13 +444,14 @@ function _stopAiLoop(src) {
   }
   src.bgCanvas = null;
   src.bgCtx = null;
-  src.hiddenCanvas = null;
-  src.hiddenCtx = null;
   src._tmpCanvas = null;
   src._tmpCtx = null;
   src._fgCanvas = null;
   src._fgCtx = null;
   src._tensorData = null;
+  src._maskCanvas = null;
+  src._maskCtx = null;
+  src._maskImg = null;
 
   // 배경 제거 + 객체 추적이 모두 꺼졌을 때 객체 번호 초기화
   if (!src.bgRemoval && !src.objectTracking) {
@@ -562,18 +563,7 @@ async function _aiLoop(src) {
   }
 
   // 출력 캔버스에 직접 그리면 AI 처리 시간 동안 원본 프레임이 1프레임 노출됩니다.
-  // 임시 캔버스에 그려서 처리 성공 시에만 출력 캔버스에 반영합니다.
-  if (!src.hiddenCanvas) {
-    src.hiddenCanvas = document.createElement("canvas");
-    src.hiddenCtx = src.hiddenCanvas.getContext("2d", {
-      willReadFrequently: true,
-    });
-  }
-  if (src.hiddenCanvas.width !== w || src.hiddenCanvas.height !== h) {
-    src.hiddenCanvas.width = w;
-    src.hiddenCanvas.height = h;
-  }
-  src.hiddenCtx.drawImage(vid, 0, 0, w, h);
+  // 전경 캔버스(_fgCanvas)에 조립한 뒤 성공 시에만 출력 캔버스에 반영합니다.
 
   if (state.session && !state.sessionBusy) {
     try {
@@ -586,6 +576,19 @@ async function _aiLoop(src) {
       if (tmp.height !== MODEL_SIZE) tmp.height = MODEL_SIZE;
       tmpCtx.drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
       const tmpData = tmpCtx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
+
+      // 전경 프레임을 여기서 붙잡아 둡니다.
+      // 마스크는 지금 이 순간의 프레임에서 계산됩니다. 추론이 끝난 뒤에
+      // 최신 프레임을 그리면 그 사이 사람이 움직인 만큼 마스크와 어긋나
+      // 사람이 잘리고 이미 지나온 자리의 배경이 드러납니다.
+      // GPU 간 복사라 readback 이 없습니다.
+      const fgCv = src._fgCanvas;
+      const fgCtx = src._fgCtx;
+      if (fgCv.width !== w) fgCv.width = w;
+      if (fgCv.height !== h) fgCv.height = h;
+      fgCtx.globalCompositeOperation = "source-over";
+      fgCtx.clearRect(0, 0, w, h);
+      fgCtx.drawImage(vid, 0, 0, w, h);
 
       const tensorData = src._tensorData;
       const INV_255 = 0.003921568627451;
@@ -614,8 +617,10 @@ async function _aiLoop(src) {
         return;
       }
 
-      const frame = src.hiddenCtx.getImageData(0, 0, w, h);
-      const imageData = frame;
+      // 트래커 색상 표본은 모델 입력(640×640)에서 뽑습니다.
+      // 박스가 이미 같은 좌표계라 변환이 필요 없고, 전체 해상도 프레임을
+      // CPU로 내리지 않아도 됩니다.
+      const imageData = tmpData;
 
       // ── 기본 모델 출력 파싱 (출력 형태 [1, 300, 38] 고정) ──────────────
       const out0Tensor = results[state.session.outputNames[0]];
@@ -722,13 +727,58 @@ async function _aiLoop(src) {
       }
 
       // 배경 제거가 켜져 있을 때 다중 객체 마스크 적용
+      //
+      // 마스크 확률·박스 절단·페이드 기준(0.40~0.65)은 이전과 동일합니다.
+      // 달라진 것은 알파를 어디에 쓰느냐입니다. 이전에는 전체 해상도
+      // 프레임을 CPU로 내려(getImageData 8.3MB) 207만 픽셀의 알파를 직접
+      // 고치고 다시 올렸습니다(putImageData 8.3MB). 이제는 모델 해상도
+      // 알파 캔버스만 만들고 마지막 확대는 destination-in 합성으로
+      // 브라우저에 맡깁니다.
+      //
+      // 램프를 proto 해상도(160)에서 걸면 안 됩니다. 이후 12배 확대에서
+      // 클램프 구간이 선형으로 늘어나 경계가 5px → 12px로 뭉개집니다.
+      // 모델 해상도(640)에서 걸면 남은 확대가 3배뿐이라 이전 경계가
+      // 사실상 그대로 유지됩니다.
+      const PROTO = 160;
+      const nProto = PROTO * PROTO;
+
+      // 알파를 계산할 격자 크기를 출력 해상도에서 정합니다.
+      // 고정값(640)이면 1080p 에는 맞지만 4K 에서는 남은 확대가 6배로 커져
+      // 경계가 뭉개지고, VGA 에서는 출력 픽셀보다 많은 셀을 계산해 낭비입니다.
+      // 남은 확대를 항상 3배 안팎으로 유지합니다.
+      const MASK_RES = Math.max(
+        PROTO,
+        Math.min(1280, Math.round(Math.max(w, h) / 3)),
+      );
+      const P2M = PROTO / MASK_RES; // 마스크 격자 → proto 격자
+
+      // 해상도가 바뀌면 격자 크기도 바뀌므로 캔버스를 다시 만듭니다.
+      if (!src._maskCanvas || src._maskCanvas.width !== MASK_RES) {
+        src._maskCanvas = src._maskCanvas || document.createElement("canvas");
+        src._maskCanvas.width = MASK_RES;
+        src._maskCanvas.height = MASK_RES;
+        src._maskCtx = src._maskCanvas.getContext("2d");
+        src._maskImg = src._maskCtx.createImageData(MASK_RES, MASK_RES);
+        const d = src._maskImg.data;
+        for (let i = 0; i < d.length; i += 4) {
+          d[i] = 255;
+          d[i + 1] = 255;
+          d[i + 2] = 255;
+        }
+      }
+
       if (src.bgRemoval) {
+        const md = src._maskImg.data;
+
         const bgTargets = people.filter(
           (p) => state.targetPersonIds.includes(p.id) && p.score > 0.5,
         );
 
-        if (bgTargets.length > 0) {
-          const combinedMask = new Float32Array(160 * 160);
+        if (bgTargets.length === 0) {
+          // 사람 미감지 시 전체 투명
+          for (let j = 3; j < md.length; j += 4) md[j] = 0;
+        } else {
+          const combinedMask = new Float32Array(nProto);
 
           for (const target of bgTargets) {
             const coeffs = new Float32Array(32);
@@ -736,10 +786,10 @@ async function _aiLoop(src) {
               coeffs[c] = output0[target.anc * NUM_CHANNELS + COEFF_START + c];
             }
 
-            for (let p = 0; p < 160 * 160; p++) {
+            for (let p = 0; p < nProto; p++) {
               let sum = 0;
               for (let c = 0; c < 32; c++) {
-                sum += coeffs[c] * protos[c * 160 * 160 + p];
+                sum += coeffs[c] * protos[c * nProto + p];
               }
               const prob = 1 / (1 + Math.exp(-sum)); // sigmoid
               if (prob > combinedMask[p]) {
@@ -748,85 +798,86 @@ async function _aiLoop(src) {
             }
           }
 
-          const imgW = imageData.width;
-          const imgH = imageData.height;
-
           // 각 대상별 바운딩 박스를 160 해상도로 변환하여 배열에 저장
           const boxes160 = bgTargets.map((target) => {
             return {
-              x1: Math.floor(target.box.x1 * (160 / 640)),
-              y1: Math.floor(target.box.y1 * (160 / 640)),
-              x2: Math.ceil(target.box.x2 * (160 / 640)),
-              y2: Math.ceil(target.box.y2 * (160 / 640)),
+              x1: Math.floor(target.box.x1 * (PROTO / 640)),
+              y1: Math.floor(target.box.y1 * (PROTO / 640)),
+              x2: Math.ceil(target.box.x2 * (PROTO / 640)),
+              y2: Math.ceil(target.box.y2 * (PROTO / 640)),
             };
           });
 
-          // ── 이중선형 보간 헬퍼: 160×160 마스크를 연속 좌표로 샘플링 ──
-          // Math.floor(최단입점) 대신 4개 인접 셀의 가중평균을 사용하여
-          // 160→원본 해상도 업스케일 시 발생하는 블록 계단현상을 제거합니다.
-          const bilinearSample = (mask, px, py) => {
-            const gx = (px / imgW) * 160;
-            const gy = (py / imgH) * 160;
-            const x0 = Math.floor(gx);
-            const y0 = Math.floor(gy);
-            const x1 = Math.min(x0 + 1, 159);
-            const y1 = Math.min(y0 + 1, 159);
-            const fx = gx - x0;
+          // ── 소프트 알파 페더링 ──────────────────────────────────────
+          // 하한이 컷오프입니다. 이 확률 이하는 완전 투명입니다.
+          //
+          // 0.40 으로 두면 모델이 "배경 쪽에 가깝다"고 본 0.40~0.50 구간까지
+          // 알파 0.2~0.4 로 남아, 검어야 할 곳에 배경이 어렴풋이 비칩니다.
+          // 원래의 하드 이진화 기준이던 0.75 로 되돌립니다.
+          //
+          // 상한은 1.0 으로 둘 수 없습니다. sigmoid 는 1 에 도달하지 못하므로
+          // 인물 내부가 영구히 반투명해집니다. 0.85 면 그 위는 모두 불투명입니다.
+          const FADE_LO = 0.75;
+          const FADE_HI = 0.85;
+          const FADE_SPAN = FADE_HI - FADE_LO;
+          const last = PROTO - 1;
+
+          for (let my = 0; my < MASK_RES; my++) {
+            // 마스크 격자 → proto 연속 좌표 (픽셀 중심 정렬)
+            //
+            // proto 한 칸은 여러 출력 픽셀을 덮고, 그 칸의 값은 덮는 구간의
+            // 한가운데에 놓입니다. +0.5 / -0.5 없이 mx * P2M 로만 쓰면 칸을
+            // 구간 맨 앞에 놓게 되어 마스크 전체가 왼쪽·위로 밀립니다.
+            // GPU 의 MASK_RES → 출력 확대는 이미 중심 정렬이므로,
+            // 여기서 맞춰주면 종단 매핑이 해상도와 무관하게 정확해집니다.
+            let gy = (my + 0.5) * P2M - 0.5;
+            if (gy < 0) gy = 0;
+            else if (gy > last) gy = last;
+            const y0 = gy | 0;
             const fy = gy - y0;
-            return (
-              (1 - fx) * (1 - fy) * mask[y0 * 160 + x0] +
-              fx * (1 - fy) * mask[y0 * 160 + x1] +
-              (1 - fx) * fy * mask[y1 * 160 + x0] +
-              fx * fy * mask[y1 * 160 + x1]
-            );
-          };
+            const r0 = y0 * PROTO;
+            const r1 = (y0 + 1 < PROTO ? y0 + 1 : last) * PROTO;
+            let rowOut = my * MASK_RES * 4 + 3;
 
-          for (let y = 0; y < imgH; y++) {
-            for (let x = 0; x < imgW; x++) {
-              // 이중선형 보간으로 마스크 확률값 획득
-              const prob = bilinearSample(combinedMask, x, y);
+            for (let mx = 0; mx < MASK_RES; mx++, rowOut += 4) {
+              let gx = (mx + 0.5) * P2M - 0.5;
+              if (gx < 0) gx = 0;
+              else if (gx > last) gx = last;
+              const x0 = gx | 0;
 
-              // 박스 내 여부는 보간된 좌표 기준으로 판정
-              const mx = Math.floor((x / imgW) * 160);
-              const my = Math.floor((y / imgH) * 160);
+              // 박스 절단 (이전과 동일하게 proto 격자 기준으로 판정)
               let inAnyBox = false;
               for (const box of boxes160) {
                 if (
-                  mx >= box.x1 &&
-                  mx <= box.x2 &&
-                  my >= box.y1 &&
-                  my <= box.y2
+                  x0 >= box.x1 &&
+                  x0 <= box.x2 &&
+                  y0 >= box.y1 &&
+                  y0 <= box.y2
                 ) {
                   inAnyBox = true;
                   break;
                 }
               }
-
-              // ── 소프트 알파 페더링 ──────────────────────────────────────
-              // 0.75 하드 이진화 대신 0.40~0.65 구간을 부드럽게 페이드하여
-              // 엣지에 자연스러운 반투명 전환(페더링)을 적용합니다.
               if (!inAnyBox) {
-                imageData.data[(y * imgW + x) * 4 + 3] = 0;
-              } else {
-                const FADE_LO = 0.4; // 이 확률 이하면 완전 투명
-                const FADE_HI = 0.65; // 이 확률 이상이면 완전 불투명
-                const alpha = Math.max(
-                  0,
-                  Math.min(1, (prob - FADE_LO) / (FADE_HI - FADE_LO)),
-                );
-                imageData.data[(y * imgW + x) * 4 + 3] = Math.round(
-                  alpha * 255,
-                );
+                md[rowOut] = 0;
+                continue;
               }
+
+              // 이중선형 보간으로 마스크 확률값 획득 (이전과 동일)
+              const fx = gx - x0;
+              const x1 = x0 + 1 < PROTO ? x0 + 1 : last;
+              const top =
+                combinedMask[r0 + x0] * (1 - fx) + combinedMask[r0 + x1] * fx;
+              const bot =
+                combinedMask[r1 + x0] * (1 - fx) + combinedMask[r1 + x1] * fx;
+              const prob = top * (1 - fy) + bot * fy;
+
+              const a = (prob - FADE_LO) / FADE_SPAN;
+              md[rowOut] = a <= 0 ? 0 : a >= 1 ? 255 : (a * 255) | 0;
             }
           }
-        } else {
-          // 배경 제거 ON인데 사람 미감지 시 전체 투명
-          const total = imageData.width * imageData.height;
-          for (let i = 0; i < total; i++) {
-            imageData.data[i * 4 + 3] = 0;
-          }
         }
+        src._maskCtx.putImageData(src._maskImg, 0, 0);
       }
 
       // 배경 이미지/영상/색 합성 (배경 제거 ON일 때만 배경 교체)
@@ -844,12 +895,21 @@ async function _aiLoop(src) {
           src.bgCtx.fillRect(0, 0, w, h);
         }
       }
-      // 캔버스 재사용 (매 프레임 생성 방지)
-      const fgCv = src._fgCanvas;
-      const fgCtx = src._fgCtx;
-      if (fgCv.width !== w) fgCv.width = w;
-      if (fgCv.height !== h) fgCv.height = h;
-      fgCtx.putImageData(frame, 0, 0);
+
+      // ── 전경 합성 ────────────────────────────────────────────────
+      // fgCanvas 에는 추론 직전에 붙잡아 둔 프레임이 이미 들어 있습니다.
+      // 여기서 다시 그리면 마스크와 시점이 어긋납니다.
+      if (src.bgRemoval) {
+        // 마스크 캔버스는 MASK_RES×MASK_RES 정사각이고, 전처리가 원본을
+        // 비율 보정 없이 정사각으로 늘려 넣었으므로 여기서 w×h 로 되돌려
+        // 늘리면 원본 프레임과 정렬됩니다. 전처리의 종횡비 처리를 바꾸면
+        // 이 확대도 함께 바꿔야 합니다.
+        fgCtx.imageSmoothingEnabled = true;
+        fgCtx.globalCompositeOperation = "destination-in";
+        fgCtx.drawImage(src._maskCanvas, 0, 0, w, h);
+        fgCtx.globalCompositeOperation = "source-over";
+      }
+
       // ── blur+contrast 메타볼 이펙트 ─────────────────────────────────
       // 전경 합성 직전 미세 블러로 엣지 픽셀을 번지게 한 뒤
       // contrast로 다시 당겨줌으로써 잔여 계단 패턴을 추가로 억제합니다.
