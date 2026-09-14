@@ -452,7 +452,6 @@ function _stopAiLoop(src) {
   src._maskCanvas = null;
   src._maskCtx = null;
   src._maskImg = null;
-  src._alpha160 = null;
 
   // 배경 제거 + 객체 추적이 모두 꺼졌을 때 객체 번호 초기화
   if (!src.bgRemoval && !src.objectTracking) {
@@ -838,23 +837,22 @@ async function _aiLoop(src) {
             const fy = gy - y0;
             const r0 = y0 * PROTO;
             const r1 = (y0 + 1 < PROTO ? y0 + 1 : last) * PROTO;
-            const my160 = gy | 0;
             let rowOut = my * MASK_RES * 4 + 3;
 
             for (let mx = 0; mx < MASK_RES; mx++, rowOut += 4) {
               let gx = (mx + 0.5) * P2M - 0.5;
               if (gx < 0) gx = 0;
               else if (gx > last) gx = last;
-              const mx160 = gx | 0;
+              const x0 = gx | 0;
 
               // 박스 절단 (이전과 동일하게 proto 격자 기준으로 판정)
               let inAnyBox = false;
               for (const box of boxes160) {
                 if (
-                  mx160 >= box.x1 &&
-                  mx160 <= box.x2 &&
-                  my160 >= box.y1 &&
-                  my160 <= box.y2
+                  x0 >= box.x1 &&
+                  x0 <= box.x2 &&
+                  y0 >= box.y1 &&
+                  y0 <= box.y2
                 ) {
                   inAnyBox = true;
                   break;
@@ -866,7 +864,6 @@ async function _aiLoop(src) {
               }
 
               // 이중선형 보간으로 마스크 확률값 획득 (이전과 동일)
-              const x0 = gx | 0;
               const fx = gx - x0;
               const x1 = x0 + 1 < PROTO ? x0 + 1 : last;
               const top =
@@ -903,8 +900,10 @@ async function _aiLoop(src) {
       // fgCanvas 에는 추론 직전에 붙잡아 둔 프레임이 이미 들어 있습니다.
       // 여기서 다시 그리면 마스크와 시점이 어긋납니다.
       if (src.bgRemoval) {
-        // 마스크 캔버스는 모델 좌표계(640×640)이고 전처리가 원본을 그대로
-        // 늘려 넣었으므로, 여기서 되돌려 늘리면 원본 프레임과 정렬됩니다.
+        // 마스크 캔버스는 MASK_RES×MASK_RES 정사각이고, 전처리가 원본을
+        // 비율 보정 없이 정사각으로 늘려 넣었으므로 여기서 w×h 로 되돌려
+        // 늘리면 원본 프레임과 정렬됩니다. 전처리의 종횡비 처리를 바꾸면
+        // 이 확대도 함께 바꿔야 합니다.
         fgCtx.imageSmoothingEnabled = true;
         fgCtx.globalCompositeOperation = "destination-in";
         fgCtx.drawImage(src._maskCanvas, 0, 0, w, h);
