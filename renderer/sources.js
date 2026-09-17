@@ -15,9 +15,13 @@
  */
 import { state, isElectron } from "./state.js";
 import { sendObjectCoords, sendTrackingState } from "./rpi.js";
-import { HybridTracker } from "./hybridTracker.js";
+import {
+  ByteTracker, collectPersonDetections, selectMaskTracks, selectControlTrack,
+  controlPoint, videoFrameKey,
+} from "./byteTracker.js";
 
-const globalTracker = new HybridTracker();
+const globalTracker = new ByteTracker();
+let trackerSourceId = null;
 let _trackSnapshot = "";
 
 // ─────────────────────────────────────────────────────────
@@ -270,6 +274,12 @@ export function addRpiSource() {
 export function removeSource(id) {
   const idx = state.sources.findIndex((s) => s.id === id);
   if (idx === -1) return;
+  if (trackerSourceId === id || state.selectedSourceId === id) {
+    if (state.autoTrackingEnabled) sendTrackingState(false);
+    state.autoTrackingEnabled = false;
+    state.objectTrackingEnabled = false;
+    state.backgroundRemovalEnabled = false;
+  }
   _cleanupSource(state.sources[idx]);
   state.sources.splice(idx, 1);
   if (state.selectedSourceId === id) {
@@ -356,7 +366,7 @@ export function toggleBgRemovalForSelectedSource() {
 
   // AI 루프 관리: 둘 중 하나라도 켜져 있으면 루프 유지
   const needAi = src.bgRemoval || src.objectTracking;
-  if (needAi && !src.bgAnimFrame) {
+  if (needAi && !src._aiRunning) {
     _startAiLoop(src);
   } else if (!needAi) {
     _stopAiLoop(src);
@@ -384,7 +394,7 @@ export function toggleObjectTrackingForSelectedSource() {
 
   // AI 루프 관리: 둘 중 하나라도 켜져 있으면 루프 유지
   const needAi = src.bgRemoval || src.objectTracking;
-  if (needAi && !src.bgAnimFrame) {
+  if (needAi && !src._aiRunning) {
     _startAiLoop(src);
   } else if (!needAi) {
     _stopAiLoop(src);
@@ -414,6 +424,16 @@ function _updateObjectTrackingBtn() {
 // ─────────────────────────────────────────────────────────
 
 function _startAiLoop(src) {
+  if (src._aiRunning) return;
+  src._aiRunning = true;
+  src._aiGeneration = (src._aiGeneration || 0) + 1;
+  src._aiFrameId = 0;
+  src._lastVideoFrameKey = null;
+  trackerSourceId = src.id;
+  globalTracker.reset();
+  state.targetPersonId = null;
+  state.targetPersonIds = [];
+  _trackSnapshot = "";
   if (!src.bgCanvas) {
     src.bgCanvas = document.createElement("canvas");
     // 브라우저 기본값(300×150) 대신 0으로 초기화해야 wasEmpty 검사가 올바르게 동작함
@@ -434,10 +454,12 @@ function _startAiLoop(src) {
   if (!src._tensorData) {
     src._tensorData = new Float32Array(3 * 640 * 640);
   }
-  _aiLoop(src);
+  _aiLoop(src, src._aiGeneration);
 }
 
 function _stopAiLoop(src) {
+  src._aiRunning = false;
+  src._aiGeneration = (src._aiGeneration || 0) + 1;
   if (src.bgAnimFrame) {
     cancelAnimationFrame(src.bgAnimFrame);
     src.bgAnimFrame = null;
@@ -453,14 +475,30 @@ function _stopAiLoop(src) {
   src._maskCtx = null;
   src._maskImg = null;
 
-  // 배경 제거 + 객체 추적이 모두 꺼졌을 때 객체 번호 초기화
-  if (!src.bgRemoval && !src.objectTracking) {
+  // Only the owner can clear IDs. Deleting an unrelated source must not do so.
+  if (trackerSourceId === src.id) {
+    trackerSourceId = null;
     globalTracker.reset();
     state.targetPersonIds = [];
     state.targetPersonId = null;
     _trackSnapshot = "";
     renderObjectList([]);
   }
+}
+
+function _isAiCurrent(src, generation) {
+  return src._aiRunning && src._aiGeneration === generation
+    && trackerSourceId === src.id && state.selectedSourceId === src.id
+    && state.sources.includes(src) && !!src.bgCtx
+    && (src.bgRemoval || src.objectTracking);
+}
+
+function _scheduleAiLoop(src, generation) {
+  if (!_isAiCurrent(src, generation)) return;
+  src.bgAnimFrame = requestAnimationFrame(() => {
+    src.bgAnimFrame = null;
+    _aiLoop(src, generation);
+  });
 }
 
 /**
@@ -510,6 +548,7 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
     // 바운딩박스
     ctx.strokeStyle = boxColor;
     ctx.lineWidth = isTarget ? 3 : 2;
+    if (!person.observed) ctx.setLineDash([6, 4]);
     ctx.strokeRect(bx, by, bw, bh);
 
     // 중심점 + 십자선
@@ -527,7 +566,7 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
     ctx.stroke();
 
     // 라벨 배경 + 텍스트
-    const label = `ID ${person.id}`;
+    const label = `ID ${person.id}${person.observed ? "" : " (예측)"}`;
     ctx.font = `bold ${fontSize}px sans-serif`;
     const tw = ctx.measureText(label).width;
     const pad = 4;
@@ -543,11 +582,11 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
   });
 }
 
-async function _aiLoop(src) {
-  if ((!src.bgRemoval && !src.objectTracking) || !src.bgCtx) return;
+async function _aiLoop(src, generation) {
+  if (!_isAiCurrent(src, generation)) return;
   const vid = src.videoEl;
   if (!vid || vid.readyState < 2) {
-    src.bgAnimFrame = requestAnimationFrame(() => _aiLoop(src));
+    _scheduleAiLoop(src, generation);
     return;
   }
 
@@ -566,8 +605,20 @@ async function _aiLoop(src) {
   // 전경 캔버스(_fgCanvas)에 조립한 뒤 성공 시에만 출력 캔버스에 반영합니다.
 
   if (state.session && !state.sessionBusy) {
+    const frameKey = videoFrameKey(vid);
+    if (frameKey !== null && frameKey === src._lastVideoFrameKey) {
+      _scheduleAiLoop(src, generation);
+      return;
+    }
+    const session = state.session;
+    let inputTensor;
+    let results;
     try {
       state.sessionBusy = true;
+      // Renderer-local sampling time, not the remote camera's exposure time.
+      const timestampMs = performance.now();
+      const frameId = ++src._aiFrameId;
+      src._lastVideoFrameKey = frameKey;
       const MODEL_SIZE = 640;
       // 캔버스 재사용 (매 프레임 생성 방지)
       const tmp = src._tmpCanvas;
@@ -602,60 +653,34 @@ async function _aiLoop(src) {
         tensorData[2 * totalPixels + i] = data[p + 2] * INV_255;
       }
 
-      const inputTensor = new ort.Tensor("float32", tensorData, [
+      inputTensor = new ort.Tensor("float32", tensorData, [
         1,
         3,
         MODEL_SIZE,
         MODEL_SIZE,
       ]);
-      const feeds = { [state.session.inputNames[0]]: inputTensor };
-      const results = await state.session.run(feeds);
+      const feeds = { [session.inputNames[0]]: inputTensor };
+      results = await session.run(feeds);
 
-      // 추론 대기 중 소스가 변경되어 AI 처리가 중단된 경우 조기 종료
-      if ((!src.bgRemoval && !src.objectTracking) || !src.bgCtx) {
-        state.sessionBusy = false;
+      // OFF→ON, source replacement and A→B→A invalidate in-flight results too.
+      if (!_isAiCurrent(src, generation) || src.videoEl !== vid) return;
+      if (state.session !== session) {
+        src._lastVideoFrameKey = null;
+        _scheduleAiLoop(src, generation);
         return;
       }
 
-      // 트래커 색상 표본은 모델 입력(640×640)에서 뽑습니다.
-      // 박스가 이미 같은 좌표계라 변환이 필요 없고, 전체 해상도 프레임을
-      // CPU로 내리지 않아도 됩니다.
-      const imageData = tmpData;
-
-      // ── 기본 모델 출력 파싱 (출력 형태 [1, 300, 38] 고정) ──────────────
-      const out0Tensor = results[state.session.outputNames[0]];
-      const out1Tensor = results[state.session.outputNames[1]];
+      // ── YOLO26-seg detections [1, N, 38] and mask prototypes ─────────
+      const out0Tensor = results[session.outputNames[0]];
+      const out1Tensor = results[session.outputNames[1]];
       const output0 = out0Tensor.data;
       const protos = out1Tensor.data;
 
-      const NUM_ANCHORS = 300;
-      const NUM_CHANNELS = 38;
-
-      const SCORE_CH = 4;
+      const NUM_CHANNELS = out0Tensor.dims[2];
       const COEFF_START = 6;
 
-      // 1. 감지된 "사람(classId=0)" 앵커들을 모두 수집
-      let detectedPeople = [];
-      for (let a = 0; a < NUM_ANCHORS; a++) {
-        const score = output0[a * NUM_CHANNELS + SCORE_CH];
-        const classId = output0[a * NUM_CHANNELS + 5];
-
-        if (classId === 0 && score > 0.40) {
-          detectedPeople.push({
-            anc: a,
-            score: score,
-            box: {
-              x1: output0[a * NUM_CHANNELS + 0],
-              y1: output0[a * NUM_CHANNELS + 1],
-              x2: output0[a * NUM_CHANNELS + 2],
-              y2: output0[a * NUM_CHANNELS + 3],
-            },
-          });
-        }
-      }
-
-      // 2. 하이브리드 트래커 적용 (고유 ID 부여 및 객체 추적)
-      let people = globalTracker.update(detectedPeople, imageData);
+      const detectedPeople = collectPersonDetections(output0, NUM_CHANNELS);
+      const people = globalTracker.update(detectedPeople, { timestampMs, frameId });
 
       // UI 표시 및 인덱스 매칭을 위해 현재 프레임 기준 X좌표 순(왼쪽부터)으로 정렬
       people.sort((a, b) => a.box.x1 - b.box.x1);
@@ -681,22 +706,9 @@ async function _aiLoop(src) {
         );
       }
 
-      let bestScore = -Infinity;
-      let bestAnc = -1;
-      let bestBox = null;
-
-      // 고정된 targetPersonId와 일치하는 사람 찾기 (순서가 뒤바뀌어도 ID를 따라감)
-      const targetPerson = people.find((p) => p.id === state.targetPersonId);
-
-      if (targetPerson) {
-        bestScore = targetPerson.score;
-        bestAnc = targetPerson.anc;
-        bestBox = targetPerson.box;
-      }
-      // targetPersonId가 null이면 사용자가 아직 선택하지 않은 상태 → 자동 선택 안 함
-      // 트래커가 아직 해당 ID를 기억 중(일시 소실)이면 이 프레임은 생략
-
-      const bestProb = bestScore;
+      const controlTarget = selectControlTrack(
+        globalTracker, people, state.targetPersonId, frameId, performance.now(),
+      );
 
       // Object Panel 목록 갱신 (트래커 상태나 선택 상태가 바뀔 때)
       const _snap =
@@ -711,24 +723,15 @@ async function _aiLoop(src) {
 
       if (window._deepDiagDone) window._deepDiagDone = false;
 
-      // 확률이 50% 이상이고 유효한 추적 대상이 감지되었을 때만 처리
-      if (bestProb > 0.5 && bestAnc >= 0) {
-        // 객체추적이 켜져 있으면 좌표 전송
-        if (state.autoTrackingEnabled) {
-          const obj_x = ((bestBox.x1 + bestBox.x2) / 2) * (w / 640);
-          const obj_y = (bestBox.y1 + (bestBox.y2 - bestBox.y1) * 0.2) * (h / 640);
-          sendObjectCoords({
-            x: obj_x,
-            y: obj_y,
-            frameWidth: w,
-            frameHeight: h,
-          });
-        }
+      // Low-score observations already passed ByteTrack association. A short
+      // missing interval can use the same ID's prediction; never use its mask.
+      if (src.objectTracking && state.autoTrackingEnabled && controlTarget) {
+        sendObjectCoords(controlPoint(controlTarget.box));
       }
 
       // 배경 제거가 켜져 있을 때 다중 객체 마스크 적용
       //
-      // 마스크 확률·박스 절단·페이드 기준(0.40~0.65)은 이전과 동일합니다.
+      // Keep segmentation confidence separate from low-score track recovery.
       // 달라진 것은 알파를 어디에 쓰느냐입니다. 이전에는 전체 해상도
       // 프레임을 CPU로 내려(getImageData 8.3MB) 207만 픽셀의 알파를 직접
       // 고치고 다시 올렸습니다(putImageData 8.3MB). 이제는 모델 해상도
@@ -770,8 +773,8 @@ async function _aiLoop(src) {
       if (src.bgRemoval) {
         const md = src._maskImg.data;
 
-        const bgTargets = people.filter(
-          (p) => state.targetPersonIds.includes(p.id) && p.score > 0.5,
+        const bgTargets = selectMaskTracks(
+          people, state.targetPersonIds, frameId, output0.length / NUM_CHANNELS,
         );
 
         if (bgTargets.length === 0) {
@@ -921,12 +924,16 @@ async function _aiLoop(src) {
 
       // 바운딩박스, 데드존, 중심점 디버그 그리기
       if (src.objectTracking) {
-        _drawTrackingOverlay(src.bgCtx, people, state.targetPersonId, w, h);
+        const overlayPeople = controlTarget && !controlTarget.observed
+          ? [...people, controlTarget] : people;
+        _drawTrackingOverlay(src.bgCtx, overlayPeople, state.targetPersonId, w, h);
       }
     } catch (e) {
       console.error("[BG] 추론 오류:", e);
     } finally {
       state.sessionBusy = false;
+      inputTensor?.dispose?.();
+      for (const tensor of Object.values(results || {})) tensor.dispose?.();
     }
   }
 
@@ -935,7 +942,7 @@ async function _aiLoop(src) {
     src.bgCtx.drawImage(vid, 0, 0, w, h);
   }
 
-  src.bgAnimFrame = requestAnimationFrame(() => _aiLoop(src));
+  _scheduleAiLoop(src, generation);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -966,6 +973,8 @@ function _createVideoEl(stream) {
 }
 
 function _cleanupSource(src) {
+  src.bgRemoval = false;
+  src.objectTracking = false;
   _stopAiLoop(src);
   if (src.stream && src.type !== "rpi")
     src.stream.getTracks().forEach((t) => t.stop());
@@ -994,7 +1003,7 @@ function renderObjectList(tracks) {
   const sorted = [...tracks].sort((a, b) => a.id - b.id);
 
   sorted.forEach((track, idx) => {
-    const missing = track.missingFrames > 0;
+    const missing = !track.observed;
 
     if (!state.targetPersonIds) state.targetPersonIds = [];
     const isBgSelected = state.targetPersonIds.includes(track.id);
@@ -1012,7 +1021,7 @@ function renderObjectList(tracks) {
     }
 
     li.addEventListener("click", (e) => {
-      if (e.target.tagName.toLowerCase() === "input") return;
+      if (e.target.closest("input, label")) return;
 
       const idIdx = state.targetPersonIds.indexOf(track.id);
       if (idIdx > -1) {
@@ -1025,7 +1034,7 @@ function renderObjectList(tracks) {
     });
 
     const labelSpan = document.createElement("span");
-    labelSpan.textContent = `사람 ${track.id}` + (missing ? " (사라짐)" : "");
+    labelSpan.textContent = `사람 ${track.id}` + (missing ? " (잠시 놓침)" : "");
 
     const trackLabel = document.createElement("label");
     trackLabel.style.display = "flex";
