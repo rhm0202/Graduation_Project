@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 
 const ROOT = path.join(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "out");
@@ -80,17 +80,29 @@ function findPackageFolder() {
 }
 
 function createZip(srcFolder, destZip) {
-  if (process.platform === "win32") {
-    execSync(
-      `powershell -Command "Compress-Archive -Path '${srcFolder}' -DestinationPath '${destZip}' -Force"`,
-      { stdio: "inherit" },
-    );
-  } else {
-    const folderName = path.basename(srcFolder);
-    const parentDir = path.dirname(srcFolder);
-    execSync(`cd "${parentDir}" && zip -r "${destZip}" "${folderName}"`, {
-      stdio: "inherit",
-    });
+  const temporaryZip = `${destZip}.${process.pid}.tmp.zip`;
+  try {
+    if (process.platform === "win32") {
+      execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+        "$ErrorActionPreference = 'Stop'; " +
+        "Add-Type -AssemblyName System.IO.Compression.FileSystem; " +
+        "[System.IO.Compression.ZipFile]::CreateFromDirectory(" +
+        "$env:SPOTLIGHT_ZIP_SOURCE, $env:SPOTLIGHT_ZIP_DESTINATION, " +
+        "[System.IO.Compression.CompressionLevel]::Optimal, $true)",
+      ], {
+        stdio: "inherit",
+        windowsHide: true,
+        env: { ...process.env, SPOTLIGHT_ZIP_SOURCE: srcFolder,
+          SPOTLIGHT_ZIP_DESTINATION: temporaryZip },
+      });
+    } else {
+      execFileSync("zip", ["-r", temporaryZip, path.basename(srcFolder)], {
+        cwd: path.dirname(srcFolder), stdio: "inherit",
+      });
+    }
+    fs.renameSync(temporaryZip, destZip);
+  } finally {
+    fs.rmSync(temporaryZip, { force: true });
   }
 }
 

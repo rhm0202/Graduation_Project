@@ -12,7 +12,7 @@ PID 제어 + EMA 평활화를 적용한 정밀 추적을 수행한다.
         ▼
     [MotorPIDManager.update()]
         ├─ Pan PID  → EMA → pan_angle  (0~180°)
-        └─ Tilt PID → EMA → tilt_angle (0~180°)
+        └─ Tilt PID → EMA → tilt_angle (20~160°)
         │
         ▼
     [RPi servo_drive.py] → PCA9685 PWM 출력
@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import time
 import collections
+import math
+from modules.config import PAN_LIMITS, TILT_LIMITS
 from modules.logger import get_logger
 
 logger = get_logger("pid_controller")
@@ -198,8 +200,8 @@ class MotorPIDManager:
         raw_tilt = self.tilt_angle - tilt_correction
 
         # 서보 물리적 한계 적용 (0~180°)
-        raw_pan = max(0.0, min(180.0, raw_pan))
-        raw_tilt = max(0.0, min(180.0, raw_tilt))
+        raw_pan = max(PAN_LIMITS[0], min(PAN_LIMITS[1], raw_pan))
+        raw_tilt = max(TILT_LIMITS[0], min(TILT_LIMITS[1], raw_tilt))
 
         # EMA 평활화
         if not self.pan_history:
@@ -217,12 +219,19 @@ class MotorPIDManager:
 
         return self.pan_angle, self.tilt_angle
 
+    def sync_angles(self, pan_angle: float, tilt_angle: float):
+        """Rebase on the Pi's last successful PWM output (not encoder feedback)."""
+        if not math.isfinite(pan_angle) or not math.isfinite(tilt_angle):
+            raise ValueError("Motor angles must be finite")
+        self.pan_angle = max(PAN_LIMITS[0], min(PAN_LIMITS[1], pan_angle))
+        self.tilt_angle = max(TILT_LIMITS[0], min(TILT_LIMITS[1], tilt_angle))
+        if self.pan_history:
+            self.pan_history[-1] = self.pan_angle
+            self.tilt_history[-1] = self.tilt_angle
+
     def reset(self):
-        """추적 대상이 바뀌거나 잃어버렸을 때 전체 상태를 초기화한다."""
+        """Clear PID/EMA history while preserving the synchronized camera pose."""
         self.pan_pid.reset()
         self.tilt_pid.reset()
         self.pan_history.clear()
         self.tilt_history.clear()
-        self.pan_angle = 90.0
-        self.tilt_angle = 90.0
-        logger.info("PID 매니저 리셋 — 서보 중앙(90°)으로 복귀")

@@ -127,6 +127,7 @@ function _updatePreviewCanvas() {
 // ─────────────────────────────────────────────────────────
 
 let _idSeq = 0;
+let _webcamRequest = 0;
 function _uid() {
   return `src_${++_idSeq}`;
 }
@@ -168,12 +169,17 @@ function _makeSource(overrides) {
  * 기존 웹캠 소스가 있으면 스트림을 교체합니다.
  */
 export async function addWebcamSource(deviceId, label) {
+  const request = ++_webcamRequest;
   try {
     const constraints = {
       video: deviceId ? { deviceId: { exact: deviceId } } : true,
       audio: true,
     };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (request !== _webcamRequest) {
+      stream.getTracks().forEach(track => track.stop());
+      return null;
+    }
     state.mediaStream = stream;
     _syncAudioToMaster(stream);
 
@@ -181,13 +187,12 @@ export async function addWebcamSource(deviceId, label) {
     const existing = state.sources.find((s) => s.type === "webcam");
     if (existing) {
       if (existing.stream) existing.stream.getTracks().forEach((t) => t.stop());
+      _clearSourceVideo(existing);
       existing.stream = stream;
       existing.videoEl = _createVideoEl(stream);
       existing.label = label || existing.label;
-      if (existing.bgRemoval || existing.objectTracking) {
-        _stopAiLoop(existing);
-        _startAiLoop(existing);
-      }
+      if (existing.bgRemoval && state.selectedSourceId === existing.id) _startAiLoop(existing);
+      _previewSelectedSource();
       renderSourcesList();
       return existing;
     }
@@ -250,7 +255,16 @@ export async function addWindowSource(sourceId, label) {
  */
 export function addRpiSource() {
   if (!state.piVideoStream) return null;
-  if (state.sources.find((s) => s.type === "rpi")) return null; // 중복 방지
+  const existing = state.sources.find((s) => s.type === "rpi");
+  if (existing) {
+    if (existing.videoEl === state.piVideoStream) return existing;
+    clearRpiSource();
+    existing.videoEl = state.piVideoStream;
+    existing.stream = state.piVideoStream.srcObject;
+    if (existing.bgRemoval && state.selectedSourceId === existing.id) _startAiLoop(existing);
+    _previewSelectedSource();
+    return existing;
+  }
 
   const src = _makeSource({
     type: "rpi",
@@ -271,9 +285,30 @@ export function addRpiSource() {
 // 소스 제어
 // ─────────────────────────────────────────────────────────
 
+// Keep the layout/source ID while invalidating old frames, masks and motor targets.
+export function clearRpiSource() {
+  const src = state.sources.find(s => s.type === "rpi");
+  if (src) _clearSourceVideo(src);
+}
+
+function _clearSourceVideo(src) {
+  if (trackerSourceId === src.id || state.selectedSourceId === src.id) {
+    if (state.autoTrackingEnabled) sendTrackingState(false);
+    state.autoTrackingEnabled = false;
+    state.objectTrackingEnabled = false;
+  }
+  src.objectTracking = false;
+  _stopAiLoop(src);
+  src.videoEl = null;
+  src.stream = null;
+  _updateObjectTrackingBtn();
+  _previewSelectedSource();
+}
+
 export function removeSource(id) {
   const idx = state.sources.findIndex((s) => s.id === id);
   if (idx === -1) return;
+  if (state.sources[idx].type === "webcam") _webcamRequest++;
   if (trackerSourceId === id || state.selectedSourceId === id) {
     if (state.autoTrackingEnabled) sendTrackingState(false);
     state.autoTrackingEnabled = false;
@@ -726,7 +761,7 @@ async function _aiLoop(src, generation) {
       // Low-score observations already passed ByteTrack association. A short
       // missing interval can use the same ID's prediction; never use its mask.
       if (src.objectTracking && state.autoTrackingEnabled && controlTarget) {
-        sendObjectCoords(controlPoint(controlTarget.box));
+        sendObjectCoords({ ...controlPoint(controlTarget.box), observedAtMs: timestampMs });
       }
 
       // 배경 제거가 켜져 있을 때 다중 객체 마스크 적용

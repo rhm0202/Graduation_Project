@@ -69,14 +69,23 @@ function startGpuMonitoring(win) {
 }
 
 function startSpotlightCore() {
-  const serverDir = app.isPackaged
-    ? path.join(process.resourcesPath, "app.asar.unpacked", "server")
-    : path.join(__dirname, "server");
-  const scriptPath = path.join(serverDir, "spotlight_core.py");
-  spotlightProcess = spawn("py", [scriptPath], {
-    cwd: serverDir,
-    stdio: "inherit",
+  const serverDir = path.join(__dirname, "server");
+  const executable = app.isPackaged
+    ? path.join(process.resourcesPath, "spotlight_core",
+      process.platform === "win32" ? "spotlight_core.exe" : "spotlight_core")
+    : (process.platform === "win32" ? "py" : "python3");
+  const args = app.isPackaged ? [] : [path.join(serverDir, "spotlight_core.py")];
+  const workingDir = app.isPackaged ? app.getPath("userData") : serverDir;
+  fs.mkdirSync(workingDir, { recursive: true });
+  spotlightProcess = spawn(executable, args, {
+    cwd: workingDir,
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, PYTHONIOENCODING: "utf-8",
+      SPOTLIGHT_LOG_DIR: path.join(workingDir, "logs") },
   });
+  spotlightProcess.stdout.on("data", (data) => console.log(data.toString("utf8").trimEnd()));
+  spotlightProcess.stderr.on("data", (data) => console.error(data.toString("utf8").trimEnd()));
   spotlightProcess.on("error", (err) => {
     console.error("[Spotlight] 실행 실패:", err.message);
   });

@@ -22,3 +22,9 @@ EMA_ALPHA        = 0.18    # EMA 스무딩 팩터 (낮을수록 부드러움, �
 # ─── 추적 안정화 파라미터 ─────────────────────────────────
 MAX_JUMP_PX      = 400     # 이 픽셀 이상 좌표가 급변하면 점프로 간주해 무시
 MIN_SEND_INTERVAL = 0.033  # RPi 최소 전송 간격 (초) — 최대 30fps 상한
+
+# Command lifetime and the physical limits used by the Pi controller.
+COMMAND_TTL_MS = 250
+MOTOR_STATUS_TIMEOUT = 0.8
+PAN_LIMITS = (0.0, 180.0)
+TILT_LIMITS = (20.0, 160.0)

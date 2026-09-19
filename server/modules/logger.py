@@ -10,9 +10,10 @@ logger.py
 
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 
-_LOG_DIR      = "logs"
+_LOG_DIR      = os.environ.get("SPOTLIGHT_LOG_DIR", "logs")
 _MAX_BYTES    = 1_000_000  # 1MB
 _BACKUP_COUNT = 3
 _FORMAT       = "[%(asctime)s] %(levelname)s - %(message)s"
@@ -51,13 +52,12 @@ def get_logger(name: str) -> logging.Logger:
     )
     file_handler.setFormatter(formatter)
 
-    console_handler = logging.StreamHandler()
-    console_handler.stream = open(
-        console_handler.stream.fileno(), 'w', encoding='utf-8', closefd=False
-    )
-    console_handler.setFormatter(formatter)
-
     logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    if sys.stderr is not None:
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
     return logger
