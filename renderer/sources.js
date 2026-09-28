@@ -17,6 +17,7 @@ import { state, isElectron } from "./state.js";
 import { sendObjectCoords, sendTrackingState } from "./rpi.js";
 import {
   ByteTracker, collectPersonDetections, selectMaskTracks, selectControlTrack,
+  collectHeldObjectDetections, selectHeldObjects,
   controlPoint, videoFrameKey,
 } from "./byteTracker.js";
 
@@ -537,6 +538,376 @@ function _scheduleAiLoop(src, generation) {
 }
 
 /**
+ * 마스크 격자 기준 침식 깊이입니다. MASK_RES 는 출력의 약 1/3 이므로
+ * 1 칸이 출력에서 3px 안팎입니다. 2 로 올리면 손가락처럼 얇은 부분이
+ * 같이 깎이기 시작합니다.
+ */
+const ERODE_CELLS = 1;
+
+/**
+ * 경계를 영상의 실제 윤곽에 붙일지 여부입니다.
+ *
+ * 프로토타입 마스크는 160×160 격자라 확률이 0.1 에서 0.9 로 넘어가는 데만
+ * 가로 4 칸(1280 폭 기준 출력 32px)이 걸립니다. 어디를 잘라도 경계선이
+ * 실제 윤곽에서 그만큼 벗어날 수 있고, 그래서 사람 주위에 원래 배경이
+ * 띠처럼 남습니다. 임계값을 올리거나 더 깎아도 띠가 위치만 옮길 뿐입니다.
+ *
+ * guided filter 는 영상의 휘도 경계를 마스크에 옮겨 붙여 그 띠를 없앱니다.
+ */
+const REFINE_EDGE = true;
+
+/**
+ * guided filter 반경 (마스크 칸).
+ *
+ * 마스크가 윤곽에서 벗어난 거리를 덮을 만큼은 되어야 하지만, 크게 잡으면
+ * 안 됩니다. guide 에 휘도 경계가 없는 창에서는 a→0 이 되어 보정이
+ * prob 를 그 창의 평균으로 바꿔 버리기 때문입니다 — 즉 반경만큼의
+ * 박스 블러입니다. 검은 정장 vs 어두운 배경처럼 대비가 없는 구간이
+ * 정확히 이 경우라, 반경이 크면 실루엣이 평균으로 뭉개집니다.
+ *
+ * 반경 8 로 두었더니 어깨 윤곽이 톱니처럼 물어뜯기고, 창보다 얇은
+ * 돌출부(펴든 손가락)는 평균이 0.5 밑으로 내려가 통째로 잘렸습니다.
+ * 2~4 는 둘 다 깨끗했고, 2 는 보정을 끈 것보다도 낫습니다(손가락 위쪽이
+ * 반투명하게 깎이던 것이 실제 윤곽에 붙습니다). 여유를 두고 2 로 둡니다.
+ */
+const REFINE_RADIUS = 2;
+
+/** 작을수록 휘도 경계에 강하게 붙습니다. 너무 작으면 노이즈까지 따라갑니다. */
+const REFINE_EPS = 1e-4;
+
+/**
+ * 알파 램프 구간입니다. 중심은 0.5 로 두고 폭만 조절합니다.
+ *
+ * 좁게 잡습니다. 보정을 거친 확률장은 경계에서 완만하게 눕기 때문입니다.
+ * 실제 모델을 돌려 재보니 0.5 를 지날 때의 기울기가 칸당 0.13~0.21 이라,
+ * 0 에서 1 까지 5~8 칸(출력 15~24px)에 걸쳐 넘어갑니다. 램프 폭이 곧
+ * 반투명 띠의 폭이고, 둘은 거의 정비례합니다(COCO 사진 4장, 출력 둘레로
+ * 정규화한 평균 띠 폭):
+ *
+ *   0.45~0.55  띠 0.9~1.4 칸 (4~5px)   ← 현재
+ *   0.30~0.70  띠 4.4~6.3 칸 (12~16px)
+ *   0.20~0.80  띠 8.0~9.6 칸 (20~24px)
+ *
+ * 넓히면 계단이 줄지 않을까 싶어 재봤지만 아니었습니다. 알파 128 등고선의
+ * 행당 이동량은 0.34~0.67px 로 거의 변하지 않았고(사진에 따라 오히려
+ * 나빠짐), 대신 손·어깨 둘레에 눈에 띄는 번짐 테두리가 생겼습니다. 확률장이
+ * 이미 완만해서 0.45~0.55 만으로도 경계 칸이 중간 알파를 갖기 때문입니다 —
+ * 즉 이 폭에서 이미 안티에일리어싱이 되고 있고, 더 넓히면 번지기만 합니다.
+ *
+ * CSS blur 도 답이 아닙니다. Chromium 은 1px 미만 blur() 를 무시해서
+ * 0.5px 은 건 것과 안 건 것이 같고, 1px 부터는 계단이 거의 그대로인 채
+ * (RMS 0.69→0.65px) 띠만 2px 에서 6px 으로 벌어집니다.
+ *
+ * 보정을 끄면 확률장이 또 달라지므로 예전 값이 필요합니다.
+ *
+ * 위 수치는 REFINE_RADIUS 가 8 이던 때 잰 것입니다. 반경을 2 로 줄인 지금은
+ * 확률장이 그때만큼 눕지 않으므로 기울기와 띠 폭이 이보다 가파릅니다.
+ * 0.45~0.55 는 반경 2 에서도 육안으로 문제없었으나, 폭을 다시 손볼 일이
+ * 생기면 수치부터 다시 재야 합니다.
+ */
+const FADE = REFINE_EDGE ? { lo: 0.45, hi: 0.55 } : { lo: 0.75, hi: 0.85 };
+
+/**
+ * 박스 필터. 적분영상을 쓰므로 반경과 무관하게 O(n) 입니다.
+ *
+ * @param {Float32Array} src - 입력 (W*H)
+ * @param {Float32Array} dst - 출력 (W*H)
+ * @param {number} W - 너비
+ * @param {number} H - 높이
+ * @param {number} r - 반경
+ * @param {Float64Array} integral - (W+1)*(H+1) 이상 크기의 작업용 버퍼
+ */
+function boxFilter(src, dst, W, H, r, integral) {
+  const IW = W + 1;
+  for (let x = 0; x <= W; x++) integral[x] = 0;
+  for (let y = 0; y < H; y++) {
+    let rowsum = 0;
+    const so = y * W, io = (y + 1) * IW, po = y * IW;
+    integral[io] = 0;
+    for (let x = 0; x < W; x++) {
+      rowsum += src[so + x];
+      integral[io + x + 1] = integral[po + x + 1] + rowsum;
+    }
+  }
+  for (let y = 0; y < H; y++) {
+    const y0 = y - r > 0 ? y - r : 0;
+    const y1 = y + r < H - 1 ? y + r : H - 1;
+    const top = y0 * IW, bot = (y1 + 1) * IW;
+    const rows = y1 - y0 + 1, out = y * W;
+    for (let x = 0; x < W; x++) {
+      const x0 = x - r > 0 ? x - r : 0;
+      const x1 = x + r < W - 1 ? x + r : W - 1;
+      dst[out + x] = (integral[bot + x1 + 1] - integral[top + x1 + 1]
+        - integral[bot + x0] + integral[top + x0]) / (rows * (x1 - x0 + 1));
+    }
+  }
+}
+
+/**
+ * Guided filter (He et al.). guide 의 경계 구조를 prob 에 옮겨 붙입니다.
+ *
+ * 각 창에서 prob ≈ a·guide + b 인 선형 계수를 구하고, 그 계수를 다시
+ * 평활해 되돌립니다. 휘도가 균일한 창에서는 a→0 이라 원래 값이 남고,
+ * 경계가 있는 창에서는 a 가 커져 마스크가 그 경계를 따라갑니다.
+ *
+ * prob 를 제자리에서 갱신합니다.
+ *
+ * @param {Float32Array} guide - 같은 격자의 휘도 (0..1)
+ * @param {Float32Array} prob - 마스크 확률 (0..1), 제자리 갱신
+ * @param {number} W - 너비
+ * @param {number} H - 높이
+ * @param {number} r - 반경
+ * @param {number} eps - 정규화 항
+ * @param {Object} s - 작업용 버퍼 묶음
+ */
+function guidedRefine(guide, prob, W, H, r, eps, s) {
+  const n = W * H;
+  const { t1, t2, meanI, meanP, boxA, boxB, integral } = s;
+
+  for (let i = 0; i < n; i++) {
+    const g = guide[i];
+    t1[i] = g * g;
+    t2[i] = g * prob[i];
+  }
+  boxFilter(t1, boxA, W, H, r, integral);       // corr(I,I)
+  boxFilter(t2, boxB, W, H, r, integral);       // corr(I,p)
+  boxFilter(guide, meanI, W, H, r, integral);
+  boxFilter(prob, meanP, W, H, r, integral);
+
+  for (let i = 0; i < n; i++) {
+    const mI = meanI[i], mP = meanP[i];
+    const a = (boxB[i] - mI * mP) / (boxA[i] - mI * mI + eps);
+    t1[i] = a;
+    t2[i] = mP - a * mI;
+  }
+  boxFilter(t1, boxA, W, H, r, integral);
+  boxFilter(t2, boxB, W, H, r, integral);
+
+  for (let i = 0; i < n; i++) prob[i] = boxA[i] * guide[i] + boxB[i];
+}
+
+/**
+ * 윤곽 안쪽의 구멍을 메울지 여부입니다.
+ *
+ * 켜면 사람 윤곽 안의 구멍이 MAX_HOLE_FRACTION 이하인 한 지워지지 않습니다.
+ */
+const FILL_ENCLOSED_HOLES = true;
+
+/**
+ * 메울 구멍의 최대 넓이입니다. 그 구멍을 품은 사람 박스 넓이에 대한 비율이고,
+ * 0 이하면 넓이를 따지지 않고 전부 메웁니다.
+ *
+ * 상한이 필요한 이유는 허리에 손을 얹었을 때 생기는 팔과 몸통 사이 틈입니다.
+ * 그 틈도 윤곽 안쪽이라 구멍으로 잡히지만 진짜로 뚫려야 하는 자리여서,
+ * 메우면 교체 배경이 아니라 원래 배경이 보입니다. 팔 틈은 손에 든 물건보다
+ * 넓으므로 넓이로 갈라냅니다.
+ *
+ * 모델이 아는 80종(컵·휴대폰·책 등)은 이 단계 전에 마스크를 합쳐 두므로
+ * 상한과 무관합니다. 여기서 걸러지는 것은 종이·펜처럼 모델이 모르는
+ * 물건뿐이고, A4 를 펼쳐 든 것처럼 큰 것은 상한을 넘어 되살아나지 않습니다.
+ * 값을 올리면 그런 것까지 살아나지만 팔 틈도 같이 메워지기 시작합니다.
+ */
+const MAX_HOLE_FRACTION = 0.06;
+
+/**
+ * 사람 윤곽 안쪽의 구멍을 메웁니다.
+ *
+ * 마스크는 픽셀마다 "사람인가"를 따로 판정하므로, 모델이 모르는 물건이
+ * 몸 앞에 오면 그 자리가 알파 0 이 되어 교체 배경이 비칩니다. 바깥과
+ * 이어지지 않은 투명 영역은 윤곽 안쪽이라는 뜻이므로 되살립니다.
+ *
+ * 번져 나가는 조건이 "알파 0" 이 아니라 "완전 불투명이 아님" 인 것이
+ * 중요합니다. 알파 0 만 따라가면 구멍 가장자리의 페더 링이 반투명으로
+ * 남아 구멍 자리에 테두리가 보입니다. 반대로 인물 내부가 어디서도 255 에
+ * 닿지 않을 만큼 얇으면(손가락 끝 등) 그 틈으로 번짐이 새어 들어갑니다.
+ *
+ * 바깥을 표시한 뒤 남은 덩어리를 하나씩 넓이를 재서, 자기를 품은 사람 박스에
+ * 비해 너무 넓은 것은 팔 틈으로 보고 그대로 둡니다.
+ *
+ * 전체 격자가 아니라 대상 박스 범위만 훑습니다. 박스 밖은 이미 알파 0 이라
+ * 결과가 같고, 1080p 기준 훑는 칸 수가 크게 줄어듭니다.
+ *
+ * @param {Uint8Array} alpha - 입출력 버퍼 (제자리 갱신)
+ * @param {Uint8Array} visited - 방문 표시용 같은 크기의 버퍼
+ * @param {Int32Array} stack - 칸 인덱스를 담을 작업용 버퍼
+ * @param {number} size - 한 변의 칸 수
+ * @param {{x1:number,y1:number,x2:number,y2:number}} rect - 검사 범위 (양 끝 포함)
+ * @param {Array<{x1:number,y1:number,x2:number,y2:number}>} boxes - 사람 박스 (마스크 격자 기준)
+ * @param {number} maxFraction - 사람 박스 넓이 대비 구멍 넓이 상한 (0 이하면 무제한)
+ * @param {(i:number)=>number} [ownerOf] - 칸이 속한 사람 번호 (사람이 아니면 음수)
+ */
+function fillEnclosedHoles(alpha, visited, stack, size, rect, boxes, maxFraction, ownerOf) {
+  const { x1, y1, x2, y2 } = rect;
+  if (x2 <= x1 || y2 <= y1) return;
+
+  for (let y = y1; y <= y2; y++) {
+    visited.fill(0, y * size + x1, y * size + x2 + 1);
+  }
+
+  // ── 1) 바깥과 이어진 투명 영역 표시 (visited = 1) ──────────────
+  let top = 0;
+  const push = (x, y) => {
+    const i = y * size + x;
+    if (visited[i] !== 0 || alpha[i] === 255) return;
+    visited[i] = 1;
+    stack[top++] = i;
+  };
+
+  // 범위의 테두리가 시작점입니다. 단, 화면 끝과 겹친 변은 뺍니다.
+  // 웹캠에서는 몸이 화면 아래에서 잘리는 게 보통이라, 가슴 앞에 든 물건의
+  // 구멍이 화면 아래 끝에 닿기 쉽습니다. 그 변을 시작점으로 두면 구멍이
+  // 바깥 배경으로 판정되어 메워지지 않습니다. 진짜 배경은 대부분 화면 끝이
+  // 아닌 다른 변을 통해 이어지므로 이 변을 빼도 바깥으로 남습니다.
+  // 화면 끝으로만 트인 배경(두 사람 사이, 뻗은 팔 아래)은 2단계에서 가립니다.
+  const edge = size - 1;
+  for (let x = x1; x <= x2; x++) {
+    if (y1 > 0) push(x, y1);
+    if (y2 < edge) push(x, y2);
+  }
+  for (let y = y1; y <= y2; y++) {
+    if (x1 > 0) push(x1, y);
+    if (x2 < edge) push(x2, y);
+  }
+
+  while (top > 0) {
+    const i = stack[--top];
+    const x = i % size;
+    const y = (i / size) | 0;
+    if (x > x1) push(x - 1, y);
+    if (x < x2) push(x + 1, y);
+    if (y > y1) push(x, y - 1);
+    if (y < y2) push(x, y + 1);
+  }
+
+  // ── 2) 남은 덩어리를 하나씩 재서 메우기 ─────────────────────────
+  // 너비 우선으로 훑으면 큐가 그대로 구성원 목록이 됩니다. 한 덩어리를
+  // 다 훑고 나면 stack[0..tail-1] 이 그 덩어리 전체라, 넓이를 보고 메울지
+  // 정한 뒤 따로 다시 찾을 필요가 없습니다.
+  const rectArea = (x2 - x1 + 1) * (y2 - y1 + 1);
+  let head = 0, tail = 0;
+  const enqueue = (i) => {
+    if (visited[i] !== 0 || alpha[i] === 255) return;
+    visited[i] = 2;
+    stack[tail++] = i;
+  };
+
+  // 덩어리를 훑으면서 테두리(불투명 이웃)가 어느 사람 것인지 모읍니다.
+  let owner = -1, mixed = false;
+  const visit = (i) => {
+    if (alpha[i] !== 255) { enqueue(i); return; }
+    if (!ownerOf || mixed) return;
+    const o = ownerOf(i);
+    if (o < 0) return;
+    if (owner < 0) owner = o;
+    else if (o !== owner) mixed = true;
+  };
+
+  for (let sy = y1; sy <= y2; sy++) {
+    const seedRow = sy * size;
+    for (let sx = x1; sx <= x2; sx++) {
+      const seed = seedRow + sx;
+      if (visited[seed] !== 0 || alpha[seed] === 255) continue;
+
+      head = 0;
+      tail = 0;
+      let sumX = 0, sumY = 0;
+      let frameSides = 0;
+      owner = -1;
+      mixed = false;
+      enqueue(seed);
+      while (head < tail) {
+        const i = stack[head++];
+        const x = i % size;
+        const y = (i / size) | 0;
+        sumX += x;
+        sumY += y;
+        if (x === 0) frameSides |= 1;
+        if (x === edge) frameSides |= 2;
+        if (y === 0) frameSides |= 4;
+        if (y === edge) frameSides |= 8;
+        if (x > x1) visit(i - 1);
+        if (x < x2) visit(i + 1);
+        if (y > y1) visit(i - size);
+        if (y < y2) visit(i + size);
+      }
+
+      // 화면 끝에 닿은 덩어리는 한 사람 안에 든 것만 메웁니다. 넓이로는
+      // 몸 앞에 든 물건과 진짜 배경이 구별되지 않아 모양으로 가립니다.
+      // - 두 변 이상에 닿으면 모서리를 끼고 트인 배경입니다. 사람이 화면을
+      //   가로로 꽉 채워 시작점이 되는 변이 없을 때 몸 옆 배경이 이렇습니다.
+      // - 테두리가 여러 사람이면 두 사람 사이나 뻗은 팔 아래의 배경입니다.
+      //   물건 구멍은 한 사람의 마스크 안에 있어 테두리가 모두 같은 사람입니다.
+      if (frameSides !== 0 && (mixed || (frameSides & (frameSides - 1)) !== 0)) continue;
+
+      // 기준은 이 덩어리를 품은 사람 박스입니다. 겹쳐 선 두 사람처럼 여러
+      // 박스가 품으면 작은 쪽을 씁니다. 어느 박스에도 안 들면 상한을 두지
+      // 않습니다 — 물건 박스 안쪽이라 메우는 편이 맞습니다.
+      let limit = rectArea;
+      if (maxFraction > 0) {
+        const cx = sumX / tail, cy = sumY / tail;
+        let ref = 0;
+        for (const b of boxes) {
+          if (cx < b.x1 || cx > b.x2 || cy < b.y1 || cy > b.y2) continue;
+          const area = (b.x2 - b.x1) * (b.y2 - b.y1);
+          if (ref === 0 || area < ref) ref = area;
+        }
+        if (ref > 0) limit = ref * maxFraction;
+      }
+
+      if (tail <= limit) {
+        for (let k = 0; k < tail; k++) alpha[stack[k]] = 255;
+      }
+    }
+  }
+}
+
+/**
+ * 알파 침식 (분리형 min 필터).
+ *
+ * 가로·세로로 한 번씩 걸면 (2r+1)² 정사각 침식과 결과가 같으면서 비용은
+ * O(n·r) 두 번으로 끝납니다. 격자 밖은 가장자리 값을 연장해서 읽습니다.
+ * 0 으로 두면 프레임에 걸친 인물의 잘린 단면까지 깎여 그 변을 따라
+ * 얇은 배경 선이 생깁니다.
+ *
+ * @param {Uint8Array} alpha - 입출력 버퍼 (제자리 갱신)
+ * @param {Uint8Array} tmp - 가로 패스 결과를 받을 같은 크기의 버퍼
+ * @param {number} size - 한 변의 칸 수
+ * @param {number} radius - 침식 깊이 (칸)
+ */
+function erodeAlpha(alpha, tmp, size, radius) {
+  if (radius <= 0) return;
+  const lastIdx = size - 1;
+
+  for (let y = 0; y < size; y++) {
+    const row = y * size;
+    for (let x = 0; x < size; x++) {
+      const x0 = x - radius > 0 ? x - radius : 0;
+      const x1 = x + radius < lastIdx ? x + radius : lastIdx;
+      let m = 255;
+      for (let k = x0; k <= x1; k++) {
+        const v = alpha[row + k];
+        if (v < m) m = v;
+      }
+      tmp[row + x] = m;
+    }
+  }
+
+  for (let y = 0; y < size; y++) {
+    const y0 = (y - radius > 0 ? y - radius : 0) * size;
+    const y1 = (y + radius < lastIdx ? y + radius : lastIdx) * size;
+    const row = y * size;
+    for (let x = 0; x < size; x++) {
+      let m = 255;
+      for (let k = y0; k <= y1; k += size) {
+        const v = tmp[k + x];
+        if (v < m) m = v;
+      }
+      alpha[row + x] = m;
+    }
+  }
+}
+
+/**
  * 객체 추적을 위한 오버레이를 그립니다.
  * 디버깅용으로 pid_controller.py의 데드존, 바운딩박스, 중심점을 함께 그립니다.
  * @param {CanvasRenderingContext2D} ctx - 그릴 캔버스 컨텍스트
@@ -803,6 +1174,26 @@ async function _aiLoop(src, generation) {
           d[i + 1] = 255;
           d[i + 2] = 255;
         }
+        // 침식과 구멍 메우기는 이웃 칸을 읽어야 하므로 RGBA 인터리브가 아닌
+        // 평면 버퍼가 필요합니다. 매 프레임 할당하지 않도록 여기서 잡습니다.
+        src._maskAlpha = new Uint8Array(MASK_RES * MASK_RES);
+        src._maskAlphaTmp = new Uint8Array(MASK_RES * MASK_RES);
+        src._maskVisited = new Uint8Array(MASK_RES * MASK_RES);
+        src._maskStack = new Int32Array(MASK_RES * MASK_RES);
+        src._maskProb = new Float32Array(MASK_RES * MASK_RES);
+        // 경계 보정용. 대상 박스 범위만 처리하므로 실제로 쓰는 구간은
+        // 이보다 작지만, 프레임마다 크기가 달라져 최대 크기로 잡아 둡니다.
+        src._refine = REFINE_EDGE ? {
+          guide: new Float32Array(MASK_RES * MASK_RES),
+          sub: new Float32Array(MASK_RES * MASK_RES),
+          t1: new Float32Array(MASK_RES * MASK_RES),
+          t2: new Float32Array(MASK_RES * MASK_RES),
+          meanI: new Float32Array(MASK_RES * MASK_RES),
+          meanP: new Float32Array(MASK_RES * MASK_RES),
+          boxA: new Float32Array(MASK_RES * MASK_RES),
+          boxB: new Float32Array(MASK_RES * MASK_RES),
+          integral: new Float64Array((MASK_RES + 1) * (MASK_RES + 1)),
+        } : null;
       }
 
       if (src.bgRemoval) {
@@ -812,13 +1203,26 @@ async function _aiLoop(src, generation) {
           people, state.targetPersonIds, frameId, output0.length / NUM_CHANNELS,
         );
 
+        // 몸 안에 들어와 있는 물건은 person 마스크에 포함되지 않아 구멍이
+        // 됩니다. 같은 추론에서 이미 나온 그 물건의 마스크를 함께 살립니다.
+        const heldObjects = selectHeldObjects(
+          collectHeldObjectDetections(output0, NUM_CHANNELS), bgTargets,
+        );
+        const maskSources = bgTargets.concat(heldObjects);
+
         if (bgTargets.length === 0) {
           // 사람 미감지 시 전체 투명
           for (let j = 3; j < md.length; j += 4) md[j] = 0;
         } else {
           const combinedMask = new Float32Array(nProto);
+          // 칸마다 가장 높은 확률을 준 사람의 번호입니다. 구멍 메우기가 구멍이
+          // 한 사람 안에 있는지 두 사람 사이에 있는지 가를 때 씁니다.
+          // 물건은 누구 것도 아니므로 -1 입니다.
+          const owner = new Int8Array(nProto).fill(-1);
 
-          for (const target of bgTargets) {
+          for (let t = 0; t < maskSources.length; t++) {
+            const target = maskSources[t];
+            const who = t < bgTargets.length ? t : -1;
             const coeffs = new Float32Array(32);
             for (let c = 0; c < 32; c++) {
               coeffs[c] = output0[target.anc * NUM_CHANNELS + COEFF_START + c];
@@ -832,12 +1236,16 @@ async function _aiLoop(src, generation) {
               const prob = 1 / (1 + Math.exp(-sum)); // sigmoid
               if (prob > combinedMask[p]) {
                 combinedMask[p] = prob;
+                owner[p] = who;
               }
             }
           }
 
           // 각 대상별 바운딩 박스를 160 해상도로 변환하여 배열에 저장
-          const boxes160 = bgTargets.map((target) => {
+          //
+          // 물건 박스도 함께 넣어야 합니다. 사람 박스만으로 자르면 팔 밖으로
+          // 나온 부분이 도로 잘려 위에서 합친 물건 마스크가 무의미해집니다.
+          const boxes160 = maskSources.map((target) => {
             return {
               x1: Math.floor(target.box.x1 * (PROTO / 640)),
               y1: Math.floor(target.box.y1 * (PROTO / 640)),
@@ -846,19 +1254,42 @@ async function _aiLoop(src, generation) {
             };
           });
 
-          // ── 소프트 알파 페더링 ──────────────────────────────────────
-          // 하한이 컷오프입니다. 이 확률 이하는 완전 투명입니다.
+          // 대상 박스를 덮는 마스크 칸 범위입니다. 경계 보정과 구멍 메우기가
+          // 모두 이 범위만 훑습니다. 박스 밖은 어차피 알파 0 이라 결과가 같고,
+          // 1080p 에서 처리량이 크게 줄어듭니다.
           //
-          // 0.40 으로 두면 모델이 "배경 쪽에 가깝다"고 본 0.40~0.50 구간까지
-          // 알파 0.2~0.4 로 남아, 검어야 할 곳에 배경이 어렴풋이 비칩니다.
-          // 원래의 하드 이진화 기준이던 0.75 로 되돌립니다.
-          //
-          // 상한은 1.0 으로 둘 수 없습니다. sigmoid 는 1 에 도달하지 못하므로
-          // 인물 내부가 영구히 반투명해집니다. 0.85 면 그 위는 모두 불투명입니다.
-          const FADE_LO = 0.75;
-          const FADE_HI = 0.85;
-          const FADE_SPAN = FADE_HI - FADE_LO;
+          // proto 칸 → 마스크 칸 (아래 램프 루프의 중심 정렬을 되돌린 식).
+          // 테두리가 박스 바깥의 투명 구간에 놓이도록 두 칸 넓힙니다.
+          let bx1 = PROTO, by1 = PROTO, bx2 = -1, by2 = -1;
+          for (const box of boxes160) {
+            if (box.x1 < bx1) bx1 = box.x1;
+            if (box.y1 < by1) by1 = box.y1;
+            if (box.x2 > bx2) bx2 = box.x2;
+            if (box.y2 > by2) by2 = box.y2;
+          }
+          const toMask = (p) => (p + 0.5) / P2M - 0.5;
+          const PAD = 2;
+          const rect = {
+            x1: Math.max(0, Math.floor(toMask(bx1)) - PAD),
+            y1: Math.max(0, Math.floor(toMask(by1)) - PAD),
+            x2: Math.min(MASK_RES - 1, Math.ceil(toMask(bx2)) + PAD),
+            y2: Math.min(MASK_RES - 1, Math.ceil(toMask(by2)) + PAD),
+          };
+
+          // 구멍 넓이 상한의 기준이 될 사람 박스입니다(마스크 격자 기준).
+          // 물건 박스는 넣지 않습니다. 이미 마스크로 합쳐져 그 안에는 구멍이
+          // 남지 않고, 작은 박스가 기준이 되면 상한만 엉뚱하게 좁아집니다.
+          const personBoxes = bgTargets.map((t) => ({
+            x1: toMask(t.box.x1 * (PROTO / 640)),
+            y1: toMask(t.box.y1 * (PROTO / 640)),
+            x2: toMask(t.box.x2 * (PROTO / 640)),
+            y2: toMask(t.box.y2 * (PROTO / 640)),
+          }));
+
+          const FADE_SPAN = FADE.hi - FADE.lo;
           const last = PROTO - 1;
+          const alpha = src._maskAlpha;
+          const probField = src._maskProb;
 
           for (let my = 0; my < MASK_RES; my++) {
             // 마스크 격자 → proto 연속 좌표 (픽셀 중심 정렬)
@@ -875,9 +1306,9 @@ async function _aiLoop(src, generation) {
             const fy = gy - y0;
             const r0 = y0 * PROTO;
             const r1 = (y0 + 1 < PROTO ? y0 + 1 : last) * PROTO;
-            let rowOut = my * MASK_RES * 4 + 3;
+            let rowOut = my * MASK_RES;
 
-            for (let mx = 0; mx < MASK_RES; mx++, rowOut += 4) {
+            for (let mx = 0; mx < MASK_RES; mx++, rowOut++) {
               let gx = (mx + 0.5) * P2M - 0.5;
               if (gx < 0) gx = 0;
               else if (gx > last) gx = last;
@@ -897,7 +1328,7 @@ async function _aiLoop(src, generation) {
                 }
               }
               if (!inAnyBox) {
-                md[rowOut] = 0;
+                probField[rowOut] = 0;
                 continue;
               }
 
@@ -908,12 +1339,84 @@ async function _aiLoop(src, generation) {
                 combinedMask[r0 + x0] * (1 - fx) + combinedMask[r0 + x1] * fx;
               const bot =
                 combinedMask[r1 + x0] * (1 - fx) + combinedMask[r1 + x1] * fx;
-              const prob = top * (1 - fy) + bot * fy;
-
-              const a = (prob - FADE_LO) / FADE_SPAN;
-              md[rowOut] = a <= 0 ? 0 : a >= 1 ? 255 : (a * 255) | 0;
+              probField[rowOut] = top * (1 - fy) + bot * fy;
             }
           }
+
+          // ── 경계를 영상의 실제 윤곽에 붙이기 ─────────────────────────
+          // 램프보다 먼저입니다. guided filter 는 연속적인 확률장을 받아야
+          // 하고, 알파로 자른 뒤에는 되돌릴 정보가 남아 있지 않습니다.
+          if (REFINE_EDGE) {
+            const rf = src._refine;
+            const rw = rect.x2 - rect.x1 + 1;
+            const rh = rect.y2 - rect.y1 + 1;
+
+            // guide 는 모델 입력 캔버스에서 만듭니다. 이미 CPU 에 올라와 있는
+            // 픽셀이라 GPU readback 이 추가로 들지 않고, 마스크와 같은
+            // 정사각 격자라 좌표계도 그대로 맞습니다.
+            const gScale = MODEL_SIZE / MASK_RES;
+            for (let y = 0; y < rh; y++) {
+              let sy = ((y + rect.y1) * gScale) | 0;
+              if (sy > MODEL_SIZE - 1) sy = MODEL_SIZE - 1;
+              const srcRow = sy * MODEL_SIZE;
+              const dstRow = y * rw;
+              const probRow = (y + rect.y1) * MASK_RES + rect.x1;
+              for (let x = 0; x < rw; x++) {
+                let sx = ((x + rect.x1) * gScale) | 0;
+                if (sx > MODEL_SIZE - 1) sx = MODEL_SIZE - 1;
+                const p = (srcRow + sx) * 4;
+                rf.guide[dstRow + x] =
+                  (0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]) / 255;
+                rf.sub[dstRow + x] = probField[probRow + x];
+              }
+            }
+
+            guidedRefine(rf.guide, rf.sub, rw, rh, REFINE_RADIUS, REFINE_EPS, rf);
+
+            for (let y = 0; y < rh; y++) {
+              const dstRow = (y + rect.y1) * MASK_RES + rect.x1;
+              const subRow = y * rw;
+              for (let x = 0; x < rw; x++) probField[dstRow + x] = rf.sub[subRow + x];
+            }
+          }
+
+          // ── 소프트 알파 페더링 ──────────────────────────────────────
+          // 하한이 컷오프입니다. 이 확률 이하는 완전 투명입니다. 상한을 1.0
+          // 으로 둘 수는 없습니다. sigmoid 는 1 에 도달하지 못하므로 인물
+          // 내부가 영구히 반투명해집니다.
+          for (let i = 0; i < probField.length; i++) {
+            const a = (probField[i] - FADE.lo) / FADE_SPAN;
+            alpha[i] = a <= 0 ? 0 : a >= 1 ? 255 : (a * 255) | 0;
+          }
+
+          // ── 윤곽 안쪽 구멍 메우기 ────────────────────────────────────
+          // 침식보다 먼저 해야 합니다. 침식은 min 필터라 구멍을 오히려
+          // 넓히므로, 구멍을 먼저 없애야 침식이 바깥 경계에만 작용합니다.
+          // 경계 보정이 어두운 옷 안쪽 같은 저대비 구간에서 알파를 끌어내려
+          // 몸통에 점처럼 구멍을 남기는 일이 있는데, 그것도 여기서 메워집니다.
+          if (FILL_ENCLOSED_HOLES) {
+            // 마스크 칸 → 가장 가까운 proto 칸의 주인 (램프 루프와 같은 중심 정렬)
+            const ownerOf = (i) => {
+              let gx = Math.round(((i % MASK_RES) + 0.5) * P2M - 0.5);
+              let gy = Math.round((((i / MASK_RES) | 0) + 0.5) * P2M - 0.5);
+              if (gx < 0) gx = 0; else if (gx > last) gx = last;
+              if (gy < 0) gy = 0; else if (gy > last) gy = last;
+              return owner[gy * PROTO + gx];
+            };
+            fillEnclosedHoles(
+              alpha, src._maskVisited, src._maskStack, MASK_RES, rect,
+              personBoxes, MAX_HOLE_FRACTION, ownerOf,
+            );
+          }
+
+          // ── 경계 침식 ────────────────────────────────────────────────
+          // 카메라가 찍은 윤곽선 1~2px 는 인물 색과 원래 배경색이 이미 섞인
+          // 픽셀입니다. 마스크가 완벽해도 그대로 얹으면 교체 배경 위에
+          // 원래 배경색 테두리가 남습니다. 알파를 한 칸 깎아 그 구간을
+          // 잘라냅니다. 마스크 한 칸은 출력에서 3px 안팎입니다.
+          erodeAlpha(alpha, src._maskAlphaTmp, MASK_RES, ERODE_CELLS);
+
+          for (let i = 0, j = 3; i < alpha.length; i++, j += 4) md[j] = alpha[i];
         }
         src._maskCtx.putImageData(src._maskImg, 0, 0);
       }
@@ -948,14 +1451,17 @@ async function _aiLoop(src, generation) {
         fgCtx.globalCompositeOperation = "source-over";
       }
 
-      // ── blur+contrast 메타볼 이펙트 ─────────────────────────────────
-      // 전경 합성 직전 미세 블러로 엣지 픽셀을 번지게 한 뒤
-      // contrast로 다시 당겨줌으로써 잔여 계단 패턴을 추가로 억제합니다.
-      if (src.bgRemoval) {
-        src.bgCtx.filter = "blur(1px) contrast(1.3)";
-      }
+      // 여기에 blur(1px) contrast(1.3) 을 걸면 안 됩니다.
+      //
+      // 블러는 RGB 뿐 아니라 알파까지 번지게 해서 경계 양옆으로 3px 가까운
+      // 반투명 띠를 만듭니다. 그리고 CSS contrast 는 프리멀티플라이드가 아닌
+      // RGB 에 적용되므로, 하필 그 띠에서만 색이 0.5 기준으로 밀려나
+      // 윤곽을 따라 밝거나 어두운 링이 생깁니다. 인물 전체도 함께 흐려지고
+      // 대비가 올라갑니다.
+      //
+      // 마스크에만 거는 방법도 재봤지만 소용이 없었습니다. 자세한 수치는
+      // FADE 주석에 있습니다. 계단 억제는 페더링과 침식이 대신합니다.
       src.bgCtx.drawImage(fgCv, 0, 0);
-      src.bgCtx.filter = "none";
 
       // 바운딩박스, 데드존, 중심점 디버그 그리기
       if (src.objectTracking) {

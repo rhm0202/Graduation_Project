@@ -450,6 +450,22 @@ export const TRACKING_POLICY = Object.freeze({
   maxControlAgeMs: 250,
 });
 
+/**
+ * 들고 있는 물건을 사람 마스크에 합칠 때의 기준입니다.
+ *
+ * containment 는 IoU 가 아니라 "물건 박스가 사람 박스 안에 든 비율" 입니다.
+ * IoU 로 재면 사람보다 훨씬 작은 물건은 항상 값이 낮게 나와 걸러집니다.
+ * 뒤쪽에 걸친 의자·소파까지 딸려오지 않도록 0.7 로 둡니다.
+ *
+ * maxObjects 는 비용 상한입니다. 물건 하나마다 160×160×32 곱셈이 추가되므로
+ * 프레임에 잡힌 모든 물건을 합치면 추론보다 이 루프가 더 비싸집니다.
+ */
+export const HELD_OBJECT_POLICY = Object.freeze({
+  scoreThreshold: 0.5,
+  containment: 0.7,
+  maxObjects: 4,
+});
+
 function validBox(box) {
   return box && [box.x1, box.y1, box.x2, box.y2].every(Number.isFinite)
     && box.x2 > box.x1 && box.y2 > box.y1;
@@ -484,6 +500,57 @@ export function collectPersonDetections(output, channels = 38) {
     });
   }
   return detections;
+}
+
+/**
+ * 사람이 아닌 클래스의 검출입니다. 트래커에는 넣지 않습니다.
+ *
+ * 이 모델은 COCO 80종 세그멘테이션 모델이라 컵·병·노트북의 마스크 계수를
+ * 이미 같은 추론에서 뽑아 놓습니다. 추가 추론 없이 그 계수만 가져옵니다.
+ */
+export function collectHeldObjectDetections(output, channels = 38) {
+  if (channels !== 38 || !output || output.length % channels !== 0) {
+    throw new Error("Expected YOLO26-seg detections with 38 channels");
+  }
+  const detections = [];
+  const size = TRACKING_POLICY.modelSize;
+  for (let offset = 0; offset < output.length; offset += channels) {
+    const score = output[offset + 4];
+    const classId = output[offset + 5];
+    if (classId === 0 || !Number.isFinite(classId) || !Number.isFinite(score)
+      || score < HELD_OBJECT_POLICY.scoreThreshold || score > 1) continue;
+    const values = Array.from(output.slice(offset, offset + 4));
+    if (!values.every(Number.isFinite)) continue;
+    const [x1, y1, x2, y2] = values.map(value => Math.max(0, Math.min(size, value)));
+    const box = { x1, y1, x2, y2 };
+    if (validBox(box)) detections.push({ anc: offset / channels, classId, score, box });
+  }
+  return detections;
+}
+
+/**
+ * 마스크 대상의 몸 안에 들어와 있는 물건만 고릅니다.
+ *
+ * 사람 마스크는 픽셀 단위로 "사람인가"를 판정하므로, 몸 앞에 든 물건은
+ * person 이 아니라는 이유로 알파 0 이 되어 몸 한가운데에 구멍이 뚫립니다.
+ * 그 물건의 자체 마스크를 함께 살려 구멍을 막습니다.
+ */
+export function selectHeldObjects(objects, maskTargets) {
+  if (!objects.length || !maskTargets.length) return [];
+  const inside = objects.filter((obj) => {
+    const area = (obj.box.x2 - obj.box.x1) * (obj.box.y2 - obj.box.y1);
+    if (!(area > 0)) return false;
+    return maskTargets.some((target) => {
+      if (!validBox(target.box)) return false;
+      const ix = Math.min(obj.box.x2, target.box.x2) - Math.max(obj.box.x1, target.box.x1);
+      const iy = Math.min(obj.box.y2, target.box.y2) - Math.max(obj.box.y1, target.box.y1);
+      if (ix <= 0 || iy <= 0) return false;
+      return (ix * iy) / area >= HELD_OBJECT_POLICY.containment;
+    });
+  });
+  return inside
+    .sort((a, b) => b.score - a.score)
+    .slice(0, HELD_OBJECT_POLICY.maxObjects);
 }
 
 /** A predicted box has no segmentation coefficients for the current frame. */
