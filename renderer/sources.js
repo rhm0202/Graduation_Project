@@ -17,8 +17,11 @@ import { state, isElectron } from "./state.js";
 import { sendObjectCoords, sendTrackingState } from "./rpi.js";
 import {
   ByteTracker, collectPersonDetections, selectMaskTracks, selectControlTrack,
-  controlPoint, videoFrameKey,
+  controlPoint, videoFrameKey, TRACKING_POLICY,
 } from "./byteTracker.js";
+
+// 검출 좌표가 사는 정사각 좌표계의 한 변. 프레임 전체에 선형 대응합니다.
+const TRACKING_FRAME_SIZE = TRACKING_POLICY.modelSize;
 
 const globalTracker = new ByteTracker();
 let trackerSourceId = null;
@@ -171,10 +174,11 @@ function _makeSource(overrides) {
 export async function addWebcamSource(deviceId, label) {
   const request = ++_webcamRequest;
   try {
-    const constraints = {
-      video: deviceId ? { deviceId: { exact: deviceId } } : true,
-      audio: true,
-    };
+    // 해상도를 지정하지 않으면 Chromium 이 640x480 으로 잡습니다. RPi 카메라가
+    // 1080p 이므로 여기서도 맞춰야 배포 환경과 같은 조건에서 검증됩니다.
+    const video = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    if (deviceId) video.deviceId = { exact: deviceId };
+    const constraints = { video, audio: true };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     if (request !== _webcamRequest) {
       stream.getTracks().forEach(track => track.stop());
@@ -509,6 +513,15 @@ function _stopAiLoop(src) {
   src._maskCanvas = null;
   src._maskCtx = null;
   src._maskImg = null;
+  src._matteCanvas = null;
+  src._matteCtx = null;
+  src._matteData = null;
+  src._matteBroken = false;
+  src._matteReady = false;
+  src._matteCount = 0;
+  src._alphaPrev = null;
+  src._alphaWarm = false;
+  _disposeMatteState(src);
 
   // Only the owner can clear IDs. Deleting an unrelated source must not do so.
   if (trackerSourceId === src.id) {
@@ -617,6 +630,212 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
   });
 }
 
+/**
+ * 매팅 알파를 src._maskCanvas 에 채웁니다.
+ *
+ * 매팅 모델은 화면의 모든 인물을 한 덩어리로 뽑습니다. 선택된 사람만 남기는
+ * 것은 ByteTrack 이 준 박스로 알파를 잘라 되살립니다.
+ */
+const MATTE_LONG_SIDE = 640;   // 알파 계산 해상도 (긴 변). 출력은 여기서 확대됩니다.
+// 512 로 줄이면 몇 ms 빨라지지만 메고 있는 가방이 알파에서 빠집니다.
+
+/**
+ * RVM 의 downsample_ratio 는 인코더가 볼 해상도를 정합니다. 저자 권장값은
+ * 512p 에서 1.0, 720p 0.375, 1080p 0.25, 4K 0.125 — 즉 내부 처리를 512px
+ * 언저리로 맞추는 값입니다. 입력을 줄여 놓고 비율까지 낮추면 인코더가 보는
+ * 크기가 손가락 틈보다 커져 그 사이 배경이 살아남습니다.
+ */
+const MATTE_ENCODER_PX = 320;  // 인코더가 볼 긴 변. 낮추면 빠르고 얇은 틈이 뭉갭니다.
+
+/**
+ * 알파 시간 평활화 계수. 가방처럼 모델이 애매하게 보는 영역은 프레임마다
+ * 포함/제외가 뒤집혀 깜빡입니다. 직전 알파와 섞어 그 진동을 눌러줍니다.
+ * 1 이면 평활화 없음, 낮출수록 안정되지만 움직임에 마스크가 뒤처집니다.
+ */
+// 12fps 에서 0.5 로 섞으면 알파가 자리잡는 데 250ms 가 걸려 잔상이 심하게
+// 남습니다. 프레임을 먼저 올린 뒤 다시 볼 값이라 지금은 꺼 둡니다.
+const ALPHA_SMOOTHING = 1;
+
+// 깜빡임 원인 분리용. true 면 RVM 순환 상태를 넘기지 않고 매 프레임 독립 추론.
+// 순환 상태를 넘기지 않고 매 프레임 독립 추론할지. 측정상 켜나 끄나
+// 경계 churn 이 같았지만(0.23 vs 0.24), 모델 본래 사용법대로 둡니다.
+const MATTE_STATELESS = false;
+
+function matteRatio(longSide) {
+  return Math.min(1, MATTE_ENCODER_PX / longSide);
+}
+
+async function _applyMatte(src, source, w, h, targets, people, tracked) {
+  const session = state.mattingSession;
+  if (!session || src._matteBroken) return false;
+
+  const scale = Math.min(1, MATTE_LONG_SIDE / Math.max(w, h));
+  const mw = Math.max(2, Math.round(w * scale));
+  const mh = Math.max(2, Math.round(h * scale));
+
+  if (!src._matteCanvas || src._matteCanvas.width !== mw || src._matteCanvas.height !== mh) {
+    src._matteCanvas = src._matteCanvas || document.createElement("canvas");
+    src._matteCanvas.width = mw;
+    src._matteCanvas.height = mh;
+    src._matteCtx = src._matteCanvas.getContext("2d", { willReadFrequently: true });
+    src._matteData = new Float32Array(3 * mw * mh);
+    src._alphaPrev = new Float32Array(mw * mh);
+    src._alphaWarm = false;
+    // 순환 상태는 공간 크기에 묶여 있으므로 해상도가 바뀌면 버립니다.
+    _disposeMatteState(src);
+    src._maskCanvas = document.createElement("canvas");
+    src._maskCanvas.width = mw;
+    src._maskCanvas.height = mh;
+    src._maskCtx = src._maskCanvas.getContext("2d");
+    src._maskImg = src._maskCtx.createImageData(mw, mh);
+    const d = src._maskImg.data;
+    for (let i = 0; i < d.length; i += 4) { d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; }
+  }
+
+  // 전경 캔버스에서 그립니다. vid 에서 다시 읽으면 추론에 걸린 시간만큼
+  // 뒤의 프레임이 들어와 마스크와 전경의 시점이 어긋납니다.
+  src._matteCtx.drawImage(source, 0, 0, mw, mh);
+  const pixels = src._matteCtx.getImageData(0, 0, mw, mh).data;
+  const plane = mw * mh;
+  const tensorData = src._matteData;
+  const INV_255 = 0.003921568627451;
+  for (let i = 0, p = 0; i < plane; i++, p += 4) {
+    tensorData[i] = pixels[p] * INV_255;
+    tensorData[plane + i] = pixels[p + 1] * INV_255;
+    tensorData[2 * plane + i] = pixels[p + 2] * INV_255;
+  }
+
+  const previous = MATTE_STATELESS ? null : src._rvmState;
+  const emptyState = () => new ort.Tensor("float32", new Float32Array(1), [1, 1, 1, 1]);
+  const feeds = {
+    src: new ort.Tensor("float32", tensorData, [1, 3, mh, mw]),
+    r1i: previous ? previous[0] : emptyState(),
+    r2i: previous ? previous[1] : emptyState(),
+    r3i: previous ? previous[2] : emptyState(),
+    r4i: previous ? previous[3] : emptyState(),
+    downsample_ratio: new ort.Tensor("float32",
+      new Float32Array([matteRatio(Math.max(mw, mh))]), [1]),
+  };
+
+  let results;
+  const started = performance.now();
+  try {
+    results = await session.run(feeds);
+    src._matteMs = performance.now() - started;
+    src._matteCount = (src._matteCount || 0) + 1;
+    if (src._matteCount <= 5 || src._matteCount % 30 === 0) {
+      console.log(`[Matte] #${src._matteCount} ${mw}x${mh} `
+        + `ratio=${matteRatio(Math.max(mw, mh)).toFixed(2)} `
+        + `${(performance.now() - started).toFixed(0)}ms state=${previous ? "reuse" : "init"}`);
+    }
+  } catch (e) {
+    // 한 번 실패한 원인은 다음 프레임에도 그대로입니다. 매 프레임 되풀이하면
+    // 로그만 쌓이고 같은 백엔드를 쓰는 다른 세션까지 흔들립니다.
+    console.error("[Matte] 추론 오류 — 매팅을 끕니다:", e);
+    _disposeMatteState(src);
+    src._matteBroken = true;
+    return false;
+  }
+
+  // 순환 상태를 다음 프레임으로 넘깁니다. 단일 프레임으로 돌리면 인물이
+  // 반투명해지는데, 상태가 이어지면 프레임이 지날수록 안정됩니다.
+  src._rvmState = [results.r1o, results.r2o, results.r3o, results.r4o];
+  if (previous) for (const tensor of previous) tensor.dispose?.();
+
+  const alpha = results.pha.data;
+  const mask = src._maskImg.data;
+  const smoothed = src._alphaPrev;
+  const warm = src._alphaWarm;
+  // churn = 직전 프레임 대비 알파 변화량. 깜빡임의 크기를 그대로 나타냅니다.
+  // edgeChurn 은 경계(0.1~0.9) 픽셀만 본 값으로, 인물 내부의 안정성과
+  // 경계의 진동을 분리합니다.
+  let churn = 0, edgeChurn = 0, edgeCount = 0;
+  for (let i = 0, a = 3; i < plane; i++, a += 4) {
+    const raw = alpha[i];
+    if (warm) {
+      const delta = Math.abs(raw - smoothed[i]);
+      churn += delta;
+      if ((raw > 0.1 && raw < 0.9) || (smoothed[i] > 0.1 && smoothed[i] < 0.9)) {
+        edgeChurn += delta; edgeCount++;
+      }
+    }
+    const value = warm ? smoothed[i] + (raw - smoothed[i]) * ALPHA_SMOOTHING : raw;
+    smoothed[i] = value;
+    mask[a] = value <= 0 ? 0 : value >= 1 ? 255 : (value * 255) | 0;
+  }
+  if (warm && src._matteCount % 30 === 0) {
+    console.log(`[Churn] 전체 ${(churn / plane).toFixed(4)} `
+      + `경계 ${(edgeChurn / Math.max(1, edgeCount)).toFixed(4)} `
+      + `경계픽셀 ${(100 * edgeCount / plane).toFixed(1)}% `
+      + `stateless=${MATTE_STATELESS}`);
+  }
+  src._alphaWarm = true;
+  // RVM 은 30fps 연속 영상을 가정합니다. 프레임 간격이 들쭉날쭉하면 순환
+  // 상태가 서서히 발산해 알파가 0 으로 무너지고, 화면 전체가 깜빡입니다.
+  // 사람이 추적되고 있는데 알파가 비면 상태만 버리고 다음 프레임에 새로
+  // 시작합니다. 한 프레임만 흐리고 곧 회복됩니다.
+  let sum = 0;
+  const step = 7;
+  for (let i = 0; i < plane; i += step) sum += alpha[i];
+  const mean = sum / Math.ceil(plane / step);
+  if (src._matteCount % 30 === 0) {
+    console.log(`[Alpha] 평균 ${mean.toFixed(3)} 추적 ${tracked}명`);
+  }
+  if (mean < 0.02 && tracked > 0) {
+    src._matteCollapse = (src._matteCollapse || 0) + 1;
+    console.warn(`[Alpha] 붕괴 감지 (평균 ${mean.toFixed(4)}) — 순환 상태 초기화 #${src._matteCollapse}`);
+    _disposeMatteState(src);
+    src._alphaWarm = false;
+  }
+  src._maskCtx.globalCompositeOperation = "source-over";
+  src._maskCtx.putImageData(src._maskImg, 0, 0);
+
+  // 선택된 사람의 박스로 잘라내면 안 됩니다. 추적 박스는 인물보다 작을 때가
+  // 있고 프레임마다 흔들리므로, 박스 밖으로 나온 가방이 깜빡이고 경계가
+  // 직선으로 잘려 벽처럼 보입니다. 선택되지 않은 사람만 지워서 필요한 것만
+  // 덜어냅니다. 혼자 있으면 아무것도 지우지 않습니다.
+  if (targets.length === 0) {
+    src._maskCtx.globalCompositeOperation = "destination-in";
+    src._maskCtx.clearRect(0, 0, mw, mh);
+    src._maskCtx.globalCompositeOperation = "source-over";
+  } else {
+    const keep = new Set(targets.map((target) => target.id));
+    const others = (people || []).filter((track) =>
+      track.observed && track.detectionBox && !keep.has(track.id));
+    if (others.length !== src._lastOthers) {
+      src._lastOthers = others.length;
+      console.log(`[Clip] 지우는 인물 ${others.length}명 `
+        + `(추적 중 ${(people || []).length}명, 선택 ${targets.length}명) `
+        + `ids=[${others.map((t) => `${t.id}:${t.score.toFixed(2)}`).join(",")}]`);
+    }
+    if (others.length) {
+      const kx = mw / TRACKING_FRAME_SIZE;
+      const ky = mh / TRACKING_FRAME_SIZE;
+      src._maskCtx.globalCompositeOperation = "destination-out";
+      src._maskCtx.fillStyle = "#000000";
+      src._maskCtx.beginPath();
+      for (const track of others) {
+        const box = track.detectionBox;
+        src._maskCtx.rect(box.x1 * kx, box.y1 * ky,
+          (box.x2 - box.x1) * kx, (box.y2 - box.y1) * ky);
+      }
+      src._maskCtx.fill();
+      src._maskCtx.globalCompositeOperation = "source-over";
+    }
+  }
+
+  results.pha.dispose?.();
+  results.fgr.dispose?.();
+  feeds.src.dispose?.();
+  feeds.downsample_ratio.dispose?.();
+  return true;
+}
+
+function _disposeMatteState(src) {
+  if (src._rvmState) for (const tensor of src._rvmState) tensor.dispose?.();
+  src._rvmState = null;
+}
+
 async function _aiLoop(src, generation) {
   if (!_isAiCurrent(src, generation)) return;
   const vid = src.videoEl;
@@ -652,6 +871,7 @@ async function _aiLoop(src, generation) {
       state.sessionBusy = true;
       // Renderer-local sampling time, not the remote camera's exposure time.
       const timestampMs = performance.now();
+      const loopStarted = timestampMs;
       const frameId = ++src._aiFrameId;
       src._lastVideoFrameKey = frameKey;
       const MODEL_SIZE = 640;
@@ -660,7 +880,16 @@ async function _aiLoop(src, generation) {
       const tmpCtx = src._tmpCtx;
       if (tmp.width !== MODEL_SIZE) tmp.width = MODEL_SIZE;
       if (tmp.height !== MODEL_SIZE) tmp.height = MODEL_SIZE;
-      tmpCtx.drawImage(vid, 0, 0, MODEL_SIZE, MODEL_SIZE);
+      // 비율을 무시하고 정사각으로 늘리면 16:9 입력이 세로로 1.78 배 찌그러집니다.
+      // YOLO 는 비율을 유지한 회색 여백(레터박스)으로 학습되어, 찌그러진 입력에서는
+      // 손가락 같은 얇은 구조가 뭉치고 작은 물체의 오검출이 늘어납니다.
+      const fit = Math.min(MODEL_SIZE / w, MODEL_SIZE / h);
+      const fitW = w * fit, fitH = h * fit;
+      const padX = (MODEL_SIZE - fitW) / 2, padY = (MODEL_SIZE - fitH) / 2;
+      const viewport = { x: padX, y: padY, width: fitW, height: fitH };
+      tmpCtx.fillStyle = "#727272"; // YOLO 표준 여백색 (114,114,114)
+      tmpCtx.fillRect(0, 0, MODEL_SIZE, MODEL_SIZE);
+      tmpCtx.drawImage(vid, padX, padY, fitW, fitH);
       const tmpData = tmpCtx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE);
 
       // 전경 프레임을 여기서 붙잡아 둡니다.
@@ -695,7 +924,9 @@ async function _aiLoop(src, generation) {
         MODEL_SIZE,
       ]);
       const feeds = { [session.inputNames[0]]: inputTensor };
+      const detectStarted = performance.now();
       results = await session.run(feeds);
+      src._detectMs = performance.now() - detectStarted;
 
       // OFF→ON, source replacement and A→B→A invalidate in-flight results too.
       if (!_isAiCurrent(src, generation) || src.videoEl !== vid) return;
@@ -714,7 +945,7 @@ async function _aiLoop(src, generation) {
       const NUM_CHANNELS = out0Tensor.dims[2];
       const COEFF_START = 6;
 
-      const detectedPeople = collectPersonDetections(output0, NUM_CHANNELS);
+      const detectedPeople = collectPersonDetections(output0, NUM_CHANNELS, viewport);
       const people = globalTracker.update(detectedPeople, { timestampMs, frameId });
 
       // UI 표시 및 인덱스 매칭을 위해 현재 프레임 기준 X좌표 순(왼쪽부터)으로 정렬
@@ -764,158 +995,18 @@ async function _aiLoop(src, generation) {
         sendObjectCoords({ ...controlPoint(controlTarget.box), observedAtMs: timestampMs });
       }
 
-      // 배경 제거가 켜져 있을 때 다중 객체 마스크 적용
-      //
-      // Keep segmentation confidence separate from low-score track recovery.
-      // 달라진 것은 알파를 어디에 쓰느냐입니다. 이전에는 전체 해상도
-      // 프레임을 CPU로 내려(getImageData 8.3MB) 207만 픽셀의 알파를 직접
-      // 고치고 다시 올렸습니다(putImageData 8.3MB). 이제는 모델 해상도
-      // 알파 캔버스만 만들고 마지막 확대는 destination-in 합성으로
-      // 브라우저에 맡깁니다.
-      //
-      // 램프를 proto 해상도(160)에서 걸면 안 됩니다. 이후 12배 확대에서
-      // 클램프 구간이 선형으로 늘어나 경계가 5px → 12px로 뭉개집니다.
-      // 모델 해상도(640)에서 걸면 남은 확대가 3배뿐이라 이전 경계가
-      // 사실상 그대로 유지됩니다.
-      const PROTO = 160;
-      const nProto = PROTO * PROTO;
-
-      // 알파를 계산할 격자 크기를 출력 해상도에서 정합니다.
-      // 고정값(640)이면 1080p 에는 맞지만 4K 에서는 남은 확대가 6배로 커져
-      // 경계가 뭉개지고, VGA 에서는 출력 픽셀보다 많은 셀을 계산해 낭비입니다.
-      // 남은 확대를 항상 3배 안팎으로 유지합니다.
-      const MASK_RES = Math.max(
-        PROTO,
-        Math.min(1280, Math.round(Math.max(w, h) / 3)),
-      );
-      const P2M = PROTO / MASK_RES; // 마스크 격자 → proto 격자
-
-      // 해상도가 바뀌면 격자 크기도 바뀌므로 캔버스를 다시 만듭니다.
-      if (!src._maskCanvas || src._maskCanvas.width !== MASK_RES) {
-        src._maskCanvas = src._maskCanvas || document.createElement("canvas");
-        src._maskCanvas.width = MASK_RES;
-        src._maskCanvas.height = MASK_RES;
-        src._maskCtx = src._maskCanvas.getContext("2d");
-        src._maskImg = src._maskCtx.createImageData(MASK_RES, MASK_RES);
-        const d = src._maskImg.data;
-        for (let i = 0; i < d.length; i += 4) {
-          d[i] = 255;
-          d[i + 1] = 255;
-          d[i + 2] = 255;
-        }
-      }
-
+      // ── 알파 매트 ────────────────────────────────────────────────
+      // COCO 의 person 마스크는 들고 있는 가방을 "사람이 아님" 으로 지웁니다.
+      // 확률을 아무리 낮게 잘라도 복구되지 않아(0.40 에서도 그대로) 검출로
+      // 보완하려 했지만 가방 자체가 잡히지 않았습니다(최고 score 0.144).
+      // 매팅 모델은 전경 인물을 통째로 뽑으므로 소지품이 함께 남고, 알파가
+      // 입력 해상도로 나와 proto 160 격자의 손끝 뭉개짐도 사라집니다.
       if (src.bgRemoval) {
-        const md = src._maskImg.data;
-
         const bgTargets = selectMaskTracks(
           people, state.targetPersonIds, frameId, output0.length / NUM_CHANNELS,
         );
-
-        if (bgTargets.length === 0) {
-          // 사람 미감지 시 전체 투명
-          for (let j = 3; j < md.length; j += 4) md[j] = 0;
-        } else {
-          const combinedMask = new Float32Array(nProto);
-
-          for (const target of bgTargets) {
-            const coeffs = new Float32Array(32);
-            for (let c = 0; c < 32; c++) {
-              coeffs[c] = output0[target.anc * NUM_CHANNELS + COEFF_START + c];
-            }
-
-            for (let p = 0; p < nProto; p++) {
-              let sum = 0;
-              for (let c = 0; c < 32; c++) {
-                sum += coeffs[c] * protos[c * nProto + p];
-              }
-              const prob = 1 / (1 + Math.exp(-sum)); // sigmoid
-              if (prob > combinedMask[p]) {
-                combinedMask[p] = prob;
-              }
-            }
-          }
-
-          // 각 대상별 바운딩 박스를 160 해상도로 변환하여 배열에 저장
-          const boxes160 = bgTargets.map((target) => {
-            return {
-              x1: Math.floor(target.box.x1 * (PROTO / 640)),
-              y1: Math.floor(target.box.y1 * (PROTO / 640)),
-              x2: Math.ceil(target.box.x2 * (PROTO / 640)),
-              y2: Math.ceil(target.box.y2 * (PROTO / 640)),
-            };
-          });
-
-          // ── 소프트 알파 페더링 ──────────────────────────────────────
-          // 하한이 컷오프입니다. 이 확률 이하는 완전 투명입니다.
-          //
-          // 0.40 으로 두면 모델이 "배경 쪽에 가깝다"고 본 0.40~0.50 구간까지
-          // 알파 0.2~0.4 로 남아, 검어야 할 곳에 배경이 어렴풋이 비칩니다.
-          // 원래의 하드 이진화 기준이던 0.75 로 되돌립니다.
-          //
-          // 상한은 1.0 으로 둘 수 없습니다. sigmoid 는 1 에 도달하지 못하므로
-          // 인물 내부가 영구히 반투명해집니다. 0.85 면 그 위는 모두 불투명입니다.
-          const FADE_LO = 0.75;
-          const FADE_HI = 0.85;
-          const FADE_SPAN = FADE_HI - FADE_LO;
-          const last = PROTO - 1;
-
-          for (let my = 0; my < MASK_RES; my++) {
-            // 마스크 격자 → proto 연속 좌표 (픽셀 중심 정렬)
-            //
-            // proto 한 칸은 여러 출력 픽셀을 덮고, 그 칸의 값은 덮는 구간의
-            // 한가운데에 놓입니다. +0.5 / -0.5 없이 mx * P2M 로만 쓰면 칸을
-            // 구간 맨 앞에 놓게 되어 마스크 전체가 왼쪽·위로 밀립니다.
-            // GPU 의 MASK_RES → 출력 확대는 이미 중심 정렬이므로,
-            // 여기서 맞춰주면 종단 매핑이 해상도와 무관하게 정확해집니다.
-            let gy = (my + 0.5) * P2M - 0.5;
-            if (gy < 0) gy = 0;
-            else if (gy > last) gy = last;
-            const y0 = gy | 0;
-            const fy = gy - y0;
-            const r0 = y0 * PROTO;
-            const r1 = (y0 + 1 < PROTO ? y0 + 1 : last) * PROTO;
-            let rowOut = my * MASK_RES * 4 + 3;
-
-            for (let mx = 0; mx < MASK_RES; mx++, rowOut += 4) {
-              let gx = (mx + 0.5) * P2M - 0.5;
-              if (gx < 0) gx = 0;
-              else if (gx > last) gx = last;
-              const x0 = gx | 0;
-
-              // 박스 절단 (이전과 동일하게 proto 격자 기준으로 판정)
-              let inAnyBox = false;
-              for (const box of boxes160) {
-                if (
-                  x0 >= box.x1 &&
-                  x0 <= box.x2 &&
-                  y0 >= box.y1 &&
-                  y0 <= box.y2
-                ) {
-                  inAnyBox = true;
-                  break;
-                }
-              }
-              if (!inAnyBox) {
-                md[rowOut] = 0;
-                continue;
-              }
-
-              // 이중선형 보간으로 마스크 확률값 획득 (이전과 동일)
-              const fx = gx - x0;
-              const x1 = x0 + 1 < PROTO ? x0 + 1 : last;
-              const top =
-                combinedMask[r0 + x0] * (1 - fx) + combinedMask[r0 + x1] * fx;
-              const bot =
-                combinedMask[r1 + x0] * (1 - fx) + combinedMask[r1 + x1] * fx;
-              const prob = top * (1 - fy) + bot * fy;
-
-              const a = (prob - FADE_LO) / FADE_SPAN;
-              md[rowOut] = a <= 0 ? 0 : a >= 1 ? 255 : (a * 255) | 0;
-            }
-          }
-        }
-        src._maskCtx.putImageData(src._maskImg, 0, 0);
+        src._matteReady = await _applyMatte(
+          src, fgCv, w, h, bgTargets, people, people.filter((t) => t.observed).length);
       }
 
       // 배경 이미지/영상/색 합성 (배경 제거 ON일 때만 배경 교체)
@@ -937,25 +1028,27 @@ async function _aiLoop(src, generation) {
       // ── 전경 합성 ────────────────────────────────────────────────
       // fgCanvas 에는 추론 직전에 붙잡아 둔 프레임이 이미 들어 있습니다.
       // 여기서 다시 그리면 마스크와 시점이 어긋납니다.
-      if (src.bgRemoval) {
-        // 마스크 캔버스는 MASK_RES×MASK_RES 정사각이고, 전처리가 원본을
-        // 비율 보정 없이 정사각으로 늘려 넣었으므로 여기서 w×h 로 되돌려
-        // 늘리면 원본 프레임과 정렬됩니다. 전처리의 종횡비 처리를 바꾸면
-        // 이 확대도 함께 바꿔야 합니다.
+      if (src.bgRemoval && src._matteReady && src._maskCanvas) {
+        // 매트 캔버스는 프레임 전체를 축소한 것이라 그대로 w×h 로 늘리면
+        // 정렬됩니다. MATTE_LONG_SIDE 를 바꿔도 이 확대는 그대로입니다.
         fgCtx.imageSmoothingEnabled = true;
         fgCtx.globalCompositeOperation = "destination-in";
         fgCtx.drawImage(src._maskCanvas, 0, 0, w, h);
         fgCtx.globalCompositeOperation = "source-over";
       }
 
-      // ── blur+contrast 메타볼 이펙트 ─────────────────────────────────
-      // 전경 합성 직전 미세 블러로 엣지 픽셀을 번지게 한 뒤
-      // contrast로 다시 당겨줌으로써 잔여 계단 패턴을 추가로 억제합니다.
-      if (src.bgRemoval) {
-        src.bgCtx.filter = "blur(1px) contrast(1.3)";
-      }
+      // 예전에는 여기서 blur(1px) contrast(1.3) 으로 proto 160 격자의 계단
+      // 패턴을 문질러 가렸습니다. 매팅 알파는 입력 해상도로 나와 계단이 없고,
+      // 블러는 되찾은 손끝 디테일만 깎으므로 걷어냈습니다.
       src.bgCtx.drawImage(fgCv, 0, 0);
-      src.bgCtx.filter = "none";
+
+      src._loopCount = (src._loopCount || 0) + 1;
+      if (src._loopCount % 30 === 0) {
+        const mem = performance.memory
+          ? ` heap=${(performance.memory.usedJSHeapSize / 1048576).toFixed(0)}MB` : "";
+        console.log(`[Loop] #${src._loopCount} 총 ${(performance.now() - loopStarted).toFixed(0)}ms`
+          + ` (검출 ${(src._detectMs || 0).toFixed(0)}ms + 매팅 ${(src._matteMs || 0).toFixed(0)}ms)${mem}`);
+      }
 
       // 바운딩박스, 데드존, 중심점 디버그 그리기
       if (src.objectTracking) {

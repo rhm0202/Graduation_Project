@@ -27,6 +27,7 @@ export const state = {
   backgroundCtx: null,
   backgroundAnimationFrame: null,
   session: null,
+  mattingSession: null,   // RVM — 알파 매트 전담
 
   // 라즈베리파이
   piWebSocket: null,

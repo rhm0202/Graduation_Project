@@ -455,20 +455,34 @@ function validBox(box) {
     && box.x2 > box.x1 && box.y2 > box.y1;
 }
 
-/** YOLO26-seg [1, N, 38]: retain low scores for existing-track recovery. */
-export function collectPersonDetections(output, channels = 38) {
+/**
+ * YOLO26-seg [1, N, 38]: retain low scores for existing-track recovery.
+ *
+ * A letterboxed input preserves the frame's aspect ratio, so detections land
+ * inside a padded sub-rectangle of the square input. `viewport` describes that
+ * rectangle and maps them back onto the full square frame that tracking, motor
+ * control and the mask grid all already assume. Omit it for a stretched input.
+ */
+export function collectPersonDetections(output, channels = 38, viewport = null) {
   if (channels !== 38 || !output || output.length % channels !== 0) {
     throw new Error("Expected YOLO26-seg detections with 38 channels");
   }
   const detections = [];
   const size = TRACKING_POLICY.modelSize;
+  const padX = viewport ? viewport.x : 0;
+  const padY = viewport ? viewport.y : 0;
+  const scaleX = viewport ? size / viewport.width : 1;
+  const scaleY = viewport ? size / viewport.height : 1;
+  const toFrameX = value => Math.max(0, Math.min(size, (value - padX) * scaleX));
+  const toFrameY = value => Math.max(0, Math.min(size, (value - padY) * scaleY));
   for (let offset = 0; offset < output.length; offset += channels) {
     const score = output[offset + 4];
     if (output[offset + 5] !== 0 || !Number.isFinite(score)
       || score < BYTE_TRACKER_DEFAULTS.lowThreshold || score > 1) continue;
     const values = Array.from(output.slice(offset, offset + 4));
     if (!values.every(Number.isFinite)) continue;
-    const [x1, y1, x2, y2] = values.map(value => Math.max(0, Math.min(size, value)));
+    const x1 = toFrameX(values[0]), y1 = toFrameY(values[1]);
+    const x2 = toFrameX(values[2]), y2 = toFrameY(values[3]);
     const box = { x1, y1, x2, y2 };
     const margin = TRACKING_POLICY.frameEdgeMargin;
     const frameEdges = {

@@ -13,10 +13,30 @@ import { toggleBgRemovalForSelectedSource } from "./sources.js";
 export async function loadModel() {
   try {
     console.log("AI 모델 로딩 중");
-    state.session = await ort.InferenceSession.create("AI_models//yolo26l-seg.onnx", { executionProviders: ["webgpu", "webgl", "wasm"], },);
-    const inputs = state.session.inputNames.join(", ");
-    const outputs = state.session.outputNames.join(", ");
-    console.log(`AI 모델 로드 완료. 입력: [${inputs}] / 출력: [${outputs}]`);
+    // 매팅은 wasm 에서 돌기 때문에 스레드 수가 곧 속도입니다. 단일 스레드면
+    // 같은 모델이 Node 대비 5 배 느려집니다.
+    const threads = typeof SharedArrayBuffer !== "undefined"
+      ? Math.max(1, Math.min(8, navigator.hardwareConcurrency || 4)) : 1;
+    ort.env.wasm.numThreads = threads;
+    ort.env.wasm.simd = true;
+    console.log(`[ORT] wasm threads=${threads} simd=true `
+      + `SharedArrayBuffer=${typeof SharedArrayBuffer !== "undefined"} `
+      + `crossOriginIsolated=${globalThis.crossOriginIsolated}`);
+    const providers = ["webgpu", "webgl", "wasm"];
+    // 검출기는 박스와 ID 만 담당합니다. 마스크를 RVM 이 맡으므로 nano 로 충분하고,
+    // 같은 프레임에서 person 검출률은 large 와 동일했습니다(15/15).
+    state.session = await ort.InferenceSession.create(
+      "AI_models//yolo26n-seg.onnx", { executionProviders: providers });
+    console.log(`검출 모델 로드 완료. 입력: [${state.session.inputNames}] / 출력: [${state.session.outputNames}]`);
+
+    // RobustVideoMatting: 전경 인물을 통째로 뽑습니다. COCO person 마스크와 달리
+    // 들고 있는 물건을 포함하고, 알파가 입력 해상도로 나와 손끝이 뭉개지지 않습니다.
+    // WebGPU 백엔드는 RVM 의 AveragePool(ceil_mode) 을 지원하지 않아 추론이
+    // 실패하고, 그 실패가 같은 백엔드를 쓰는 검출 세션까지 망가뜨립니다.
+    // 매팅은 wasm 에 고정해 백엔드를 분리합니다.
+    state.mattingSession = await ort.InferenceSession.create(
+      "AI_models//rvm_mobilenetv3_fp32.onnx", { executionProviders: ["wasm"] });
+    console.log(`매팅 모델 로드 완료. 입력: [${state.mattingSession.inputNames}]`);
 
     const pill = document.getElementById('ai-status-pill');
     const pillText = document.getElementById('ai-pill-text');
