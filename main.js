@@ -42,6 +42,10 @@ function createWindow() {
   });
 
   mainWindow.setMenu(null);
+  // 임시 계측: 렌더러 콘솔을 메인 stdout 으로 넘겨 터미널에서 읽습니다.
+  mainWindow.webContents.on("console-message", (_e, level, message) => {
+    console.log(`[renderer] ${message}`);
+  });
   mainWindow.loadFile("index.html");
 }
 

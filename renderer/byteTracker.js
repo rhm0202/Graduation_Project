@@ -19,7 +19,12 @@
 export const BYTE_TRACKER_DEFAULTS = Object.freeze({
   highThreshold: 0.5,
   lowThreshold: 0.1,
-  newTrackThreshold: 0.6,
+  // 0.6 이면 방 안의 옷·의자가 0.63~0.75 로 사람 트랙이 되어 혼자 있는데도
+  // 객체 목록에 유령이 늘어납니다. 198 프레임 중 27 프레임에서 트랙이 둘
+  // 이상이었습니다. 진짜 사람은 0.90~0.97 로 잡히므로 그 사이를 가릅니다.
+  // 이 값은 새 트랙을 만들 때만 봅니다. 한 번 잡힌 사람은 점수가 떨어져도
+  // 계속 추적되므로, 올려도 실제 인물을 놓치지 않습니다.
+  newTrackThreshold: 0.8,
   matchThreshold: 0.8,
   secondMatchThreshold: 0.5,
   tentativeMatchThreshold: 0.7,
@@ -461,10 +466,59 @@ export const TRACKING_POLICY = Object.freeze({
  * 프레임에 잡힌 모든 물건을 합치면 추론보다 이 루프가 더 비싸집니다.
  */
 export const HELD_OBJECT_POLICY = Object.freeze({
-  scoreThreshold: 0.5,
+  // 이 카메라로 실측하면 같은 가방이 자세에 따라 0.06~0.15 로 나옵니다.
+  // 선명하게 보이는 20 프레임에서도 backpack 최고가 0.134 였습니다. 0.5 로
+  // 두면 소지품 합성이 사실상 한 번도 켜지지 않아 가방이 그대로 지워집니다.
+  // 낮춰도 되는 이유는 아래 SCENERY_CLASSES 와 containment, maxObjects 가
+  // 이미 잡음을 거르기 때문입니다.
+  // 실측 로그를 보면 이 가방은 handbag 으로 0.47~0.78 에 잡히고, 같은 프레임에
+  // 0.12~0.25 짜리 중복 박스가 엉뚱한 자리에 함께 나옵니다. 그 저점수 박스마다
+  // 컷오프 완화 구간이 1 초씩 생겨 주변 배경이 들어왔다 나갔다 했습니다.
+  // 두 무리 사이를 갈라 진짜 검출만 받습니다.
+  scoreThreshold: 0.35,
   containment: 0.7,
   maxObjects: 4,
+  // 이 가방은 20 프레임에 2 번 꼴로만 검출됩니다. 검출된 프레임에만 반응하면
+  // 물건이 10% 의 프레임에서만 나타났다 사라져 오히려 더 심하게 깜빡입니다.
+  // 박스만 붙들어 두고 그 구간에서 컷오프를 낮춰 사이를 메웁니다. 마스크
+  // 계수는 한 프레임에만 유효하므로 넘기지 않습니다.
+  holdMs: 1000,
 });
+
+/**
+ * 간헐적인 물건 검출을 시간축으로 이어 줍니다. 박스만 보관합니다.
+ * 같은 클래스는 최신 것으로 덮어써, 물건이 움직여도 박스가 따라갑니다.
+ */
+export function holdHeldObjects(previous, objects, nowMs) {
+  const byClass = new Map();
+  for (const entry of previous || []) {
+    if (entry.untilMs > nowMs) byClass.set(entry.classId, entry);
+  }
+  for (const item of objects) {
+    byClass.set(item.classId, {
+      classId: item.classId,
+      box: { ...item.box },
+      untilMs: nowMs + HELD_OBJECT_POLICY.holdMs,
+    });
+  }
+  return [...byClass.values()];
+}
+
+/**
+ * 사람이 들고 다닐 수 없는 것들입니다.
+ *
+ * 사람이 가까이 서면 인물 박스가 화면 대부분을 덮어, 뒤에 있는 침대나 의자가
+ * containment 를 넘겨 소지품으로 합쳐집니다. 이 방에서 bed 는 score 0.851,
+ * chair 는 0.509 까지 나옵니다. 매 프레임 통과하는 것도 아니라서 배경 가구가
+ * 몇 프레임에 한 번 나타났다 사라지며 깜빡입니다.
+ */
+const SCENERY_CLASSES = new Set([
+  1, 2, 3, 4, 5, 6, 7, 8,      // bicycle … boat
+  9, 10, 11, 12, 13,           // traffic light … bench
+  56, 57, 58, 59, 60, 61, 62,  // chair, couch, potted plant, bed, dining table, toilet, tv
+  68, 69, 70, 71, 72,          // microwave … refrigerator
+  74, 75,                      // wall clock, vase
+]);
 
 function validBox(box) {
   return box && [box.x1, box.y1, box.x2, box.y2].every(Number.isFinite)
@@ -517,7 +571,8 @@ export function collectHeldObjectDetections(output, channels = 38) {
   for (let offset = 0; offset < output.length; offset += channels) {
     const score = output[offset + 4];
     const classId = output[offset + 5];
-    if (classId === 0 || !Number.isFinite(classId) || !Number.isFinite(score)
+    if (classId === 0 || !Number.isFinite(classId) || SCENERY_CLASSES.has(classId)
+      || !Number.isFinite(score)
       || score < HELD_OBJECT_POLICY.scoreThreshold || score > 1) continue;
     const values = Array.from(output.slice(offset, offset + 4));
     if (!values.every(Number.isFinite)) continue;

@@ -172,10 +172,11 @@ function _makeSource(overrides) {
 export async function addWebcamSource(deviceId, label) {
   const request = ++_webcamRequest;
   try {
-    const constraints = {
-      video: deviceId ? { deviceId: { exact: deviceId } } : true,
-      audio: true,
-    };
+    // 해상도를 지정하지 않으면 Chromium 이 640x480 으로 잡습니다. RPi 카메라가
+    // 1080p 이므로 여기서도 맞춰야 배포 환경과 같은 조건에서 검증됩니다.
+    const video = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    if (deviceId) video.deviceId = { exact: deviceId };
+    const constraints = { video, audio: true };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     if (request !== _webcamRequest) {
       stream.getTracks().forEach(track => track.stop());
@@ -510,6 +511,7 @@ function _stopAiLoop(src) {
   src._maskCanvas = null;
   src._maskCtx = null;
   src._maskImg = null;
+  src._heldKey = null;
 
   // Only the owner can clear IDs. Deleting an unrelated source must not do so.
   if (trackerSourceId === src.id) {
@@ -606,6 +608,12 @@ const REFINE_EPS = 1e-4;
  * 생기면 수치부터 다시 재야 합니다.
  */
 const FADE = REFINE_EDGE ? { lo: 0.45, hi: 0.55 } : { lo: 0.75, hi: 0.85 };
+
+// 물건 박스 안에서만 컷오프를 낮춰 보았으나 철회했습니다. 박스 가장자리에서
+// 알파가 불연속으로 튀어 화면에 직선이 보이고, 그 박스가 나타났다 사라지며
+// 선이 같이 움직여 오히려 깜빡임이 심해졌습니다. 구간별로 다른 컷오프를 쓰려면
+// 경계를 부드럽게 이어야 하는데, 가방은 handbag 으로 0.47~0.78 에 잡혀 마스크가
+// 그대로 합쳐지므로 완화 자체가 필요 없었습니다.
 
 /**
  * 박스 필터. 적분영상을 쓰므로 반경과 무관하게 O(n) 입니다.
@@ -706,8 +714,25 @@ const FILL_ENCLOSED_HOLES = true;
  * 상한과 무관합니다. 여기서 걸러지는 것은 종이·펜처럼 모델이 모르는
  * 물건뿐이고, A4 를 펼쳐 든 것처럼 큰 것은 상한을 넘어 되살아나지 않습니다.
  * 값을 올리면 그런 것까지 살아나지만 팔 틈도 같이 메워지기 시작합니다.
+ *
+ * 0.06 에서는 허리에 손을 얹었을 때의 팔 틈이 상한에 걸쳐, 프레임마다 메워졌다
+ * 뚫렸다 하며 그 자리에 교체 배경 대신 원래 방이 비쳤습니다. 간헐적이라 더
+ * 눈에 띕니다. 0.03 이면 팔 틈이 확실히 남습니다.
+ *
+ * 다만 넓이만 보면 큰 물건도 함께 못 메웁니다. 아래 두 값이 그 손해를 되돌려
+ * 줍니다.
  */
-const MAX_HOLE_FRACTION = 0.06;
+const MAX_HOLE_FRACTION = 0.03;
+
+/**
+ * 넓이만으로는 팔 틈과 물건 구멍이 갈리지 않아 모양을 함께 봅니다.
+ *
+ * 굽힌 팔과 몸통 사이 틈은 길쭉한 삼각형이라 자기 외접 사각형의 절반 남짓만
+ * 채웁니다. 손에 든 물건은 덩어리라 대부분을 채웁니다. 꽉 찬 구멍에만 넓이
+ * 상한을 몇 배로 늘려, 팔 틈은 좁은 상한에 걸리고 큰 물건은 메워집니다.
+ */
+const COMPACT_FILL_RATIO = 0.7;
+const COMPACT_AREA_BONUS = 3;
 
 /**
  * 사람 윤곽 안쪽의 구멍을 메웁니다.
@@ -811,6 +836,7 @@ function fillEnclosedHoles(alpha, visited, stack, size, rect, boxes, maxFraction
       head = 0;
       tail = 0;
       let sumX = 0, sumY = 0;
+      let minX = size, maxX = -1, minY = size, maxY = -1;
       let frameSides = 0;
       owner = -1;
       mixed = false;
@@ -821,6 +847,10 @@ function fillEnclosedHoles(alpha, visited, stack, size, rect, boxes, maxFraction
         const y = (i / size) | 0;
         sumX += x;
         sumY += y;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
         if (x === 0) frameSides |= 1;
         if (x === edge) frameSides |= 2;
         if (y === 0) frameSides |= 4;
@@ -854,7 +884,13 @@ function fillEnclosedHoles(alpha, visited, stack, size, rect, boxes, maxFraction
         if (ref > 0) limit = ref * maxFraction;
       }
 
-      if (tail <= limit) {
+      // 외접 사각형을 얼마나 채웠는지로 팔 틈과 물건을 가릅니다. 길쭉한
+      // 틈은 좁은 상한에, 꽉 찬 덩어리는 넉넉한 상한에 걸립니다.
+      const boxCells = (maxX - minX + 1) * (maxY - minY + 1);
+      const allowed = tail >= boxCells * COMPACT_FILL_RATIO
+        ? limit * COMPACT_AREA_BONUS : limit;
+
+      if (tail <= allowed) {
         for (let k = 0; k < tail; k++) alpha[stack[k]] = 255;
       }
     }
@@ -1091,6 +1127,14 @@ async function _aiLoop(src, generation) {
       // UI 표시 및 인덱스 매칭을 위해 현재 프레임 기준 X좌표 순(왼쪽부터)으로 정렬
       people.sort((a, b) => a.box.x1 - b.box.x1);
 
+      const peopleKey = people
+        .map((t) => `${t.id}:${t.score.toFixed(2)}:${t.state[0]}`).join(",");
+      if (peopleKey !== src._peopleKey) {
+        src._peopleKey = peopleKey;
+        const raw = detectedPeople.map((d) => d.score.toFixed(2)).join(",");
+        console.log(`[People] 트랙 ${peopleKey || "(없음)"} / 이번 검출 [${raw}]`);
+      }
+
       // 3. 타겟 추적 로직 (ID 기반)
       if (!state.targetPersonIds) state.targetPersonIds = [];
 
@@ -1209,6 +1253,11 @@ async function _aiLoop(src, generation) {
           collectHeldObjectDetections(output0, NUM_CHANNELS), bgTargets,
         );
         const maskSources = bgTargets.concat(heldObjects);
+        const heldKey = heldObjects.map((o) => `${o.classId}:${o.score.toFixed(2)}`).join(",");
+        if (heldKey !== src._heldKey) {
+          src._heldKey = heldKey;
+          console.log(`[Held] 통과 ${heldKey || "(없음)"}`);
+        }
 
         if (bgTargets.length === 0) {
           // 사람 미감지 시 전체 투명
