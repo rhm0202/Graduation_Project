@@ -509,6 +509,7 @@ function _stopAiLoop(src) {
   src._maskCanvas = null;
   src._maskCtx = null;
   src._maskImg = null;
+  src._maskHyst = null;
 
   // Only the owner can clear IDs. Deleting an unrelated source must not do so.
   if (trackerSourceId === src.id) {
@@ -615,6 +616,112 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
 
     ctx.restore();
   });
+}
+
+// ── 겹친 사람 사이 마스크 보정 ─────────────────────────────────────
+// 아래 값들은 _aiLoop 의 알파 램프(FADE_LO 0.75 ~ FADE_HI 0.85)를 기준으로 합니다.
+
+// 닫힘 연산 반경(proto 칸). 1칸이면 폭 2칸까지의 틈을 메웁니다.
+// 1080p 에서 proto 한 칸은 약 12px 입니다. 키우면 팔과 몸 사이 같은
+// 실제 배경 틈까지 메워지므로 1~2 를 넘기지 않습니다.
+const MASK_CLOSE_RADIUS = 1;
+
+// 히스테리시스: 램프 중간값(0.8) 이상이면 "켜짐"으로 기억하고,
+// 켜졌던 칸은 확률을 BOOST 만큼 올려 0.6 까지 떨어져도 유지합니다.
+const MASK_HYST_ON = 0.8;
+const MASK_HYST_BOOST = 0.2;
+
+/** 1차원 max/min 필터(창은 영역 안으로 잘림). 분리 가능한 팽창·침식용. */
+function _filter1D(src, dst, w, h, horizontal, useMax, r) {
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const c = horizontal ? x : y;
+      const n = horizontal ? w : h;
+      const lo = c - r < 0 ? 0 : c - r;
+      const hi = c + r > n - 1 ? n - 1 : c + r;
+      let v = useMax ? -Infinity : Infinity;
+      for (let k = lo; k <= hi; k++) {
+        const s = horizontal ? src[y * w + k] : src[k * w + x];
+        if (useMax ? s > v : s < v) v = s;
+      }
+      dst[y * w + x] = v;
+    }
+  }
+}
+
+/**
+ * 두 박스가 겹치는 영역에서만 마스크에 닫힘 연산(팽창 → 침식)을 겁니다.
+ *
+ * 가려진 경계에서는 앞사람·뒷사람 마스크가 함께 낮아져 합쳐도 램프
+ * 아래로 떨어지고, 두 사람 사이에 배경 띠가 생깁니다. 닫힘 연산은 좁은
+ * 틈만 메우고 바깥 윤곽은 원래 자리로 되돌리므로 테두리가 두꺼워지지
+ * 않습니다. 겹친 영역에만 걸어 다른 곳의 경계는 건드리지 않습니다.
+ */
+function closeMaskOverlaps(mask, boxes, size) {
+  const r = MASK_CLOSE_RADIUS;
+  const last = size - 1;
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i];
+      const b = boxes[j];
+      const ix1 = Math.max(0, a.x1, b.x1);
+      const iy1 = Math.max(0, a.y1, b.y1);
+      const ix2 = Math.min(last, a.x2, b.x2);
+      const iy2 = Math.min(last, a.y2, b.y2);
+      if (ix1 > ix2 || iy1 > iy2) continue;
+
+      // 침식이 겹친 영역 가장자리에서도 올바른 팽창값을 읽도록 2r 여유를 둡니다.
+      const ex1 = Math.max(0, ix1 - 2 * r);
+      const ey1 = Math.max(0, iy1 - 2 * r);
+      const ex2 = Math.min(last, ix2 + 2 * r);
+      const ey2 = Math.min(last, iy2 + 2 * r);
+      const ew = ex2 - ex1 + 1;
+      const eh = ey2 - ey1 + 1;
+
+      const region = new Float32Array(ew * eh);
+      const tmp = new Float32Array(ew * eh);
+      for (let y = 0; y < eh; y++) {
+        for (let x = 0; x < ew; x++) {
+          region[y * ew + x] = mask[(ey1 + y) * size + ex1 + x];
+        }
+      }
+
+      _filter1D(region, tmp, ew, eh, true, true, r);
+      _filter1D(tmp, region, ew, eh, false, true, r);
+      _filter1D(region, tmp, ew, eh, true, false, r);
+      _filter1D(tmp, region, ew, eh, false, false, r);
+
+      for (let y = iy1; y <= iy2; y++) {
+        for (let x = ix1; x <= ix2; x++) {
+          const closed = region[(y - ey1) * ew + (x - ex1)];
+          const p = y * size + x;
+          if (closed > mask[p]) mask[p] = closed;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * proto 칸마다 이전 프레임의 켜짐 상태를 기억해 램프 근처의 깜빡임을 막습니다.
+ * 켜짐 상태 배열을 제자리에서 갱신해 돌려줍니다. prev 가 없으면 새로 만듭니다.
+ *
+ * 프레임 간 평균과 달리 움직이는 사람 뒤로 잔상이 남지 않습니다.
+ * 켜지는 기준은 그대로라 새로 생기는 영역은 즉시, 사라지는 영역은
+ * 확률이 0.6 아래로 내려가는 즉시 꺼집니다.
+ */
+function applyMaskHysteresis(mask, prev) {
+  const on = prev && prev.length === mask.length ? prev : new Uint8Array(mask.length);
+  for (let p = 0; p < mask.length; p++) {
+    let v = mask[p];
+    if (on[p]) {
+      v += MASK_HYST_BOOST;
+      if (v > 1) v = 1;
+      mask[p] = v;
+    }
+    on[p] = v >= MASK_HYST_ON ? 1 : 0;
+  }
+  return on;
 }
 
 async function _aiLoop(src, generation) {
@@ -815,26 +922,9 @@ async function _aiLoop(src, generation) {
         if (bgTargets.length === 0) {
           // 사람 미감지 시 전체 투명
           for (let j = 3; j < md.length; j += 4) md[j] = 0;
+          src._maskHyst = null;
         } else {
           const combinedMask = new Float32Array(nProto);
-
-          for (const target of bgTargets) {
-            const coeffs = new Float32Array(32);
-            for (let c = 0; c < 32; c++) {
-              coeffs[c] = output0[target.anc * NUM_CHANNELS + COEFF_START + c];
-            }
-
-            for (let p = 0; p < nProto; p++) {
-              let sum = 0;
-              for (let c = 0; c < 32; c++) {
-                sum += coeffs[c] * protos[c * nProto + p];
-              }
-              const prob = 1 / (1 + Math.exp(-sum)); // sigmoid
-              if (prob > combinedMask[p]) {
-                combinedMask[p] = prob;
-              }
-            }
-          }
 
           // 각 대상별 바운딩 박스를 160 해상도로 변환하여 배열에 저장
           const boxes160 = bgTargets.map((target) => {
@@ -845,6 +935,43 @@ async function _aiLoop(src, generation) {
               y2: Math.ceil(target.box.y2 * (PROTO / 640)),
             };
           });
+
+          // 인스턴스 마스크를 max 가 아니라 합(1 상한)으로 합칩니다.
+          //
+          // 두 사람이 겹치면 앞사람 마스크는 1→0, 뒷사람 마스크는 0→1 로
+          // 같은 경계에서 엇갈립니다. 경계에서는 둘 다 0.5 안팎이라 max 는
+          // FADE_LO(0.75) 아래로 떨어져 두 사람 사이에 배경이 비치는 띠가
+          // 생깁니다. 합이면 경계에서 약 1 이 되어 틈이 메워집니다.
+          //
+          // 합은 박스 밖의 낮은 확률도 쌓으므로 각 인스턴스를 자기 박스
+          // (+1칸, 경계 보간용) 안에서만 더합니다.
+          for (let t = 0; t < bgTargets.length; t++) {
+            const coeffs = new Float32Array(32);
+            for (let c = 0; c < 32; c++) {
+              coeffs[c] = output0[bgTargets[t].anc * NUM_CHANNELS + COEFF_START + c];
+            }
+
+            const box = boxes160[t];
+            const bx1 = Math.max(0, box.x1 - 1);
+            const by1 = Math.max(0, box.y1 - 1);
+            const bx2 = Math.min(PROTO - 1, box.x2 + 1);
+            const by2 = Math.min(PROTO - 1, box.y2 + 1);
+
+            for (let y = by1; y <= by2; y++) {
+              for (let p = y * PROTO + bx1, pe = y * PROTO + bx2; p <= pe; p++) {
+                let sum = 0;
+                for (let c = 0; c < 32; c++) {
+                  sum += coeffs[c] * protos[c * nProto + p];
+                }
+                const prob = 1 / (1 + Math.exp(-sum)); // sigmoid
+                const merged = combinedMask[p] + prob;
+                combinedMask[p] = merged > 1 ? 1 : merged;
+              }
+            }
+          }
+
+          closeMaskOverlaps(combinedMask, boxes160, PROTO);
+          src._maskHyst = applyMaskHysteresis(combinedMask, src._maskHyst);
 
           // ── 소프트 알파 페더링 ──────────────────────────────────────
           // 하한이 컷오프입니다. 이 확률 이하는 완전 투명입니다.
@@ -917,6 +1044,8 @@ async function _aiLoop(src, generation) {
         }
         src._maskCtx.putImageData(src._maskImg, 0, 0);
       }
+
+      if (!src.bgRemoval) src._maskHyst = null;
 
       // 배경 이미지/영상/색 합성 (배경 제거 ON일 때만 배경 교체)
       src.bgCtx.clearRect(0, 0, w, h);
