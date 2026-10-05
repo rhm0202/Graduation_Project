@@ -57,7 +57,7 @@ class PIDController:
         self.output_limits = output_limits
 
         self._integral = 0.0
-        self._last_error = 0.0
+        self._last_error: float | None = None
         self._last_time: float | None = None
 
     def __call__(self, current_value: float) -> float:
@@ -83,7 +83,12 @@ class PIDController:
         self._integral += error * dt
 
         # 미분 (오차 변화율)
-        derivative = (error - self._last_error) / dt if dt > 0 else 0.0
+        # 초기화 직후에는 이전 오차가 없으므로 0. 0을 이전 오차로 쓰면
+        # error/0.01 의 미분 킥이 나와 첫 명령이 출력 한계까지 튄다.
+        if self._last_error is None:
+            derivative = 0.0
+        else:
+            derivative = (error - self._last_error) / dt
 
         # PID 출력
         output = (self.Kp * error) + (self.Ki * self._integral) + (self.Kd * derivative)
@@ -103,7 +108,7 @@ class PIDController:
     def reset(self):
         """PID 내부 상태를 초기화한다."""
         self._integral = 0.0
-        self._last_error = 0.0
+        self._last_error = None
         self._last_time = None
 
 
@@ -122,6 +127,8 @@ class MotorPIDManager:
         output_limit: PID 1회 출력 최대 각도 변화
         ema_alpha: EMA 스무딩 팩터 (0 < alpha ≤ 1, 낮을수록 부드러움)
         ema_history_len: EMA 히스토리 큐 길이
+        switch_max_speed: 대상 전환 직후 최대 회전 속도 (°/s, None 이면 제한 없음)
+        switch_ramp_s: 전환 직후 0 → switch_max_speed 까지 가속하는 시간 (초)
     """
 
     def __init__(
@@ -136,6 +143,9 @@ class MotorPIDManager:
         ema_history_len: int = 5,
         x_dead_zone: float = 200.0,
         y_dead_zone: float = 100.0,
+        y_dead_zone_bottom: float | None = None,
+        switch_max_speed: float | None = None,
+        switch_ramp_s: float = 0.6,
     ):
         center_x = frame_width / 2.0
         center_y = frame_height / 2.0
@@ -160,15 +170,25 @@ class MotorPIDManager:
         self.tilt_angle = 90.0
 
         # 데드존: 객체가 중심에서 이 픽셀 범위 안에 있으면 보정하지 않음
+        # 틸트는 위(y_dead_zone)와 아래(y_dead_zone_bottom)를 따로 둔다.
         self.x_dead_zone = x_dead_zone
         self.y_dead_zone = y_dead_zone
+        self.y_dead_zone_bottom = y_dead_zone if y_dead_zone_bottom is None else y_dead_zone_bottom
         self.center_x = center_x
         self.center_y = center_y
+
+        # 대상 전환 모드: begin_transition() 부터 대상이 데드존에 들어올 때까지
+        # 회전 속도를 0 에서 switch_max_speed 까지 천천히 올린다.
+        self.switch_max_speed = switch_max_speed
+        self.switch_ramp_s = switch_ramp_s
+        self._transition_start: float | None = None
+        self._last_command_time: float | None = None
 
         logger.info(
             f"PID 매니저 초기화 — setpoint=({center_x}, {center_y}), "
             f"Kp={pid_kp}, Ki={pid_ki}, Kd={pid_kd}, "
-            f"output_limit=±{output_limit}°, EMA α={ema_alpha}, x_dead_zone={x_dead_zone}px, y_dead_zone={y_dead_zone}px"
+            f"output_limit=±{output_limit}°, EMA α={ema_alpha}, x_dead_zone={x_dead_zone}px, "
+            f"y_dead_zone=-{self.y_dead_zone}/+{self.y_dead_zone_bottom}px"
         )
 
     def update(self, obj_x: float, obj_y: float) -> tuple[float, float]:
@@ -187,11 +207,14 @@ class MotorPIDManager:
 
         # 데드존: 객체가 중앙 근처에 있으면 보정 무시 + 적분 리셋
         dx = abs(obj_x - self.center_x)
-        dy = abs(obj_y - self.center_y)
-        if dx < self.x_dead_zone:
+        dy = obj_y - self.center_y  # 화면 y는 아래로 증가: 양수면 중심보다 아래
+        y_limit = self.y_dead_zone_bottom if dy > 0 else self.y_dead_zone
+        in_dead_x = dx < self.x_dead_zone
+        in_dead_y = abs(dy) < y_limit
+        if in_dead_x:
             pan_correction = 0.0
             self.pan_pid._integral = 0.0
-        if dy < self.y_dead_zone:
+        if in_dead_y:
             tilt_correction = 0.0
             self.tilt_pid._integral = 0.0
 
@@ -204,11 +227,28 @@ class MotorPIDManager:
         raw_tilt = max(TILT_LIMITS[0], min(TILT_LIMITS[1], raw_tilt))
 
         # EMA 평활화
-        if not self.pan_history:
-            smooth_pan, smooth_tilt = raw_pan, raw_tilt
-        else:
-            smooth_pan = (self.alpha * raw_pan) + ((1 - self.alpha) * self.pan_history[-1])
-            smooth_tilt = (self.alpha * raw_tilt) + ((1 - self.alpha) * self.tilt_history[-1])
+        # 초기화 직후(히스토리 없음)에도 현재 자세를 기준으로 평활화한다.
+        # raw 를 그대로 쓰면 첫 명령이 PID 1회 출력 한계만큼 한 번에 튄다.
+        prev_pan = self.pan_history[-1] if self.pan_history else self.pan_angle
+        prev_tilt = self.tilt_history[-1] if self.tilt_history else self.tilt_angle
+        smooth_pan = (self.alpha * raw_pan) + ((1 - self.alpha) * prev_pan)
+        smooth_tilt = (self.alpha * raw_tilt) + ((1 - self.alpha) * prev_tilt)
+
+        # 대상 전환 모드: 속도 상한을 0 에서부터 천천히 올린다.
+        # 출력이 포화되는 큰 오차에서는 평소 속도가 영상 지연보다 빨라
+        # 데드존을 지나쳐 되돌아오며 흔들린다. 데드존에 들어오면 해제한다.
+        now = time.monotonic()
+        if self._transition_start is not None:
+            if in_dead_x and in_dead_y:
+                self._transition_start = None
+            else:
+                elapsed = now - self._transition_start
+                ramp = min(1.0, elapsed / self.switch_ramp_s) if self.switch_ramp_s > 0 else 1.0
+                dt = 0.0 if self._last_command_time is None else min(0.1, now - self._last_command_time)
+                max_step = self.switch_max_speed * ramp * dt
+                smooth_pan = self.pan_angle + max(-max_step, min(max_step, smooth_pan - self.pan_angle))
+                smooth_tilt = self.tilt_angle + max(-max_step, min(max_step, smooth_tilt - self.tilt_angle))
+        self._last_command_time = now
 
         self.pan_history.append(smooth_pan)
         self.tilt_history.append(smooth_tilt)
@@ -235,3 +275,11 @@ class MotorPIDManager:
         self.tilt_pid.reset()
         self.pan_history.clear()
         self.tilt_history.clear()
+        self._transition_start = None
+        self._last_command_time = None
+
+    def begin_transition(self):
+        """새 대상 선택·재포착: 상태를 비우고 전환 모드로 천천히 출발한다."""
+        self.reset()
+        if self.switch_max_speed:
+            self._transition_start = time.monotonic()

@@ -271,7 +271,7 @@ export function updatePiConnectionStatus(connected, message) {
   if (disconnect) disconnect.style.display = state.piWebSocket || videoAttempt ? 'inline-block' : 'none';
 }
 
-export function sendObjectCoords({ x, y, frameWidth, frameHeight, observedAtMs }) {
+export function sendObjectCoords({ x, y, frameWidth, frameHeight, observedAtMs, targetSeq }) {
   const ws = state.piWebSocket;
   if (!state.piMotorReady || !state.autoTrackingEnabled || ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 0) return;
   if (![x, y, frameWidth, frameHeight, observedAtMs].every(Number.isFinite) || frameWidth <= 0 || frameHeight <= 0) return;
@@ -282,6 +282,8 @@ export function sendObjectCoords({ x, y, frameWidth, frameHeight, observedAtMs }
     obj_x: x * TRACKING_FRAME_WIDTH / frameWidth,
     obj_y: y * TRACKING_FRAME_HEIGHT / frameHeight,
     observed_at_ms: Date.now() - age,
+    // Changes whenever the user picks another target; the core then eases in.
+    target_seq: Number.isSafeInteger(targetSeq) ? targetSeq : null,
   }));
 }
 

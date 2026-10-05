@@ -23,6 +23,10 @@ import {
 const globalTracker = new ByteTracker();
 let trackerSourceId = null;
 let _trackSnapshot = "";
+// 모터 추적 대상이 바뀔 때마다 증가. 서버는 이 값이 바뀌면 전환 모드로 천천히
+// 출발합니다. ID 는 재사용되므로 ID 대신 선택이 바뀐 횟수로 구분합니다.
+let _controlTargetSeq = 0;
+let _lastControlTargetId = null;
 
 // ─────────────────────────────────────────────────────────
 // 마스터 캔버스
@@ -509,6 +513,8 @@ function _stopAiLoop(src) {
   src._maskCanvas = null;
   src._maskCtx = null;
   src._maskImg = null;
+  src._maskField = null;
+  src._maskBlurTmp = null;
   src._maskHyst = null;
 
   // Only the owner can clear IDs. Deleting an unrelated source must not do so.
@@ -539,7 +545,7 @@ function _scheduleAiLoop(src, generation) {
 
 /**
  * 객체 추적을 위한 오버레이를 그립니다.
- * 디버깅용으로 pid_controller.py의 데드존, 바운딩박스, 중심점을 함께 그립니다.
+ * pid_controller.py의 데드존과, 카메라가 추적하는 지점에 "사람 N" 라벨을 그립니다.
  * @param {CanvasRenderingContext2D} ctx - 그릴 캔버스 컨텍스트
  * @param {Array<Object>} people - 추적 결과 (각 객체에 id, box가 있어야 함)
  * @param {string} targetPersonId - 추적 중인 사람 ID (없으면 모든 사람 표시)
@@ -549,70 +555,53 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
   const sy = h / 640;
   const fontSize = Math.max(13, Math.round(w * 0.02));
 
-  // PID 데드존 시각화 (config.py: X_DEAD_ZONE=300@1920px, Y_DEAD_ZONE=150@1080px)
+  // PID 데드존 시각화
+  // (config.py: X_DEAD_ZONE=300@1920px, Y_DEAD_ZONE=150 / Y_DEAD_ZONE_BOTTOM=120 @1080px)
   const dzHalfW = (300 * w) / 1920;
-  const dzHalfH = (150 * h) / 1080;
+  const dzTop = (150 * h) / 1080;
+  const dzBottom = (120 * h) / 1080;
   ctx.save();
   ctx.strokeStyle = "rgba(255, 220, 0, 0.9)";
   ctx.lineWidth = 2;
   ctx.setLineDash([10, 5]);
-  ctx.strokeRect(w / 2 - dzHalfW, h / 2 - dzHalfH, dzHalfW * 2, dzHalfH * 2);
+  ctx.strokeRect(w / 2 - dzHalfW, h / 2 - dzTop, dzHalfW * 2, dzTop + dzBottom);
   ctx.setLineDash([]);
   ctx.font = `${fontSize - 2}px monospace`;
   ctx.fillStyle = "rgba(255, 220, 0, 0.9)";
-  ctx.fillText("DEAD ZONE", w / 2 - dzHalfW + 4, h / 2 - dzHalfH - 5);
+  ctx.fillText("DEAD ZONE", w / 2 - dzHalfW + 4, h / 2 - dzTop - 5);
   ctx.restore();
 
-  // 각 사람별 바운딩박스 + 중심점 + 라벨
+  // 카메라가 추적하는 지점(controlPoint)에 "사람 N" 라벨 (바운딩박스는 그리지 않음)
   people.forEach((person) => {
-    const { x1, y1, x2, y2 } = person.box;
-    const bx = x1 * sx;
-    const by = y1 * sy;
-    const bw = (x2 - x1) * sx;
-    const bh = (y2 - y1) * sy;
-    const cx = ((x1 + x2) / 2) * sx;
-    const cy = (y1 + (y2 - y1) * 0.2) * sy;
+    const point = controlPoint(person.box);
+    const cx = point.x * sx;
+    const cy = point.y * sy;
 
     const isTarget = person.id === targetPersonId;
-    const boxColor = isTarget ? "#00ff44" : "#ff9500";
     const labelBg = isTarget
       ? "rgba(0, 150, 40, 0.85)"
       : "rgba(180, 90, 0, 0.85)";
 
     ctx.save();
 
-    // 바운딩박스
-    ctx.strokeStyle = boxColor;
-    ctx.lineWidth = isTarget ? 3 : 2;
-    if (!person.observed) ctx.setLineDash([6, 4]);
-    ctx.strokeRect(bx, by, bw, bh);
-
-    // 중심점 + 십자선
-    ctx.fillStyle = boxColor;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = boxColor;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx - 10, cy);
-    ctx.lineTo(cx + 10, cy);
-    ctx.moveTo(cx, cy - 10);
-    ctx.lineTo(cx, cy + 10);
-    ctx.stroke();
-
-    // 라벨 배경 + 텍스트
-    const label = `ID ${person.id}${person.observed ? "" : " (예측)"}`;
+    const label = `사람 ${person.id}${person.observed ? "" : " (예측)"}`;
     ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     const tw = ctx.measureText(label).width;
-    const pad = 4;
-    const lh = fontSize + pad * 2;
-    const lx = Math.max(0, bx);
-    const ly = by > lh ? by : by + lh;
+    const padX = 8;
+    const lw = tw + padX * 2;
+    const lh = fontSize + 10;
+    // 화면 밖으로 반쯤 나간 사람도 라벨은 화면 안에 둡니다.
+    const lx = Math.min(Math.max(cx, lw / 2), w - lw / 2);
+    const ly = Math.min(Math.max(cy, lh / 2), h - lh / 2);
+    ctx.globalAlpha = person.observed ? 1 : 0.6;
     ctx.fillStyle = labelBg;
-    ctx.fillRect(lx, ly - lh, tw + pad * 2, lh);
+    ctx.beginPath();
+    ctx.roundRect(lx - lw / 2, ly - lh / 2, lw, lh, lh / 2);
+    ctx.fill();
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(label, lx + pad, ly - pad);
+    ctx.fillText(label, lx, ly);
 
     ctx.restore();
   });
@@ -645,6 +634,38 @@ function _filter1D(src, dst, w, h, horizontal, useMax, r) {
         if (useMax ? s > v : s < v) v = s;
       }
       dst[y * w + x] = v;
+    }
+  }
+}
+
+/**
+ * n×n 배열에 반경 r 박스 블러를 제자리로 겁니다(가장자리는 끝값 반복).
+ * 누적합이라 r 과 무관하게 픽셀당 상수 비용입니다. tmp 는 같은 크기의 작업 버퍼입니다.
+ */
+function _boxBlurSquare(data, tmp, n, r) {
+  const inv = 1 / (2 * r + 1);
+  const last = n - 1;
+  // 가로: data → tmp
+  for (let y = 0; y < n; y++) {
+    const row = y * n;
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += data[row + (k < 0 ? 0 : k > last ? last : k)];
+    for (let x = 0; x < n; x++) {
+      tmp[row + x] = acc * inv;
+      const out = x - r;
+      const inn = x + r + 1;
+      acc += data[row + (inn > last ? last : inn)] - data[row + (out < 0 ? 0 : out)];
+    }
+  }
+  // 세로: tmp → data
+  for (let x = 0; x < n; x++) {
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += tmp[(k < 0 ? 0 : k > last ? last : k) * n + x];
+    for (let y = 0; y < n; y++) {
+      data[y * n + x] = acc * inv;
+      const out = y - r;
+      const inn = y + r + 1;
+      acc += tmp[(inn > last ? last : inn) * n + x] - tmp[(out < 0 ? 0 : out) * n + x];
     }
   }
 }
@@ -867,8 +888,16 @@ async function _aiLoop(src, generation) {
 
       // Low-score observations already passed ByteTrack association. A short
       // missing interval can use the same ID's prediction; never use its mask.
+      if (state.targetPersonId !== _lastControlTargetId) {
+        _lastControlTargetId = state.targetPersonId;
+        _controlTargetSeq++;
+      }
       if (src.objectTracking && state.autoTrackingEnabled && controlTarget) {
-        sendObjectCoords({ ...controlPoint(controlTarget.box), observedAtMs: timestampMs });
+        sendObjectCoords({
+          ...controlPoint(controlTarget.box),
+          observedAtMs: timestampMs,
+          targetSeq: _controlTargetSeq,
+        });
       }
 
       // 배경 제거가 켜져 있을 때 다중 객체 마스크 적용
@@ -904,6 +933,8 @@ async function _aiLoop(src, generation) {
         src._maskCanvas.height = MASK_RES;
         src._maskCtx = src._maskCanvas.getContext("2d");
         src._maskImg = src._maskCtx.createImageData(MASK_RES, MASK_RES);
+        src._maskField = new Float32Array(MASK_RES * MASK_RES);
+        src._maskBlurTmp = new Float32Array(MASK_RES * MASK_RES);
         const d = src._maskImg.data;
         for (let i = 0; i < d.length; i += 4) {
           d[i] = 255;
@@ -987,28 +1018,62 @@ async function _aiLoop(src, generation) {
           const FADE_SPAN = FADE_HI - FADE_LO;
           const last = PROTO - 1;
 
+          // 마스크 격자 → proto 연속 좌표 (픽셀 중심 정렬)
+          //
+          // proto 한 칸은 여러 출력 픽셀을 덮고, 그 칸의 값은 덮는 구간의
+          // 한가운데에 놓입니다. +0.5 / -0.5 없이 mx * P2M 로만 쓰면 칸을
+          // 구간 맨 앞에 놓게 되어 마스크 전체가 왼쪽·위로 밀립니다.
+          // GPU 의 MASK_RES → 출력 확대는 이미 중심 정렬이므로,
+          // 여기서 맞춰주면 종단 매핑이 해상도와 무관하게 정확해집니다.
+          // x 와 y 의 매핑은 같으므로 한 번만 계산해 두 축에 씁니다.
+          const g0 = new Int32Array(MASK_RES);
+          const gf = new Float32Array(MASK_RES);
+          for (let m = 0; m < MASK_RES; m++) {
+            let g = (m + 0.5) * P2M - 0.5;
+            if (g < 0) g = 0;
+            else if (g > last) g = last;
+            g0[m] = g | 0;
+            gf[m] = g - g0[m];
+          }
+
+          // 1) 이중선형 보간으로 MASK_RES 확률 지도 생성
+          const field = src._maskField;
           for (let my = 0; my < MASK_RES; my++) {
-            // 마스크 격자 → proto 연속 좌표 (픽셀 중심 정렬)
-            //
-            // proto 한 칸은 여러 출력 픽셀을 덮고, 그 칸의 값은 덮는 구간의
-            // 한가운데에 놓입니다. +0.5 / -0.5 없이 mx * P2M 로만 쓰면 칸을
-            // 구간 맨 앞에 놓게 되어 마스크 전체가 왼쪽·위로 밀립니다.
-            // GPU 의 MASK_RES → 출력 확대는 이미 중심 정렬이므로,
-            // 여기서 맞춰주면 종단 매핑이 해상도와 무관하게 정확해집니다.
-            let gy = (my + 0.5) * P2M - 0.5;
-            if (gy < 0) gy = 0;
-            else if (gy > last) gy = last;
-            const y0 = gy | 0;
-            const fy = gy - y0;
+            const y0 = g0[my];
+            const fy = gf[my];
             const r0 = y0 * PROTO;
             const r1 = (y0 + 1 < PROTO ? y0 + 1 : last) * PROTO;
-            let rowOut = my * MASK_RES * 4 + 3;
+            const rowF = my * MASK_RES;
+            for (let mx = 0; mx < MASK_RES; mx++) {
+              const x0 = g0[mx];
+              const fx = gf[mx];
+              const x1 = x0 + 1 < PROTO ? x0 + 1 : last;
+              const top =
+                combinedMask[r0 + x0] * (1 - fx) + combinedMask[r0 + x1] * fx;
+              const bot =
+                combinedMask[r1 + x0] * (1 - fx) + combinedMask[r1 + x1] * fx;
+              field[rowF + mx] = top * (1 - fy) + bot * fy;
+            }
+          }
+
+          // 2) 계단 현상 보정: proto 한 칸 폭의 박스 블러
+          //
+          // 이중선형 보간의 윤곽선은 proto 칸 경계마다 기울기가 꺾여
+          // (1080p 에서 약 12px 간격) 좁은 램프를 거치면 계단으로 보입니다.
+          // 칸 폭의 박스 블러를 한 번 더 걸면 2차 B-스플라인 보간과 같아져
+          // 윤곽이 칸 경계에서도 매끄럽게 이어집니다. 램프보다 먼저 걸어야
+          // 경계가 흐려지지 않고 윤곽 모양만 다듬어집니다.
+          const blurR = Math.floor(MASK_RES / PROTO / 2);
+          if (blurR > 0) _boxBlurSquare(field, src._maskBlurTmp, MASK_RES, blurR);
+
+          // 3) 박스 절단 + 소프트 알파 램프
+          for (let my = 0; my < MASK_RES; my++) {
+            const y0 = g0[my];
+            const rowF = my * MASK_RES;
+            let rowOut = rowF * 4 + 3;
 
             for (let mx = 0; mx < MASK_RES; mx++, rowOut += 4) {
-              let gx = (mx + 0.5) * P2M - 0.5;
-              if (gx < 0) gx = 0;
-              else if (gx > last) gx = last;
-              const x0 = gx | 0;
+              const x0 = g0[mx];
 
               // 박스 절단 (이전과 동일하게 proto 격자 기준으로 판정)
               let inAnyBox = false;
@@ -1028,16 +1093,7 @@ async function _aiLoop(src, generation) {
                 continue;
               }
 
-              // 이중선형 보간으로 마스크 확률값 획득 (이전과 동일)
-              const fx = gx - x0;
-              const x1 = x0 + 1 < PROTO ? x0 + 1 : last;
-              const top =
-                combinedMask[r0 + x0] * (1 - fx) + combinedMask[r0 + x1] * fx;
-              const bot =
-                combinedMask[r1 + x0] * (1 - fx) + combinedMask[r1 + x1] * fx;
-              const prob = top * (1 - fy) + bot * fy;
-
-              const a = (prob - FADE_LO) / FADE_SPAN;
+              const a = (field[rowF + mx] - FADE_LO) / FADE_SPAN;
               md[rowOut] = a <= 0 ? 0 : a >= 1 ? 255 : (a * 255) | 0;
             }
           }

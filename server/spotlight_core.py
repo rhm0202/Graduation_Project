@@ -8,8 +8,9 @@ from modules.pid_controller import MotorPIDManager
 from modules.config import (
     RPI_WS_URL, WS_PORT, FRAME_WIDTH, FRAME_HEIGHT,
     PID_KP, PID_KI, PID_KD, PID_OUTPUT_LIMIT, EMA_ALPHA,
-    X_DEAD_ZONE, Y_DEAD_ZONE, MAX_JUMP_PX, MIN_SEND_INTERVAL,
+    X_DEAD_ZONE, Y_DEAD_ZONE, Y_DEAD_ZONE_BOTTOM, MAX_JUMP_PX, MIN_SEND_INTERVAL,
     COMMAND_TTL_MS, MOTOR_STATUS_TIMEOUT,
+    SWITCH_MAX_SPEED_DPS, SWITCH_RAMP_S, REACQUIRE_GAP_S,
 )
 
 logger = get_logger("spotlight_core")
@@ -28,15 +29,19 @@ _last_status_time = 0.0
 _last_send_time = 0.0
 _prev_obj_x = None
 _prev_obj_y = None
+_target_seq = None
+_last_sample_time = 0.0
 _pending_control = None
 _pending_motion = None
 _send_event = None
 
 
 def reset_observations():
-    global _last_send_time, _prev_obj_x, _prev_obj_y
+    global _last_send_time, _prev_obj_x, _prev_obj_y, _target_seq
     _last_send_time = 0.0
     _prev_obj_x = _prev_obj_y = None
+    # 다음 좌표는 새 대상처럼 전환 모드로 천천히 출발한다.
+    _target_seq = None
     pid_manager.reset()
 
 
@@ -79,8 +84,9 @@ async def send_to_pi(data):
     return True
 
 
-async def process_object_detected(obj_x, obj_y, observed_at_ms):
+async def process_object_detected(obj_x, obj_y, observed_at_ms, target_seq=None):
     global _last_send_time, _prev_obj_x, _prev_obj_y, _pending_motion
+    global _target_seq, _last_sample_time
     if tracking_state != "on" or not _pi_ready:
         return
     if not all(math.isfinite(v) for v in (obj_x, obj_y, observed_at_ms)):
@@ -92,12 +98,19 @@ async def process_object_detected(obj_x, obj_y, observed_at_ms):
     now = time.monotonic()
     if not 0 <= age_ms <= COMMAND_TTL_MS or now - _last_status_time > MOTOR_STATUS_TIMEOUT:
         return
+    # 사용자가 다른 사람을 고르거나, 좌표가 한동안 끊겼다 돌아오면
+    # 이전 대상 기준의 PID 상태를 버리고 전환 모드로 천천히 출발한다.
+    if target_seq != _target_seq or now - _last_sample_time > REACQUIRE_GAP_S:
+        _pending_motion = None
+        reset_observations()
+        pid_manager.begin_transition()
+    _target_seq, _last_sample_time = target_seq, now
     if now - _last_send_time < MIN_SEND_INTERVAL:
         return
     if _prev_obj_x is not None and (abs(obj_x - _prev_obj_x) > MAX_JUMP_PX
                                     or abs(obj_y - _prev_obj_y) > MAX_JUMP_PX):
         _pending_motion = None
-        pid_manager.reset()
+        pid_manager.begin_transition()
         _prev_obj_x, _prev_obj_y = obj_x, obj_y
         return
     _prev_obj_x, _prev_obj_y = obj_x, obj_y
@@ -234,7 +247,11 @@ async def ws_handler(websocket):
                     tracking_state = "off"
                     request_sync(center=True)
                 elif data.get("type") == "object_detected" and data.get("epoch") == _desktop_epoch:
-                    await process_object_detected(float(data["obj_x"]), float(data["obj_y"]), float(data["observed_at_ms"]))
+                    target_seq = data.get("target_seq")
+                    if type(target_seq) is not int:
+                        target_seq = None
+                    await process_object_detected(float(data["obj_x"]), float(data["obj_y"]),
+                                                  float(data["observed_at_ms"]), target_seq)
             except (ValueError, TypeError, KeyError):
                 continue
     except websockets.exceptions.ConnectionClosed:
@@ -254,6 +271,8 @@ async def main():
         pid_kp=PID_KP, pid_ki=PID_KI, pid_kd=PID_KD,
         output_limit=PID_OUTPUT_LIMIT, ema_alpha=EMA_ALPHA,
         x_dead_zone=X_DEAD_ZONE, y_dead_zone=Y_DEAD_ZONE,
+        y_dead_zone_bottom=Y_DEAD_ZONE_BOTTOM,
+        switch_max_speed=SWITCH_MAX_SPEED_DPS, switch_ramp_s=SWITCH_RAMP_S,
     )
     async with websockets.serve(ws_handler, "127.0.0.1", WS_PORT, close_timeout=1, max_queue=1):
         await connect_to_pi()

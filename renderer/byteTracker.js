@@ -202,9 +202,21 @@ export class ByteTracker {
 
   reset() {
     this._records = [];
-    this._nextId = 0;
     this._lastTimestampMs = null;
     this._lastFrameId = null;
+  }
+
+  /**
+   * Smallest positive ID not held by any record (tentative and lost included),
+   * so labels stay "사람 1, 2, 3" instead of climbing past 100. A lost ID stays
+   * reserved until it expires, so a returning person cannot collide with a
+   * newcomer. Callers drop expired IDs via isTrackAlive() after every update.
+   */
+  _allocateId() {
+    const used = new Set(this._records.map(track => track.id));
+    let id = 1;
+    while (used.has(id)) id++;
+    return id;
   }
 
   /** Confirmed and lost snapshots; tentative births are intentionally hidden. */
@@ -314,7 +326,7 @@ export class ByteTracker {
       if (detection.score < this.options.newTrackThreshold) continue;
       const initial = this._kalman.initiate(boxToXYAH(detection.box));
       this._records.push({
-        id: this._nextId++,
+        id: this._allocateId(),
         mean: initial.mean,
         covariance: initial.covariance,
         state: firstFrame ? "confirmed" : "tentative",
