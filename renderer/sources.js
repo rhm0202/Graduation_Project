@@ -516,6 +516,7 @@ function _stopAiLoop(src) {
   src._maskField = null;
   src._maskBlurTmp = null;
   src._maskHyst = null;
+  src._maskPrevBoxes = null;
 
   // Only the owner can clear IDs. Deleting an unrelated source must not do so.
   if (trackerSourceId === src.id) {
@@ -619,6 +620,14 @@ const MASK_CLOSE_RADIUS = 1;
 // 켜졌던 칸은 확률을 BOOST 만큼 올려 0.6 까지 떨어져도 유지합니다.
 const MASK_HYST_ON = 0.8;
 const MASK_HYST_BOOST = 0.2;
+
+// 움직이는 사람에게는 히스테리시스를 풉니다. 붙잡아 둔 칸이 사람이 떠난
+// 자리에 남아 실제 배경이 꼬리처럼 비치기 때문입니다. 카메라가 돌 때도
+// 화면 속 박스가 함께 움직이므로 같은 판정으로 풀립니다.
+// 박스 가장자리 이동량(모델 640 좌표, 프레임당) 기준:
+// STILL 이하면 그대로, MOVING 이상이면 끔, 사이는 비례해서 약하게.
+const MASK_HYST_STILL_PX = 1.5;
+const MASK_HYST_MOVING_PX = 5;
 
 /** 1차원 max/min 필터(창은 영역 안으로 잘림). 분리 가능한 팽창·침식용. */
 function _filter1D(src, dst, w, h, horizontal, useMax, r) {
@@ -724,19 +733,56 @@ function closeMaskOverlaps(mask, boxes, size) {
 }
 
 /**
+ * 사람별 이동량으로 히스테리시스 세기(0~1)를 proto 칸마다 정합니다.
+ *
+ * 이전 프레임 박스와 지금 박스의 가장자리 이동량을 보고, 움직이는 사람은
+ * 두 박스를 합친 영역(+1칸)의 세기를 낮춥니다. 지금 박스만 보면 사람이
+ * 떠난 자리(꼬리)가 빠져 그곳의 잔상이 그대로 남습니다.
+ * 이전 프레임에 없던 대상은 비교할 수 없으므로 그대로(1) 둡니다.
+ */
+function computeMaskHystScale(targets, prevBoxes, size) {
+  const scale = new Float32Array(size * size).fill(1);
+  if (!prevBoxes) return scale;
+  const toProto = size / 640;
+  const last = size - 1;
+  for (const target of targets) {
+    const prev = prevBoxes.get(target.id);
+    if (!prev) continue;
+    const b = target.box;
+    const shift = Math.max(
+      Math.abs(b.x1 - prev.x1), Math.abs(b.x2 - prev.x2),
+      Math.abs(b.y1 - prev.y1), Math.abs(b.y2 - prev.y2),
+    );
+    const s = 1 - (shift - MASK_HYST_STILL_PX) / (MASK_HYST_MOVING_PX - MASK_HYST_STILL_PX);
+    if (s >= 1) continue;
+    const k = s > 0 ? s : 0;
+    const x1 = Math.max(0, Math.floor(Math.min(b.x1, prev.x1) * toProto) - 1);
+    const y1 = Math.max(0, Math.floor(Math.min(b.y1, prev.y1) * toProto) - 1);
+    const x2 = Math.min(last, Math.ceil(Math.max(b.x2, prev.x2) * toProto) + 1);
+    const y2 = Math.min(last, Math.ceil(Math.max(b.y2, prev.y2) * toProto) + 1);
+    for (let y = y1; y <= y2; y++) {
+      for (let p = y * size + x1, pe = y * size + x2; p <= pe; p++) {
+        if (k < scale[p]) scale[p] = k;
+      }
+    }
+  }
+  return scale;
+}
+
+/**
  * proto 칸마다 이전 프레임의 켜짐 상태를 기억해 램프 근처의 깜빡임을 막습니다.
  * 켜짐 상태 배열을 제자리에서 갱신해 돌려줍니다. prev 가 없으면 새로 만듭니다.
  *
- * 프레임 간 평균과 달리 움직이는 사람 뒤로 잔상이 남지 않습니다.
- * 켜지는 기준은 그대로라 새로 생기는 영역은 즉시, 사라지는 영역은
- * 확률이 0.6 아래로 내려가는 즉시 꺼집니다.
+ * 켜지는 기준은 그대로라 새로 생기는 영역은 즉시 켜집니다. 켜졌던 칸은
+ * BOOST × scale 만큼 붙잡아 두므로, 움직이는 사람(scale 0)에게는
+ * 붙잡기가 없어 떠난 자리가 바로 꺼집니다. scale 을 생략하면 1 입니다.
  */
-function applyMaskHysteresis(mask, prev) {
+function applyMaskHysteresis(mask, prev, scale) {
   const on = prev && prev.length === mask.length ? prev : new Uint8Array(mask.length);
   for (let p = 0; p < mask.length; p++) {
     let v = mask[p];
     if (on[p]) {
-      v += MASK_HYST_BOOST;
+      v += MASK_HYST_BOOST * (scale ? scale[p] : 1);
       if (v > 1) v = 1;
       mask[p] = v;
     }
@@ -954,6 +1000,7 @@ async function _aiLoop(src, generation) {
           // 사람 미감지 시 전체 투명
           for (let j = 3; j < md.length; j += 4) md[j] = 0;
           src._maskHyst = null;
+          src._maskPrevBoxes = null;
         } else {
           const combinedMask = new Float32Array(nProto);
 
@@ -1002,7 +1049,9 @@ async function _aiLoop(src, generation) {
           }
 
           closeMaskOverlaps(combinedMask, boxes160, PROTO);
-          src._maskHyst = applyMaskHysteresis(combinedMask, src._maskHyst);
+          const hystScale = computeMaskHystScale(bgTargets, src._maskPrevBoxes, PROTO);
+          src._maskPrevBoxes = new Map(bgTargets.map((t) => [t.id, t.box]));
+          src._maskHyst = applyMaskHysteresis(combinedMask, src._maskHyst, hystScale);
 
           // ── 소프트 알파 페더링 ──────────────────────────────────────
           // 하한이 컷오프입니다. 이 확률 이하는 완전 투명입니다.
@@ -1101,7 +1150,10 @@ async function _aiLoop(src, generation) {
         src._maskCtx.putImageData(src._maskImg, 0, 0);
       }
 
-      if (!src.bgRemoval) src._maskHyst = null;
+      if (!src.bgRemoval) {
+        src._maskHyst = null;
+        src._maskPrevBoxes = null;
+      }
 
       // 배경 이미지/영상/색 합성 (배경 제거 ON일 때만 배경 교체)
       src.bgCtx.clearRect(0, 0, w, h);
