@@ -20,7 +20,7 @@ Spotlight Cam은 자동 업데이트 기능을 지원합니다. 사용자는 앱
 {
   "version": "1.0.1",
   "releaseDate": "2026-05-06",
-  "downloadUrl": "https://media.githubusercontent.com/media/rhm0202/Graduation_Project/main/website/downloads/Spotlight_Cam-Setup_v1.0.1.exe",
+  "downloadUrl": "https://media.githubusercontent.com/media/rhm0202/spotlight-cam/main/website/downloads/Spotlight_Cam-Setup_v1.0.1.exe",
   "releaseNotes": "버그 수정 및 성능 개선\n- 라즈베리파이 연결 안정성 향상\n- UI 개선\n- 새로운 기능 추가"
 }
 ```
@@ -38,10 +38,10 @@ Spotlight Cam은 자동 업데이트 기능을 지원합니다. 사용자는 앱
 
 ```javascript
 const UPDATE_SERVER_URL =
-  "https://raw.githubusercontent.com/rhm0202/Graduation_Project/main/updates/latest.json";
+  "https://raw.githubusercontent.com/rhm0202/spotlight-cam/main/updates/latest.json";
 ```
 
-**현재 설정된 저장소**: [rhm0202/Graduation_Project](https://github.com/rhm0202/Graduation_Project)
+**현재 설정된 저장소**: [rhm0202/spotlight-cam](https://github.com/rhm0202/spotlight-cam)
 
 #### 4단계: 새 버전 배포
 
@@ -165,7 +165,7 @@ application/
 {
   "version": "1.0.1",
   "releaseDate": "2026-05-06",
-  "downloadUrl": "https://media.githubusercontent.com/media/rhm0202/Graduation_Project/main/website/downloads/Spotlight_Cam-Setup_v1.0.1.exe",
+  "downloadUrl": "https://media.githubusercontent.com/media/rhm0202/spotlight-cam/main/website/downloads/Spotlight_Cam-Setup_v1.0.1.exe",
   "releaseNotes": "주요 변경사항:\n- 버그 수정 및 성능 개선\n- UI 개선"
 }
 ```

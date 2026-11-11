@@ -111,7 +111,7 @@ Spotlight Cam은 크로마키의 물리적 제약을 해결하기 위해 개발�
 ## 프로젝트 구조
 
 ```
-Graduation_Project/
+spotlight-cam/
 ├── main.js                 # Electron 메인 프로세스 (spotlight_core 실행, 업데이트 확인)
 ├── preload.js
 ├── index.html / styles.css
@@ -139,7 +139,7 @@ Graduation_Project/
 └── docs/                   # 개발 현황 웹사이트
 ```
 
-라즈베리파이 측 코드는 [Graduation_Project_In_Raspberry_Pi](https://github.com/rhm0202/Graduation_Project_In_Raspberry_Pi) 레포에 있습니다.
+라즈베리파이 측 코드는 [spotlight-cam-rpi](https://github.com/rhm0202/spotlight-cam-rpi) 레포에 있습니다.
 
 ---
 
@@ -167,7 +167,7 @@ Graduation_Project/
 ### 데스크탑 앱
 
 #### 릴리스 파일로 설치
-1. [Releases](https://github.com/rhm0202/Graduation_Project/releases)에서 최신 `Spotlight_Cam_v*-win32-x64.zip` 다운로드
+1. [Releases](https://github.com/rhm0202/spotlight-cam/releases)에서 최신 `Spotlight_Cam_v*-win32-x64.zip` 다운로드
 2. 압축 해제 후 실행 파일 실행
 
 #### 개발자 빌드
@@ -189,7 +189,7 @@ pip install websockets
 
 ### 라즈베리파이
 
-[Graduation_Project_In_Raspberry_Pi](https://github.com/rhm0202/Graduation_Project_In_Raspberry_Pi) README를 참고하세요.
+[spotlight-cam-rpi](https://github.com/rhm0202/spotlight-cam-rpi) README를 참고하세요.
 
 1. I2C 활성화: `sudo raspi-config` → Interface Options → I2C → Enable
 2. MediaMTX 설치 및 카메라 스트림(`cam`) 설정

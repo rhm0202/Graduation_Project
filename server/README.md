@@ -51,4 +51,4 @@ Electron 앱에서 **라즈베리파이 연결 버튼**을 누르면 자동으�
 
 ## 관련 레포지토리
 
-- RPi 서버: [Graduation_Project_In_Raspberry_Pi](https://github.com/rhm0202/Graduation_Project_In_Raspberry_Pi)
+- RPi 서버: [spotlight-cam-rpi](https://github.com/rhm0202/spotlight-cam-rpi)
