@@ -31,6 +31,8 @@ export const state = {
   // 라즈베리파이
   piWebSocket: null,
   piConnected: false,
+  piMotorReady: false,
+  piMotorStatus: null,
   piReconnectAttempts: 0,
   piReconnectTimer: null,
   piVideoStream: null,       // WebRTC 수신 <video> element

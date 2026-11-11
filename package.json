@@ -4,7 +4,6 @@
   "version": "2.1.0",
   "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
@@ -37,5 +36,10 @@
     "@electron-forge/plugin-fuses": "^7.10.2",
     "@electron/fuses": "^1.8.0",
     "electron": "^39.1.0"
+  },
+  "allowScripts": {
+    "electron@39.8.9": true,
+    "electron-winstaller@5.4.0": true,
+    "protobufjs@7.5.6": true
   }
 }

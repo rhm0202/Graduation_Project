@@ -10,7 +10,8 @@ FRAME_WIDTH  = 1920                         # 카메라 해상도 (1080p)
 FRAME_HEIGHT = 1080
 
 X_DEAD_ZONE  = 300                          # 팬 데드존 (200@1280 → 300@1920 비례 스케일)
-Y_DEAD_ZONE  = 150                          # 틸트 데드존 (100@720 → 150@1080 비례 스케일)
+Y_DEAD_ZONE  = 150                          # 틸트 데드존 위쪽 (100@720 → 150@1080 비례 스케일)
+Y_DEAD_ZONE_BOTTOM = 120                    # 틸트 데드존 아래쪽 — 위쪽보다 좁혀 아래로 내려갈 때 일찍 보정
 
 # ─── PID 모터 제어 파라미터 ───────────────────────────────
 PID_KP           = 0.20    # 비례 게인 — 오차 크기에 비례한 즉각 보정
@@ -19,6 +20,17 @@ PID_KD           = 0.08    # 미분 게인 — 오차 변화 속도에 제동 (�
 PID_OUTPUT_LIMIT = 15.0    # PID 1회 출력 최대 각도 변화 (±도) — 빠른 추적 핵심
 EMA_ALPHA        = 0.18    # EMA 스무딩 팩터 (낮을수록 부드러움, 높을수록 응답 빠름)
 
+# ─── 대상 전환 시 부드러운 이동 ───────────────────────────
+SWITCH_MAX_SPEED_DPS = 30.0  # 새 대상으로 이동할 때 최대 회전 속도 (°/s) — 데드존에 들어오면 해제
+SWITCH_RAMP_S        = 0.6   # 0 → 최대 속도까지 가속하는 시간 (초)
+REACQUIRE_GAP_S      = 0.5   # 좌표가 이 시간 이상 끊겼다 다시 오면 새 대상처럼 천천히 출발
+
 # ─── 추적 안정화 파라미터 ─────────────────────────────────
 MAX_JUMP_PX      = 400     # 이 픽셀 이상 좌표가 급변하면 점프로 간주해 무시
 MIN_SEND_INTERVAL = 0.033  # RPi 최소 전송 간격 (초) — 최대 30fps 상한
+
+# Command lifetime and the physical limits used by the Pi controller.
+COMMAND_TTL_MS = 250
+MOTOR_STATUS_TIMEOUT = 0.8
+PAN_LIMITS = (0.0, 180.0)
+TILT_LIMITS = (20.0, 160.0)

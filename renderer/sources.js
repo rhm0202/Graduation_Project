@@ -15,10 +15,18 @@
  */
 import { state, isElectron } from "./state.js";
 import { sendObjectCoords, sendTrackingState } from "./rpi.js";
-import { HybridTracker } from "./hybridTracker.js";
+import {
+  ByteTracker, collectPersonDetections, selectMaskTracks, selectControlTrack,
+  controlPoint, videoFrameKey,
+} from "./byteTracker.js";
 
-const globalTracker = new HybridTracker();
+const globalTracker = new ByteTracker();
+let trackerSourceId = null;
 let _trackSnapshot = "";
+// 모터 추적 대상이 바뀔 때마다 증가. 서버는 이 값이 바뀌면 전환 모드로 천천히
+// 출발합니다. ID 는 재사용되므로 ID 대신 선택이 바뀐 횟수로 구분합니다.
+let _controlTargetSeq = 0;
+let _lastControlTargetId = null;
 
 // ─────────────────────────────────────────────────────────
 // 마스터 캔버스
@@ -123,6 +131,7 @@ function _updatePreviewCanvas() {
 // ─────────────────────────────────────────────────────────
 
 let _idSeq = 0;
+let _webcamRequest = 0;
 function _uid() {
   return `src_${++_idSeq}`;
 }
@@ -164,12 +173,17 @@ function _makeSource(overrides) {
  * 기존 웹캠 소스가 있으면 스트림을 교체합니다.
  */
 export async function addWebcamSource(deviceId, label) {
+  const request = ++_webcamRequest;
   try {
     const constraints = {
       video: deviceId ? { deviceId: { exact: deviceId } } : true,
       audio: true,
     };
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (request !== _webcamRequest) {
+      stream.getTracks().forEach(track => track.stop());
+      return null;
+    }
     state.mediaStream = stream;
     _syncAudioToMaster(stream);
 
@@ -177,13 +191,12 @@ export async function addWebcamSource(deviceId, label) {
     const existing = state.sources.find((s) => s.type === "webcam");
     if (existing) {
       if (existing.stream) existing.stream.getTracks().forEach((t) => t.stop());
+      _clearSourceVideo(existing);
       existing.stream = stream;
       existing.videoEl = _createVideoEl(stream);
       existing.label = label || existing.label;
-      if (existing.bgRemoval || existing.objectTracking) {
-        _stopAiLoop(existing);
-        _startAiLoop(existing);
-      }
+      if (existing.bgRemoval && state.selectedSourceId === existing.id) _startAiLoop(existing);
+      _previewSelectedSource();
       renderSourcesList();
       return existing;
     }
@@ -246,7 +259,16 @@ export async function addWindowSource(sourceId, label) {
  */
 export function addRpiSource() {
   if (!state.piVideoStream) return null;
-  if (state.sources.find((s) => s.type === "rpi")) return null; // 중복 방지
+  const existing = state.sources.find((s) => s.type === "rpi");
+  if (existing) {
+    if (existing.videoEl === state.piVideoStream) return existing;
+    clearRpiSource();
+    existing.videoEl = state.piVideoStream;
+    existing.stream = state.piVideoStream.srcObject;
+    if (existing.bgRemoval && state.selectedSourceId === existing.id) _startAiLoop(existing);
+    _previewSelectedSource();
+    return existing;
+  }
 
   const src = _makeSource({
     type: "rpi",
@@ -267,9 +289,36 @@ export function addRpiSource() {
 // 소스 제어
 // ─────────────────────────────────────────────────────────
 
+// Keep the layout/source ID while invalidating old frames, masks and motor targets.
+export function clearRpiSource() {
+  const src = state.sources.find(s => s.type === "rpi");
+  if (src) _clearSourceVideo(src);
+}
+
+function _clearSourceVideo(src) {
+  if (trackerSourceId === src.id || state.selectedSourceId === src.id) {
+    if (state.autoTrackingEnabled) sendTrackingState(false);
+    state.autoTrackingEnabled = false;
+    state.objectTrackingEnabled = false;
+  }
+  src.objectTracking = false;
+  _stopAiLoop(src);
+  src.videoEl = null;
+  src.stream = null;
+  _updateObjectTrackingBtn();
+  _previewSelectedSource();
+}
+
 export function removeSource(id) {
   const idx = state.sources.findIndex((s) => s.id === id);
   if (idx === -1) return;
+  if (state.sources[idx].type === "webcam") _webcamRequest++;
+  if (trackerSourceId === id || state.selectedSourceId === id) {
+    if (state.autoTrackingEnabled) sendTrackingState(false);
+    state.autoTrackingEnabled = false;
+    state.objectTrackingEnabled = false;
+    state.backgroundRemovalEnabled = false;
+  }
   _cleanupSource(state.sources[idx]);
   state.sources.splice(idx, 1);
   if (state.selectedSourceId === id) {
@@ -356,7 +405,7 @@ export function toggleBgRemovalForSelectedSource() {
 
   // AI 루프 관리: 둘 중 하나라도 켜져 있으면 루프 유지
   const needAi = src.bgRemoval || src.objectTracking;
-  if (needAi && !src.bgAnimFrame) {
+  if (needAi && !src._aiRunning) {
     _startAiLoop(src);
   } else if (!needAi) {
     _stopAiLoop(src);
@@ -384,7 +433,7 @@ export function toggleObjectTrackingForSelectedSource() {
 
   // AI 루프 관리: 둘 중 하나라도 켜져 있으면 루프 유지
   const needAi = src.bgRemoval || src.objectTracking;
-  if (needAi && !src.bgAnimFrame) {
+  if (needAi && !src._aiRunning) {
     _startAiLoop(src);
   } else if (!needAi) {
     _stopAiLoop(src);
@@ -414,6 +463,16 @@ function _updateObjectTrackingBtn() {
 // ─────────────────────────────────────────────────────────
 
 function _startAiLoop(src) {
+  if (src._aiRunning) return;
+  src._aiRunning = true;
+  src._aiGeneration = (src._aiGeneration || 0) + 1;
+  src._aiFrameId = 0;
+  src._lastVideoFrameKey = null;
+  trackerSourceId = src.id;
+  globalTracker.reset();
+  state.targetPersonId = null;
+  state.targetPersonIds = [];
+  _trackSnapshot = "";
   if (!src.bgCanvas) {
     src.bgCanvas = document.createElement("canvas");
     // 브라우저 기본값(300×150) 대신 0으로 초기화해야 wasEmpty 검사가 올바르게 동작함
@@ -434,10 +493,12 @@ function _startAiLoop(src) {
   if (!src._tensorData) {
     src._tensorData = new Float32Array(3 * 640 * 640);
   }
-  _aiLoop(src);
+  _aiLoop(src, src._aiGeneration);
 }
 
 function _stopAiLoop(src) {
+  src._aiRunning = false;
+  src._aiGeneration = (src._aiGeneration || 0) + 1;
   if (src.bgAnimFrame) {
     cancelAnimationFrame(src.bgAnimFrame);
     src.bgAnimFrame = null;
@@ -452,9 +513,14 @@ function _stopAiLoop(src) {
   src._maskCanvas = null;
   src._maskCtx = null;
   src._maskImg = null;
+  src._maskField = null;
+  src._maskBlurTmp = null;
+  src._maskHyst = null;
+  src._maskPrevBoxes = null;
 
-  // 배경 제거 + 객체 추적이 모두 꺼졌을 때 객체 번호 초기화
-  if (!src.bgRemoval && !src.objectTracking) {
+  // Only the owner can clear IDs. Deleting an unrelated source must not do so.
+  if (trackerSourceId === src.id) {
+    trackerSourceId = null;
     globalTracker.reset();
     state.targetPersonIds = [];
     state.targetPersonId = null;
@@ -463,9 +529,24 @@ function _stopAiLoop(src) {
   }
 }
 
+function _isAiCurrent(src, generation) {
+  return src._aiRunning && src._aiGeneration === generation
+    && trackerSourceId === src.id && state.selectedSourceId === src.id
+    && state.sources.includes(src) && !!src.bgCtx
+    && (src.bgRemoval || src.objectTracking);
+}
+
+function _scheduleAiLoop(src, generation) {
+  if (!_isAiCurrent(src, generation)) return;
+  src.bgAnimFrame = requestAnimationFrame(() => {
+    src.bgAnimFrame = null;
+    _aiLoop(src, generation);
+  });
+}
+
 /**
  * 객체 추적을 위한 오버레이를 그립니다.
- * 디버깅용으로 pid_controller.py의 데드존, 바운딩박스, 중심점을 함께 그립니다.
+ * pid_controller.py의 데드존과, 카메라가 추적하는 지점에 "사람 N" 라벨을 그립니다.
  * @param {CanvasRenderingContext2D} ctx - 그릴 캔버스 컨텍스트
  * @param {Array<Object>} people - 추적 결과 (각 객체에 id, box가 있어야 함)
  * @param {string} targetPersonId - 추적 중인 사람 ID (없으면 모든 사람 표시)
@@ -475,79 +556,246 @@ function _drawTrackingOverlay(ctx, people, targetPersonId, w, h) {
   const sy = h / 640;
   const fontSize = Math.max(13, Math.round(w * 0.02));
 
-  // PID 데드존 시각화 (config.py: X_DEAD_ZONE=300@1920px, Y_DEAD_ZONE=150@1080px)
+  // PID 데드존 시각화
+  // (config.py: X_DEAD_ZONE=300@1920px, Y_DEAD_ZONE=150 / Y_DEAD_ZONE_BOTTOM=120 @1080px)
   const dzHalfW = (300 * w) / 1920;
-  const dzHalfH = (150 * h) / 1080;
+  const dzTop = (150 * h) / 1080;
+  const dzBottom = (120 * h) / 1080;
   ctx.save();
   ctx.strokeStyle = "rgba(255, 220, 0, 0.9)";
   ctx.lineWidth = 2;
   ctx.setLineDash([10, 5]);
-  ctx.strokeRect(w / 2 - dzHalfW, h / 2 - dzHalfH, dzHalfW * 2, dzHalfH * 2);
+  ctx.strokeRect(w / 2 - dzHalfW, h / 2 - dzTop, dzHalfW * 2, dzTop + dzBottom);
   ctx.setLineDash([]);
   ctx.font = `${fontSize - 2}px monospace`;
   ctx.fillStyle = "rgba(255, 220, 0, 0.9)";
-  ctx.fillText("DEAD ZONE", w / 2 - dzHalfW + 4, h / 2 - dzHalfH - 5);
+  ctx.fillText("DEAD ZONE", w / 2 - dzHalfW + 4, h / 2 - dzTop - 5);
   ctx.restore();
 
-  // 각 사람별 바운딩박스 + 중심점 + 라벨
+  // 카메라가 추적하는 지점(controlPoint)에 "사람 N" 라벨 (바운딩박스는 그리지 않음)
   people.forEach((person) => {
-    const { x1, y1, x2, y2 } = person.box;
-    const bx = x1 * sx;
-    const by = y1 * sy;
-    const bw = (x2 - x1) * sx;
-    const bh = (y2 - y1) * sy;
-    const cx = ((x1 + x2) / 2) * sx;
-    const cy = (y1 + (y2 - y1) * 0.2) * sy;
+    const point = controlPoint(person.box);
+    const cx = point.x * sx;
+    const cy = point.y * sy;
 
     const isTarget = person.id === targetPersonId;
-    const boxColor = isTarget ? "#00ff44" : "#ff9500";
     const labelBg = isTarget
       ? "rgba(0, 150, 40, 0.85)"
       : "rgba(180, 90, 0, 0.85)";
 
     ctx.save();
 
-    // 바운딩박스
-    ctx.strokeStyle = boxColor;
-    ctx.lineWidth = isTarget ? 3 : 2;
-    ctx.strokeRect(bx, by, bw, bh);
-
-    // 중심점 + 십자선
-    ctx.fillStyle = boxColor;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = boxColor;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx - 10, cy);
-    ctx.lineTo(cx + 10, cy);
-    ctx.moveTo(cx, cy - 10);
-    ctx.lineTo(cx, cy + 10);
-    ctx.stroke();
-
-    // 라벨 배경 + 텍스트
-    const label = `ID ${person.id}`;
+    const label = `사람 ${person.id}${person.observed ? "" : " (예측)"}`;
     ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     const tw = ctx.measureText(label).width;
-    const pad = 4;
-    const lh = fontSize + pad * 2;
-    const lx = Math.max(0, bx);
-    const ly = by > lh ? by : by + lh;
+    const padX = 8;
+    const lw = tw + padX * 2;
+    const lh = fontSize + 10;
+    // 화면 밖으로 반쯤 나간 사람도 라벨은 화면 안에 둡니다.
+    const lx = Math.min(Math.max(cx, lw / 2), w - lw / 2);
+    const ly = Math.min(Math.max(cy, lh / 2), h - lh / 2);
+    ctx.globalAlpha = person.observed ? 1 : 0.6;
     ctx.fillStyle = labelBg;
-    ctx.fillRect(lx, ly - lh, tw + pad * 2, lh);
+    ctx.beginPath();
+    ctx.roundRect(lx - lw / 2, ly - lh / 2, lw, lh, lh / 2);
+    ctx.fill();
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(label, lx + pad, ly - pad);
+    ctx.fillText(label, lx, ly);
 
     ctx.restore();
   });
 }
 
-async function _aiLoop(src) {
-  if ((!src.bgRemoval && !src.objectTracking) || !src.bgCtx) return;
+// ── 겹친 사람 사이 마스크 보정 ─────────────────────────────────────
+// 아래 값들은 _aiLoop 의 알파 램프(FADE_LO 0.75 ~ FADE_HI 0.85)를 기준으로 합니다.
+
+// 닫힘 연산 반경(proto 칸). 1칸이면 폭 2칸까지의 틈을 메웁니다.
+// 1080p 에서 proto 한 칸은 약 12px 입니다. 키우면 팔과 몸 사이 같은
+// 실제 배경 틈까지 메워지므로 1~2 를 넘기지 않습니다.
+const MASK_CLOSE_RADIUS = 1;
+
+// 히스테리시스: 램프 중간값(0.8) 이상이면 "켜짐"으로 기억하고,
+// 켜졌던 칸은 확률을 BOOST 만큼 올려 0.6 까지 떨어져도 유지합니다.
+const MASK_HYST_ON = 0.8;
+const MASK_HYST_BOOST = 0.2;
+
+// 움직이는 사람에게는 히스테리시스를 풉니다. 붙잡아 둔 칸이 사람이 떠난
+// 자리에 남아 실제 배경이 꼬리처럼 비치기 때문입니다. 카메라가 돌 때도
+// 화면 속 박스가 함께 움직이므로 같은 판정으로 풀립니다.
+// 박스 가장자리 이동량(모델 640 좌표, 프레임당) 기준:
+// STILL 이하면 그대로, MOVING 이상이면 끔, 사이는 비례해서 약하게.
+const MASK_HYST_STILL_PX = 1.5;
+const MASK_HYST_MOVING_PX = 5;
+
+/** 1차원 max/min 필터(창은 영역 안으로 잘림). 분리 가능한 팽창·침식용. */
+function _filter1D(src, dst, w, h, horizontal, useMax, r) {
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const c = horizontal ? x : y;
+      const n = horizontal ? w : h;
+      const lo = c - r < 0 ? 0 : c - r;
+      const hi = c + r > n - 1 ? n - 1 : c + r;
+      let v = useMax ? -Infinity : Infinity;
+      for (let k = lo; k <= hi; k++) {
+        const s = horizontal ? src[y * w + k] : src[k * w + x];
+        if (useMax ? s > v : s < v) v = s;
+      }
+      dst[y * w + x] = v;
+    }
+  }
+}
+
+/**
+ * n×n 배열에 반경 r 박스 블러를 제자리로 겁니다(가장자리는 끝값 반복).
+ * 누적합이라 r 과 무관하게 픽셀당 상수 비용입니다. tmp 는 같은 크기의 작업 버퍼입니다.
+ */
+function _boxBlurSquare(data, tmp, n, r) {
+  const inv = 1 / (2 * r + 1);
+  const last = n - 1;
+  // 가로: data → tmp
+  for (let y = 0; y < n; y++) {
+    const row = y * n;
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += data[row + (k < 0 ? 0 : k > last ? last : k)];
+    for (let x = 0; x < n; x++) {
+      tmp[row + x] = acc * inv;
+      const out = x - r;
+      const inn = x + r + 1;
+      acc += data[row + (inn > last ? last : inn)] - data[row + (out < 0 ? 0 : out)];
+    }
+  }
+  // 세로: tmp → data
+  for (let x = 0; x < n; x++) {
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += tmp[(k < 0 ? 0 : k > last ? last : k) * n + x];
+    for (let y = 0; y < n; y++) {
+      data[y * n + x] = acc * inv;
+      const out = y - r;
+      const inn = y + r + 1;
+      acc += tmp[(inn > last ? last : inn) * n + x] - tmp[(out < 0 ? 0 : out) * n + x];
+    }
+  }
+}
+
+/**
+ * 두 박스가 겹치는 영역에서만 마스크에 닫힘 연산(팽창 → 침식)을 겁니다.
+ *
+ * 가려진 경계에서는 앞사람·뒷사람 마스크가 함께 낮아져 합쳐도 램프
+ * 아래로 떨어지고, 두 사람 사이에 배경 띠가 생깁니다. 닫힘 연산은 좁은
+ * 틈만 메우고 바깥 윤곽은 원래 자리로 되돌리므로 테두리가 두꺼워지지
+ * 않습니다. 겹친 영역에만 걸어 다른 곳의 경계는 건드리지 않습니다.
+ */
+function closeMaskOverlaps(mask, boxes, size) {
+  const r = MASK_CLOSE_RADIUS;
+  const last = size - 1;
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i];
+      const b = boxes[j];
+      const ix1 = Math.max(0, a.x1, b.x1);
+      const iy1 = Math.max(0, a.y1, b.y1);
+      const ix2 = Math.min(last, a.x2, b.x2);
+      const iy2 = Math.min(last, a.y2, b.y2);
+      if (ix1 > ix2 || iy1 > iy2) continue;
+
+      // 침식이 겹친 영역 가장자리에서도 올바른 팽창값을 읽도록 2r 여유를 둡니다.
+      const ex1 = Math.max(0, ix1 - 2 * r);
+      const ey1 = Math.max(0, iy1 - 2 * r);
+      const ex2 = Math.min(last, ix2 + 2 * r);
+      const ey2 = Math.min(last, iy2 + 2 * r);
+      const ew = ex2 - ex1 + 1;
+      const eh = ey2 - ey1 + 1;
+
+      const region = new Float32Array(ew * eh);
+      const tmp = new Float32Array(ew * eh);
+      for (let y = 0; y < eh; y++) {
+        for (let x = 0; x < ew; x++) {
+          region[y * ew + x] = mask[(ey1 + y) * size + ex1 + x];
+        }
+      }
+
+      _filter1D(region, tmp, ew, eh, true, true, r);
+      _filter1D(tmp, region, ew, eh, false, true, r);
+      _filter1D(region, tmp, ew, eh, true, false, r);
+      _filter1D(tmp, region, ew, eh, false, false, r);
+
+      for (let y = iy1; y <= iy2; y++) {
+        for (let x = ix1; x <= ix2; x++) {
+          const closed = region[(y - ey1) * ew + (x - ex1)];
+          const p = y * size + x;
+          if (closed > mask[p]) mask[p] = closed;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 사람별 이동량으로 히스테리시스 세기(0~1)를 proto 칸마다 정합니다.
+ *
+ * 이전 프레임 박스와 지금 박스의 가장자리 이동량을 보고, 움직이는 사람은
+ * 두 박스를 합친 영역(+1칸)의 세기를 낮춥니다. 지금 박스만 보면 사람이
+ * 떠난 자리(꼬리)가 빠져 그곳의 잔상이 그대로 남습니다.
+ * 이전 프레임에 없던 대상은 비교할 수 없으므로 그대로(1) 둡니다.
+ */
+function computeMaskHystScale(targets, prevBoxes, size) {
+  const scale = new Float32Array(size * size).fill(1);
+  if (!prevBoxes) return scale;
+  const toProto = size / 640;
+  const last = size - 1;
+  for (const target of targets) {
+    const prev = prevBoxes.get(target.id);
+    if (!prev) continue;
+    const b = target.box;
+    const shift = Math.max(
+      Math.abs(b.x1 - prev.x1), Math.abs(b.x2 - prev.x2),
+      Math.abs(b.y1 - prev.y1), Math.abs(b.y2 - prev.y2),
+    );
+    const s = 1 - (shift - MASK_HYST_STILL_PX) / (MASK_HYST_MOVING_PX - MASK_HYST_STILL_PX);
+    if (s >= 1) continue;
+    const k = s > 0 ? s : 0;
+    const x1 = Math.max(0, Math.floor(Math.min(b.x1, prev.x1) * toProto) - 1);
+    const y1 = Math.max(0, Math.floor(Math.min(b.y1, prev.y1) * toProto) - 1);
+    const x2 = Math.min(last, Math.ceil(Math.max(b.x2, prev.x2) * toProto) + 1);
+    const y2 = Math.min(last, Math.ceil(Math.max(b.y2, prev.y2) * toProto) + 1);
+    for (let y = y1; y <= y2; y++) {
+      for (let p = y * size + x1, pe = y * size + x2; p <= pe; p++) {
+        if (k < scale[p]) scale[p] = k;
+      }
+    }
+  }
+  return scale;
+}
+
+/**
+ * proto 칸마다 이전 프레임의 켜짐 상태를 기억해 램프 근처의 깜빡임을 막습니다.
+ * 켜짐 상태 배열을 제자리에서 갱신해 돌려줍니다. prev 가 없으면 새로 만듭니다.
+ *
+ * 켜지는 기준은 그대로라 새로 생기는 영역은 즉시 켜집니다. 켜졌던 칸은
+ * BOOST × scale 만큼 붙잡아 두므로, 움직이는 사람(scale 0)에게는
+ * 붙잡기가 없어 떠난 자리가 바로 꺼집니다. scale 을 생략하면 1 입니다.
+ */
+function applyMaskHysteresis(mask, prev, scale) {
+  const on = prev && prev.length === mask.length ? prev : new Uint8Array(mask.length);
+  for (let p = 0; p < mask.length; p++) {
+    let v = mask[p];
+    if (on[p]) {
+      v += MASK_HYST_BOOST * (scale ? scale[p] : 1);
+      if (v > 1) v = 1;
+      mask[p] = v;
+    }
+    on[p] = v >= MASK_HYST_ON ? 1 : 0;
+  }
+  return on;
+}
+
+async function _aiLoop(src, generation) {
+  if (!_isAiCurrent(src, generation)) return;
   const vid = src.videoEl;
   if (!vid || vid.readyState < 2) {
-    src.bgAnimFrame = requestAnimationFrame(() => _aiLoop(src));
+    _scheduleAiLoop(src, generation);
     return;
   }
 
@@ -566,8 +814,20 @@ async function _aiLoop(src) {
   // 전경 캔버스(_fgCanvas)에 조립한 뒤 성공 시에만 출력 캔버스에 반영합니다.
 
   if (state.session && !state.sessionBusy) {
+    const frameKey = videoFrameKey(vid);
+    if (frameKey !== null && frameKey === src._lastVideoFrameKey) {
+      _scheduleAiLoop(src, generation);
+      return;
+    }
+    const session = state.session;
+    let inputTensor;
+    let results;
     try {
       state.sessionBusy = true;
+      // Renderer-local sampling time, not the remote camera's exposure time.
+      const timestampMs = performance.now();
+      const frameId = ++src._aiFrameId;
+      src._lastVideoFrameKey = frameKey;
       const MODEL_SIZE = 640;
       // 캔버스 재사용 (매 프레임 생성 방지)
       const tmp = src._tmpCanvas;
@@ -602,60 +862,34 @@ async function _aiLoop(src) {
         tensorData[2 * totalPixels + i] = data[p + 2] * INV_255;
       }
 
-      const inputTensor = new ort.Tensor("float32", tensorData, [
+      inputTensor = new ort.Tensor("float32", tensorData, [
         1,
         3,
         MODEL_SIZE,
         MODEL_SIZE,
       ]);
-      const feeds = { [state.session.inputNames[0]]: inputTensor };
-      const results = await state.session.run(feeds);
+      const feeds = { [session.inputNames[0]]: inputTensor };
+      results = await session.run(feeds);
 
-      // 추론 대기 중 소스가 변경되어 AI 처리가 중단된 경우 조기 종료
-      if ((!src.bgRemoval && !src.objectTracking) || !src.bgCtx) {
-        state.sessionBusy = false;
+      // OFF→ON, source replacement and A→B→A invalidate in-flight results too.
+      if (!_isAiCurrent(src, generation) || src.videoEl !== vid) return;
+      if (state.session !== session) {
+        src._lastVideoFrameKey = null;
+        _scheduleAiLoop(src, generation);
         return;
       }
 
-      // 트래커 색상 표본은 모델 입력(640×640)에서 뽑습니다.
-      // 박스가 이미 같은 좌표계라 변환이 필요 없고, 전체 해상도 프레임을
-      // CPU로 내리지 않아도 됩니다.
-      const imageData = tmpData;
-
-      // ── 기본 모델 출력 파싱 (출력 형태 [1, 300, 38] 고정) ──────────────
-      const out0Tensor = results[state.session.outputNames[0]];
-      const out1Tensor = results[state.session.outputNames[1]];
+      // ── YOLO26-seg detections [1, N, 38] and mask prototypes ─────────
+      const out0Tensor = results[session.outputNames[0]];
+      const out1Tensor = results[session.outputNames[1]];
       const output0 = out0Tensor.data;
       const protos = out1Tensor.data;
 
-      const NUM_ANCHORS = 300;
-      const NUM_CHANNELS = 38;
-
-      const SCORE_CH = 4;
+      const NUM_CHANNELS = out0Tensor.dims[2];
       const COEFF_START = 6;
 
-      // 1. 감지된 "사람(classId=0)" 앵커들을 모두 수집
-      let detectedPeople = [];
-      for (let a = 0; a < NUM_ANCHORS; a++) {
-        const score = output0[a * NUM_CHANNELS + SCORE_CH];
-        const classId = output0[a * NUM_CHANNELS + 5];
-
-        if (classId === 0 && score > 0.40) {
-          detectedPeople.push({
-            anc: a,
-            score: score,
-            box: {
-              x1: output0[a * NUM_CHANNELS + 0],
-              y1: output0[a * NUM_CHANNELS + 1],
-              x2: output0[a * NUM_CHANNELS + 2],
-              y2: output0[a * NUM_CHANNELS + 3],
-            },
-          });
-        }
-      }
-
-      // 2. 하이브리드 트래커 적용 (고유 ID 부여 및 객체 추적)
-      let people = globalTracker.update(detectedPeople, imageData);
+      const detectedPeople = collectPersonDetections(output0, NUM_CHANNELS);
+      const people = globalTracker.update(detectedPeople, { timestampMs, frameId });
 
       // UI 표시 및 인덱스 매칭을 위해 현재 프레임 기준 X좌표 순(왼쪽부터)으로 정렬
       people.sort((a, b) => a.box.x1 - b.box.x1);
@@ -681,22 +915,9 @@ async function _aiLoop(src) {
         );
       }
 
-      let bestScore = -Infinity;
-      let bestAnc = -1;
-      let bestBox = null;
-
-      // 고정된 targetPersonId와 일치하는 사람 찾기 (순서가 뒤바뀌어도 ID를 따라감)
-      const targetPerson = people.find((p) => p.id === state.targetPersonId);
-
-      if (targetPerson) {
-        bestScore = targetPerson.score;
-        bestAnc = targetPerson.anc;
-        bestBox = targetPerson.box;
-      }
-      // targetPersonId가 null이면 사용자가 아직 선택하지 않은 상태 → 자동 선택 안 함
-      // 트래커가 아직 해당 ID를 기억 중(일시 소실)이면 이 프레임은 생략
-
-      const bestProb = bestScore;
+      const controlTarget = selectControlTrack(
+        globalTracker, people, state.targetPersonId, frameId, performance.now(),
+      );
 
       // Object Panel 목록 갱신 (트래커 상태나 선택 상태가 바뀔 때)
       const _snap =
@@ -711,24 +932,23 @@ async function _aiLoop(src) {
 
       if (window._deepDiagDone) window._deepDiagDone = false;
 
-      // 확률이 50% 이상이고 유효한 추적 대상이 감지되었을 때만 처리
-      if (bestProb > 0.5 && bestAnc >= 0) {
-        // 객체추적이 켜져 있으면 좌표 전송
-        if (state.autoTrackingEnabled) {
-          const obj_x = ((bestBox.x1 + bestBox.x2) / 2) * (w / 640);
-          const obj_y = (bestBox.y1 + (bestBox.y2 - bestBox.y1) * 0.2) * (h / 640);
-          sendObjectCoords({
-            x: obj_x,
-            y: obj_y,
-            frameWidth: w,
-            frameHeight: h,
-          });
-        }
+      // Low-score observations already passed ByteTrack association. A short
+      // missing interval can use the same ID's prediction; never use its mask.
+      if (state.targetPersonId !== _lastControlTargetId) {
+        _lastControlTargetId = state.targetPersonId;
+        _controlTargetSeq++;
+      }
+      if (src.objectTracking && state.autoTrackingEnabled && controlTarget) {
+        sendObjectCoords({
+          ...controlPoint(controlTarget.box),
+          observedAtMs: timestampMs,
+          targetSeq: _controlTargetSeq,
+        });
       }
 
       // 배경 제거가 켜져 있을 때 다중 객체 마스크 적용
       //
-      // 마스크 확률·박스 절단·페이드 기준(0.40~0.65)은 이전과 동일합니다.
+      // Keep segmentation confidence separate from low-score track recovery.
       // 달라진 것은 알파를 어디에 쓰느냐입니다. 이전에는 전체 해상도
       // 프레임을 CPU로 내려(getImageData 8.3MB) 207만 픽셀의 알파를 직접
       // 고치고 다시 올렸습니다(putImageData 8.3MB). 이제는 모델 해상도
@@ -759,6 +979,8 @@ async function _aiLoop(src) {
         src._maskCanvas.height = MASK_RES;
         src._maskCtx = src._maskCanvas.getContext("2d");
         src._maskImg = src._maskCtx.createImageData(MASK_RES, MASK_RES);
+        src._maskField = new Float32Array(MASK_RES * MASK_RES);
+        src._maskBlurTmp = new Float32Array(MASK_RES * MASK_RES);
         const d = src._maskImg.data;
         for (let i = 0; i < d.length; i += 4) {
           d[i] = 255;
@@ -770,33 +992,17 @@ async function _aiLoop(src) {
       if (src.bgRemoval) {
         const md = src._maskImg.data;
 
-        const bgTargets = people.filter(
-          (p) => state.targetPersonIds.includes(p.id) && p.score > 0.5,
+        const bgTargets = selectMaskTracks(
+          people, state.targetPersonIds, frameId, output0.length / NUM_CHANNELS,
         );
 
         if (bgTargets.length === 0) {
           // 사람 미감지 시 전체 투명
           for (let j = 3; j < md.length; j += 4) md[j] = 0;
+          src._maskHyst = null;
+          src._maskPrevBoxes = null;
         } else {
           const combinedMask = new Float32Array(nProto);
-
-          for (const target of bgTargets) {
-            const coeffs = new Float32Array(32);
-            for (let c = 0; c < 32; c++) {
-              coeffs[c] = output0[target.anc * NUM_CHANNELS + COEFF_START + c];
-            }
-
-            for (let p = 0; p < nProto; p++) {
-              let sum = 0;
-              for (let c = 0; c < 32; c++) {
-                sum += coeffs[c] * protos[c * nProto + p];
-              }
-              const prob = 1 / (1 + Math.exp(-sum)); // sigmoid
-              if (prob > combinedMask[p]) {
-                combinedMask[p] = prob;
-              }
-            }
-          }
 
           // 각 대상별 바운딩 박스를 160 해상도로 변환하여 배열에 저장
           const boxes160 = bgTargets.map((target) => {
@@ -807,6 +1013,45 @@ async function _aiLoop(src) {
               y2: Math.ceil(target.box.y2 * (PROTO / 640)),
             };
           });
+
+          // 인스턴스 마스크를 max 가 아니라 합(1 상한)으로 합칩니다.
+          //
+          // 두 사람이 겹치면 앞사람 마스크는 1→0, 뒷사람 마스크는 0→1 로
+          // 같은 경계에서 엇갈립니다. 경계에서는 둘 다 0.5 안팎이라 max 는
+          // FADE_LO(0.75) 아래로 떨어져 두 사람 사이에 배경이 비치는 띠가
+          // 생깁니다. 합이면 경계에서 약 1 이 되어 틈이 메워집니다.
+          //
+          // 합은 박스 밖의 낮은 확률도 쌓으므로 각 인스턴스를 자기 박스
+          // (+1칸, 경계 보간용) 안에서만 더합니다.
+          for (let t = 0; t < bgTargets.length; t++) {
+            const coeffs = new Float32Array(32);
+            for (let c = 0; c < 32; c++) {
+              coeffs[c] = output0[bgTargets[t].anc * NUM_CHANNELS + COEFF_START + c];
+            }
+
+            const box = boxes160[t];
+            const bx1 = Math.max(0, box.x1 - 1);
+            const by1 = Math.max(0, box.y1 - 1);
+            const bx2 = Math.min(PROTO - 1, box.x2 + 1);
+            const by2 = Math.min(PROTO - 1, box.y2 + 1);
+
+            for (let y = by1; y <= by2; y++) {
+              for (let p = y * PROTO + bx1, pe = y * PROTO + bx2; p <= pe; p++) {
+                let sum = 0;
+                for (let c = 0; c < 32; c++) {
+                  sum += coeffs[c] * protos[c * nProto + p];
+                }
+                const prob = 1 / (1 + Math.exp(-sum)); // sigmoid
+                const merged = combinedMask[p] + prob;
+                combinedMask[p] = merged > 1 ? 1 : merged;
+              }
+            }
+          }
+
+          closeMaskOverlaps(combinedMask, boxes160, PROTO);
+          const hystScale = computeMaskHystScale(bgTargets, src._maskPrevBoxes, PROTO);
+          src._maskPrevBoxes = new Map(bgTargets.map((t) => [t.id, t.box]));
+          src._maskHyst = applyMaskHysteresis(combinedMask, src._maskHyst, hystScale);
 
           // ── 소프트 알파 페더링 ──────────────────────────────────────
           // 하한이 컷오프입니다. 이 확률 이하는 완전 투명입니다.
@@ -822,28 +1067,62 @@ async function _aiLoop(src) {
           const FADE_SPAN = FADE_HI - FADE_LO;
           const last = PROTO - 1;
 
+          // 마스크 격자 → proto 연속 좌표 (픽셀 중심 정렬)
+          //
+          // proto 한 칸은 여러 출력 픽셀을 덮고, 그 칸의 값은 덮는 구간의
+          // 한가운데에 놓입니다. +0.5 / -0.5 없이 mx * P2M 로만 쓰면 칸을
+          // 구간 맨 앞에 놓게 되어 마스크 전체가 왼쪽·위로 밀립니다.
+          // GPU 의 MASK_RES → 출력 확대는 이미 중심 정렬이므로,
+          // 여기서 맞춰주면 종단 매핑이 해상도와 무관하게 정확해집니다.
+          // x 와 y 의 매핑은 같으므로 한 번만 계산해 두 축에 씁니다.
+          const g0 = new Int32Array(MASK_RES);
+          const gf = new Float32Array(MASK_RES);
+          for (let m = 0; m < MASK_RES; m++) {
+            let g = (m + 0.5) * P2M - 0.5;
+            if (g < 0) g = 0;
+            else if (g > last) g = last;
+            g0[m] = g | 0;
+            gf[m] = g - g0[m];
+          }
+
+          // 1) 이중선형 보간으로 MASK_RES 확률 지도 생성
+          const field = src._maskField;
           for (let my = 0; my < MASK_RES; my++) {
-            // 마스크 격자 → proto 연속 좌표 (픽셀 중심 정렬)
-            //
-            // proto 한 칸은 여러 출력 픽셀을 덮고, 그 칸의 값은 덮는 구간의
-            // 한가운데에 놓입니다. +0.5 / -0.5 없이 mx * P2M 로만 쓰면 칸을
-            // 구간 맨 앞에 놓게 되어 마스크 전체가 왼쪽·위로 밀립니다.
-            // GPU 의 MASK_RES → 출력 확대는 이미 중심 정렬이므로,
-            // 여기서 맞춰주면 종단 매핑이 해상도와 무관하게 정확해집니다.
-            let gy = (my + 0.5) * P2M - 0.5;
-            if (gy < 0) gy = 0;
-            else if (gy > last) gy = last;
-            const y0 = gy | 0;
-            const fy = gy - y0;
+            const y0 = g0[my];
+            const fy = gf[my];
             const r0 = y0 * PROTO;
             const r1 = (y0 + 1 < PROTO ? y0 + 1 : last) * PROTO;
-            let rowOut = my * MASK_RES * 4 + 3;
+            const rowF = my * MASK_RES;
+            for (let mx = 0; mx < MASK_RES; mx++) {
+              const x0 = g0[mx];
+              const fx = gf[mx];
+              const x1 = x0 + 1 < PROTO ? x0 + 1 : last;
+              const top =
+                combinedMask[r0 + x0] * (1 - fx) + combinedMask[r0 + x1] * fx;
+              const bot =
+                combinedMask[r1 + x0] * (1 - fx) + combinedMask[r1 + x1] * fx;
+              field[rowF + mx] = top * (1 - fy) + bot * fy;
+            }
+          }
+
+          // 2) 계단 현상 보정: proto 한 칸 폭의 박스 블러
+          //
+          // 이중선형 보간의 윤곽선은 proto 칸 경계마다 기울기가 꺾여
+          // (1080p 에서 약 12px 간격) 좁은 램프를 거치면 계단으로 보입니다.
+          // 칸 폭의 박스 블러를 한 번 더 걸면 2차 B-스플라인 보간과 같아져
+          // 윤곽이 칸 경계에서도 매끄럽게 이어집니다. 램프보다 먼저 걸어야
+          // 경계가 흐려지지 않고 윤곽 모양만 다듬어집니다.
+          const blurR = Math.floor(MASK_RES / PROTO / 2);
+          if (blurR > 0) _boxBlurSquare(field, src._maskBlurTmp, MASK_RES, blurR);
+
+          // 3) 박스 절단 + 소프트 알파 램프
+          for (let my = 0; my < MASK_RES; my++) {
+            const y0 = g0[my];
+            const rowF = my * MASK_RES;
+            let rowOut = rowF * 4 + 3;
 
             for (let mx = 0; mx < MASK_RES; mx++, rowOut += 4) {
-              let gx = (mx + 0.5) * P2M - 0.5;
-              if (gx < 0) gx = 0;
-              else if (gx > last) gx = last;
-              const x0 = gx | 0;
+              const x0 = g0[mx];
 
               // 박스 절단 (이전과 동일하게 proto 격자 기준으로 판정)
               let inAnyBox = false;
@@ -863,21 +1142,17 @@ async function _aiLoop(src) {
                 continue;
               }
 
-              // 이중선형 보간으로 마스크 확률값 획득 (이전과 동일)
-              const fx = gx - x0;
-              const x1 = x0 + 1 < PROTO ? x0 + 1 : last;
-              const top =
-                combinedMask[r0 + x0] * (1 - fx) + combinedMask[r0 + x1] * fx;
-              const bot =
-                combinedMask[r1 + x0] * (1 - fx) + combinedMask[r1 + x1] * fx;
-              const prob = top * (1 - fy) + bot * fy;
-
-              const a = (prob - FADE_LO) / FADE_SPAN;
+              const a = (field[rowF + mx] - FADE_LO) / FADE_SPAN;
               md[rowOut] = a <= 0 ? 0 : a >= 1 ? 255 : (a * 255) | 0;
             }
           }
         }
         src._maskCtx.putImageData(src._maskImg, 0, 0);
+      }
+
+      if (!src.bgRemoval) {
+        src._maskHyst = null;
+        src._maskPrevBoxes = null;
       }
 
       // 배경 이미지/영상/색 합성 (배경 제거 ON일 때만 배경 교체)
@@ -921,12 +1196,16 @@ async function _aiLoop(src) {
 
       // 바운딩박스, 데드존, 중심점 디버그 그리기
       if (src.objectTracking) {
-        _drawTrackingOverlay(src.bgCtx, people, state.targetPersonId, w, h);
+        const overlayPeople = controlTarget && !controlTarget.observed
+          ? [...people, controlTarget] : people;
+        _drawTrackingOverlay(src.bgCtx, overlayPeople, state.targetPersonId, w, h);
       }
     } catch (e) {
       console.error("[BG] 추론 오류:", e);
     } finally {
       state.sessionBusy = false;
+      inputTensor?.dispose?.();
+      for (const tensor of Object.values(results || {})) tensor.dispose?.();
     }
   }
 
@@ -935,7 +1214,7 @@ async function _aiLoop(src) {
     src.bgCtx.drawImage(vid, 0, 0, w, h);
   }
 
-  src.bgAnimFrame = requestAnimationFrame(() => _aiLoop(src));
+  _scheduleAiLoop(src, generation);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -966,6 +1245,8 @@ function _createVideoEl(stream) {
 }
 
 function _cleanupSource(src) {
+  src.bgRemoval = false;
+  src.objectTracking = false;
   _stopAiLoop(src);
   if (src.stream && src.type !== "rpi")
     src.stream.getTracks().forEach((t) => t.stop());
@@ -994,7 +1275,7 @@ function renderObjectList(tracks) {
   const sorted = [...tracks].sort((a, b) => a.id - b.id);
 
   sorted.forEach((track, idx) => {
-    const missing = track.missingFrames > 0;
+    const missing = !track.observed;
 
     if (!state.targetPersonIds) state.targetPersonIds = [];
     const isBgSelected = state.targetPersonIds.includes(track.id);
@@ -1012,7 +1293,7 @@ function renderObjectList(tracks) {
     }
 
     li.addEventListener("click", (e) => {
-      if (e.target.tagName.toLowerCase() === "input") return;
+      if (e.target.closest("input, label")) return;
 
       const idIdx = state.targetPersonIds.indexOf(track.id);
       if (idIdx > -1) {
@@ -1025,7 +1306,7 @@ function renderObjectList(tracks) {
     });
 
     const labelSpan = document.createElement("span");
-    labelSpan.textContent = `사람 ${track.id}` + (missing ? " (사라짐)" : "");
+    labelSpan.textContent = `사람 ${track.id}` + (missing ? " (잠시 놓침)" : "");
 
     const trackLabel = document.createElement("label");
     trackLabel.style.display = "flex";
